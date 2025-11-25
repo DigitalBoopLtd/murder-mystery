@@ -528,19 +528,106 @@ def transcribe_audio(audio_path: str) -> str:
         return ""
 
 
-def text_to_speech(text: str, voice_id: str = None) -> Optional[str]:
-    """Generate speech from text."""
+def enhance_text_for_speech(text: str, speaker_type: str = "game_master") -> str:
+    """Enhance text with emotional tags and emphasis for more engaging speech.
+    
+    Adds emotional tags and uses capitalization for emphasis to make TTS more engaging.
+    
+    Args:
+        text: Original text
+        speaker_type: "game_master" or "suspect" to adjust enhancement style
+    """
+    enhanced = text
+    
+    # Add emotional context based on content
+    text_lower = text.lower()
+    
+    # Detect excitement/exclamation
+    if any(word in text_lower for word in ['amazing', 'incredible', 'wow', 'fantastic', 'unbelievable', 'remarkable']):
+        enhanced = f"[excited] {enhanced}"
+    elif '?' in text:
+        # Questions can be more curious
+        enhanced = f"[curiously] {enhanced}"
+    elif any(word in text_lower for word in ['suspicious', 'strange', 'odd', 'mysterious', 'enigmatic']):
+        enhanced = f"[mysteriously] {enhanced}"
+    elif any(word in text_lower for word in ['important', 'crucial', 'key', 'vital', 'critical']):
+        enhanced = f"[emphatically] {enhanced}"
+    elif any(word in text_lower for word in ['terrible', 'horrible', 'shocking', 'disturbing']):
+        enhanced = f"[dramatically] {enhanced}"
+    elif speaker_type == "game_master" and any(word in text_lower for word in ['welcome', 'arrive', 'begin', 'start']):
+        enhanced = f"[warmly] {enhanced}"
+    
+    # Enhance exclamation marks - capitalize words before them for emphasis
+    # Find sentences ending with ! and capitalize key words
+    sentences = enhanced.split('. ')
+    enhanced_sentences = []
+    for sentence in sentences:
+        if '!' in sentence:
+            # Capitalize important words before exclamation
+            words = sentence.split()
+            for i, word in enumerate(words):
+                if word.endswith('!') and i > 0:
+                    # Capitalize the word before the exclamation
+                    words[i-1] = words[i-1].upper()
+            sentence = ' '.join(words)
+        enhanced_sentences.append(sentence)
+    enhanced = '. '.join(enhanced_sentences)
+    
+    # Capitalize key dramatic words for emphasis
+    dramatic_words = ['suddenly', 'immediately', 'finally', 'quickly', 'carefully', 'silently', 'slowly', 'quietly']
+    for word in dramatic_words:
+        pattern = r'\b' + re.escape(word) + r'\b'
+        enhanced = re.sub(pattern, word.upper(), enhanced, flags=re.IGNORECASE)
+    
+    return enhanced
+
+
+def text_to_speech(text: str, voice_id: str = None, speaker_name: str = None) -> Optional[str]:
+    """Generate speech from text with enhanced settings for more engaging delivery.
+    
+    Args:
+        text: Text to convert to speech
+        voice_id: ElevenLabs voice ID (defaults to Game Master voice)
+        speaker_name: Name of speaker (for determining enhancement style)
+    """
     if not elevenlabs_client or not text.strip():
         return None
 
     try:
         voice_id = voice_id or GAME_MASTER_VOICE_ID
-        audio_stream = elevenlabs_client.text_to_speech.convert(
-            voice_id=voice_id,
-            text=text,
-            model_id="eleven_multilingual_v2",
-            output_format="mp3_44100_128",
-        )
+        
+        # Enhance text with emotional tags and emphasis
+        speaker_type = "suspect" if speaker_name and speaker_name != "Game Master" else "game_master"
+        enhanced_text = enhance_text_for_speech(text, speaker_type=speaker_type)
+        
+        # Use voice_settings for more engaging speech
+        # Stability: 0.45-0.50 for more emotional range (lower = more variation)
+        # Style: 0.3-0.5 for more expressive delivery (higher = more exaggerated)
+        # Note: Speed is not directly available in the SDK, but style and stability help with energy
+        
+        # Try with voice_settings first (if SDK supports it)
+        try:
+            audio_stream = elevenlabs_client.text_to_speech.convert(
+                voice_id=voice_id,
+                text=enhanced_text,
+                model_id="eleven_multilingual_v2",
+                output_format="mp3_44100_128",
+                voice_settings={
+                    "stability": 0.48,  # Lower for more emotional range
+                    "similarity_boost": 0.75,
+                    "style": 0.4,  # Style exaggeration for more expressive delivery
+                    "use_speaker_boost": True,
+                },
+            )
+        except TypeError:
+            # SDK might not support voice_settings parameter, try without it
+            # The enhanced text with emotional tags should still help
+            audio_stream = elevenlabs_client.text_to_speech.convert(
+                voice_id=voice_id,
+                text=enhanced_text,
+                model_id="eleven_multilingual_v2",
+                output_format="mp3_44100_128",
+            )
 
         audio_bytes = b"".join(chunk for chunk in audio_stream if chunk)
 
@@ -549,7 +636,21 @@ def text_to_speech(text: str, voice_id: str = None) -> Optional[str]:
             return f.name
     except Exception as e:
         logger.error(f"TTS error: {e}")
-        return None
+        # Fallback: try without voice_settings if the API doesn't support it
+        try:
+            audio_stream = elevenlabs_client.text_to_speech.convert(
+                voice_id=voice_id,
+                text=enhanced_text,
+                model_id="eleven_multilingual_v2",
+                output_format="mp3_44100_128",
+            )
+            audio_bytes = b"".join(chunk for chunk in audio_stream if chunk)
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as f:
+                f.write(audio_bytes)
+                return f.name
+        except Exception as e2:
+            logger.error(f"TTS fallback error: {e2}")
+            return None
 
 
 def get_suspect_voice_id(suspect_name: str, state: GameState) -> Optional[str]:
@@ -665,7 +766,7 @@ def start_new_game(session_id: str):
                 suspect.portrait_path = images[suspect.name]
         
         # Generate audio (needs the response text)
-        audio_path = text_to_speech(response, GAME_MASTER_VOICE_ID)
+        audio_path = text_to_speech(response, GAME_MASTER_VOICE_ID, speaker_name="Game Master")
 
     # Store in messages
     state.messages.append(
@@ -748,7 +849,8 @@ def process_player_action(
 
     # Generate audio
     tts_text = clean_response.replace("**", "").replace("*", "")
-    audio_path = audio_path_from_tool or text_to_speech(tts_text, voice_id)
+    speaker = speaker or "Game Master"
+    audio_path = audio_path_from_tool or text_to_speech(tts_text, voice_id, speaker_name=speaker)
 
     # Store response (without audio marker)
     state.messages.append(

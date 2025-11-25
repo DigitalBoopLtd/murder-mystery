@@ -554,9 +554,9 @@ class VoiceService:
                     "text": text,
                     "model_id": model_id,
                     "voice_settings": {
-                        "stability": 0.5,
+                        "stability": 0.48,  # Lower for more emotional range (45-50 range)
                         "similarity_boost": 0.75,
-                        "style": 0.5,
+                        "style": 0.4,  # Style exaggeration for more expressive delivery
                         "use_speaker_boost": True,
                     },
                 },

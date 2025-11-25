@@ -2,6 +2,7 @@
 
 import logging
 import os
+import re
 import tempfile
 import uuid
 from typing import Annotated, Optional
@@ -92,6 +93,32 @@ Suspect Profile:
     return text_response
 
 
+def enhance_text_for_speech(text: str) -> str:
+    """Enhance text with emotional tags and emphasis for more engaging speech."""
+    enhanced = text
+    
+    # Add emotional context based on content
+    text_lower = text.lower()
+    
+    # Detect excitement/exclamation
+    if any(word in text_lower for word in ['amazing', 'incredible', 'wow', 'fantastic', 'unbelievable']):
+        enhanced = f"[excited] {enhanced}"
+    elif '?' in text:
+        enhanced = f"[curiously] {enhanced}"
+    elif any(word in text_lower for word in ['suspicious', 'strange', 'odd', 'mysterious']):
+        enhanced = f"[mysteriously] {enhanced}"
+    elif any(word in text_lower for word in ['important', 'crucial', 'key', 'vital']):
+        enhanced = f"[emphatically] {enhanced}"
+    
+    # Capitalize key dramatic words for emphasis
+    dramatic_words = ['suddenly', 'immediately', 'finally', 'quickly', 'carefully', 'silently']
+    for word in dramatic_words:
+        pattern = r'\b' + re.escape(word) + r'\b'
+        enhanced = re.sub(pattern, word.upper(), enhanced, flags=re.IGNORECASE)
+    
+    return enhanced
+
+
 def generate_suspect_audio(
     text: str, voice_id: str, suspect_name: str
 ) -> Optional[str]:
@@ -117,8 +144,11 @@ def generate_suspect_audio(
         filename = f"{suspect_name.replace(' ', '_')}_{uuid.uuid4().hex[:8]}.mp3"
         output_path = os.path.join(AUDIO_DIR, filename)
 
-        # Generate audio
-        result = voice_service.generate_speech_to_file(text, voice_id, output_path)
+        # Enhance text with emotional tags and emphasis for more engaging speech
+        enhanced_text = enhance_text_for_speech(text)
+        
+        # Generate audio with enhanced text
+        result = voice_service.generate_speech_to_file(enhanced_text, voice_id, output_path)
 
         if result:
             logger.info(f"Generated audio for {suspect_name}: {output_path}")
