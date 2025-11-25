@@ -8,6 +8,7 @@ from mystery_generator import generate_mystery, prepare_game_prompt
 from game_state import GameState
 from agent import create_game_master_agent, process_message
 from ui_components import get_all_card_content
+from game_parser import parse_game_actions
 
 # Load environment variables
 load_dotenv()
@@ -24,21 +25,25 @@ ui_logs: dict[str, list] = {}
 
 class UILogHandler(logging.Handler):
     """Custom logging handler that stores logs for UI display."""
-    
+
     def __init__(self, session_id: str):
         super().__init__()
         self.session_id = session_id
-        self.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s', 
-                                           datefmt='%H:%M:%S'))
-    
+        self.setFormatter(
+            logging.Formatter(
+                "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+                datefmt="%H:%M:%S",
+            )
+        )
+
     def emit(self, record):
         """Store log record for UI display."""
         if self.session_id not in ui_logs:
             ui_logs[self.session_id] = []
-        
+
         log_entry = self.format(record)
         ui_logs[self.session_id].append(log_entry)
-        
+
         # Keep only last 100 log entries per session
         if len(ui_logs[self.session_id]) > 100:
             ui_logs[self.session_id] = ui_logs[self.session_id][-100:]
@@ -53,12 +58,12 @@ def get_ui_logs(session_id: str) -> str:
 
 def format_friendly_error(error: Exception) -> str:
     """Convert technical error messages to user-friendly ones.
-    
+
     Returns a tuple of (friendly_message, raw_error_string)
     """
     error_str = str(error)
     error_type = type(error).__name__
-    
+
     # Friendly error messages based on error type and content
     friendly_messages = {
         "OUTPUT_PARSING_FAILURE": "I'm having trouble generating a new mystery. The AI returned an unexpected format. Please try starting a new game again.",
@@ -69,14 +74,17 @@ def format_friendly_error(error: Exception) -> str:
         "TimeoutError": "The request took too long to process. Please try again.",
         "APIError": "There was an issue with the AI service. Please try again in a moment.",
     }
-    
+
     # Check for specific error patterns
     friendly_msg = None
     for pattern, message in friendly_messages.items():
-        if pattern.lower() in error_str.lower() or pattern.lower() in error_type.lower():
+        if (
+            pattern.lower() in error_str.lower()
+            or pattern.lower() in error_type.lower()
+        ):
             friendly_msg = message
             break
-    
+
     # Default friendly message if no pattern matches
     if not friendly_msg:
         if "mystery" in error_str.lower() or "generate" in error_str.lower():
@@ -85,7 +93,7 @@ def format_friendly_error(error: Exception) -> str:
             friendly_msg = "I'm having trouble processing your message. Please try rephrasing your question or try again."
         else:
             friendly_msg = "Something went wrong. Please try again. If the problem persists, check the debug logs for details."
-    
+
     # Format the response with both friendly message and raw error
     # Use markdown format that works well in Gradio
     return f"""{friendly_msg}
@@ -148,12 +156,12 @@ def chat_fn(message: str, history: list, session_id: str):
     # Set up UI logging handler for this session
     ui_handler = UILogHandler(session_id)
     ui_handler.setLevel(logging.INFO)
-    
+
     # Get root logger and add handler
     root_logger = logging.getLogger()
     root_logger.addHandler(ui_handler)
     root_logger.setLevel(logging.INFO)
-    
+
     try:
         if not message.strip():
             state = get_or_create_game_state(session_id)
@@ -196,7 +204,11 @@ def chat_fn(message: str, history: list, session_id: str):
         # Process the message
         try:
             response, speaker_name = process_message(
-                agent_app, message, state.system_prompt, session_id, thread_id=session_id
+                agent_app,
+                message,
+                state.system_prompt,
+                session_id,
+                thread_id=session_id,
             )
 
             # Format response with speaker name
@@ -213,8 +225,25 @@ def chat_fn(message: str, history: list, session_id: str):
             state.messages.append({"role": "user", "content": message})
             state.messages.append({"role": "assistant", "content": response})
 
-            # TODO: Parse response to auto-update clues_found, searched_locations, suspects_talked_to
-            # This would require response parsing or tool callbacks
+            # Parse response to auto-update game state
+            # This detects: suspects talked to, locations searched, clues found, accusations
+            actions = parse_game_actions(message, response, state)
+
+            if actions:
+                if actions.get("suspect_talked_to"):
+                    logger.info(
+                        f"Updated suspects_talked_to: {state.suspects_talked_to}"
+                    )
+                if actions.get("location_searched"):
+                    logger.info(
+                        f"Updated searched_locations: {state.searched_locations}"
+                    )
+                if actions.get("clues_found"):
+                    logger.info(f"Updated clues_found: {state.clues_found}")
+                if actions.get("accusation_made"):
+                    logger.info(
+                        f"Accusation made against: {actions['accusation_made']}, correct: {actions.get('accusation_correct')}"
+                    )
 
         except Exception as e:
             # Log the raw error
@@ -227,7 +256,7 @@ def chat_fn(message: str, history: list, session_id: str):
     finally:
         # Remove handler after processing
         root_logger.removeHandler(ui_handler)
-    
+
     logs = get_ui_logs(session_id)
     return history, *get_card_updates(state), logs
 
@@ -310,7 +339,9 @@ def create_interface():
                         container=False,
                         visible=False,
                     )
-                    submit_btn = gr.Button("Send", variant="primary", scale=1, visible=False)
+                    submit_btn = gr.Button(
+                        "Send", variant="primary", scale=1, visible=False
+                    )
 
             # Right column - Locations and Clues
             with gr.Column(scale=1):
@@ -323,7 +354,7 @@ def create_interface():
                     value="### 🔍 Clues Found\n\n*No clues discovered yet*",
                     elem_classes=["info-card"],
                 )
-        
+
         # Logs section (collapsible)
         with gr.Accordion("🔍 Debug Logs", open=False):
             logs_display = gr.Textbox(
@@ -352,10 +383,10 @@ def create_interface():
                     logs,
                     True,  # game_started
                     gr.update(visible=False),  # start_btn
-                    gr.update(visible=True),   # msg
-                    gr.update(visible=True),   # submit_btn
+                    gr.update(visible=True),  # msg
+                    gr.update(visible=True),  # submit_btn
                 )
-            
+
             # Start a new game
             result = chat_fn("start", history, session)
             # Return result + visibility updates (hide start button, show input)
@@ -363,8 +394,8 @@ def create_interface():
                 *result,
                 True,  # game_started
                 gr.update(visible=False),  # start_btn
-                gr.update(visible=True),   # msg
-                gr.update(visible=True),   # submit_btn
+                gr.update(visible=True),  # msg
+                gr.update(visible=True),  # submit_btn
             )
 
         def respond(message, history, session, started):
@@ -378,8 +409,8 @@ def create_interface():
                     logs,
                     started,  # game_started
                     gr.update(visible=False),  # start_btn
-                    gr.update(visible=True),   # msg
-                    gr.update(visible=True),   # submit_btn
+                    gr.update(visible=True),  # msg
+                    gr.update(visible=True),  # submit_btn
                 )
 
             # Get updated history and cards from chat function
@@ -388,13 +419,13 @@ def create_interface():
             state = get_or_create_game_state(session)
             is_new_game = state.mystery is not None and started == False
             new_started = started or is_new_game
-            
+
             return (
                 *result,
                 new_started,  # game_started
                 gr.update(visible=False),  # start_btn
-                gr.update(visible=True),   # msg
-                gr.update(visible=True),   # submit_btn
+                gr.update(visible=True),  # msg
+                gr.update(visible=True),  # submit_btn
             )
 
         # Wire up the start button
