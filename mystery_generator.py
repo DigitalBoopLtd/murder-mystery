@@ -19,14 +19,31 @@ def strip_markdown_json(message) -> str:
     else:
         text = str(message)
 
-    # Remove markdown code blocks (```json ... ``` or ``` ... ```)
-    text = re.sub(r"^```(?:json)?\s*\n", "", text, flags=re.MULTILINE)
-    text = re.sub(r"\n```\s*$", "", text, flags=re.MULTILINE)
+    # More aggressive markdown removal - handle various formats
+    # Remove ```json at start
+    text = re.sub(r"^```(?:json)?\s*\n?", "", text, flags=re.MULTILINE)
+    # Remove ``` at end
+    text = re.sub(r"\n?```\s*$", "", text, flags=re.MULTILINE)
+    # Remove any remaining ``` markers
+    text = re.sub(r"```", "", text)
+    # Clean up any leading/trailing whitespace
+    text = text.strip()
+    
+    # If text doesn't start with {, try to find the JSON object
+    if not text.startswith("{"):
+        # Try to find the first { and last }
+        start_idx = text.find("{")
+        end_idx = text.rfind("}")
+        if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
+            text = text[start_idx:end_idx + 1]
+    
     return text.strip()
 
 
 def generate_mystery() -> Mystery:
     """Generate a unique murder mystery scenario."""
+    import json
+    
     llm = ChatOpenAI(
         model="gpt-4o", temperature=0.9, api_key=os.getenv("OPENAI_API_KEY")
     )
@@ -45,7 +62,7 @@ Be creative with the setting - could be a mansion, cruise ship, theater, space s
 
 Create an interesting victim with enemies, 4 distinct suspects with secrets and motives, and 5 clues that lead to solving the case. One suspect is the murderer. Include one red herring clue.
 
-IMPORTANT: Return ONLY valid JSON. Do not wrap it in markdown code blocks.""",
+CRITICAL: Return ONLY valid JSON. Do NOT wrap it in markdown code blocks. Do NOT include any text before or after the JSON. Start with {{ and end with }}.""",
             ),
             ("human", "Generate a unique murder mystery scenario."),
         ]
@@ -53,7 +70,29 @@ IMPORTANT: Return ONLY valid JSON. Do not wrap it in markdown code blocks.""",
 
     # Add a step to strip markdown before parsing
     strip_markdown = RunnableLambda(strip_markdown_json)
-    chain = prompt | llm | strip_markdown | parser
+    
+    # Add validation step to ensure JSON is valid
+    def validate_and_parse_json(text: str):
+        """Validate JSON and parse it."""
+        try:
+            # Try to parse as JSON first to validate
+            json.loads(text)
+            return text
+        except json.JSONDecodeError as e:
+            # If JSON is invalid, try to extract valid JSON
+            start_idx = text.find("{")
+            end_idx = text.rfind("}")
+            if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
+                json_text = text[start_idx:end_idx + 1]
+                try:
+                    json.loads(json_text)
+                    return json_text
+                except json.JSONDecodeError:
+                    pass
+            raise ValueError(f"Invalid JSON from LLM: {str(e)}\n\nReceived text:\n{text[:500]}")
+    
+    validate_json = RunnableLambda(validate_and_parse_json)
+    chain = prompt | llm | strip_markdown | validate_json | parser
 
     mystery = chain.invoke({"format_instructions": parser.get_format_instructions()})
     return mystery

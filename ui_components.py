@@ -115,7 +115,7 @@ Type **"new game"** to try again!"""
 **Case:** The murder of {mystery.victim.name}
 
 
-**Setting:** {mystery.setting[:100]}{'...' if len(mystery.setting) > 100 else ''}"""
+**Setting:** {mystery.setting[:350]}{'...' if len(mystery.setting) > 350 else ''}"""
 
 
 def get_all_card_content(
