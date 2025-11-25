@@ -7,13 +7,12 @@ import gradio as gr
 from dotenv import load_dotenv
 from openai import OpenAI
 try:
-    from elevenlabs import generate, set_api_key
+    from elevenlabs import ElevenLabs
+    ELEVENLABS_AVAILABLE = True
 except ImportError:
     # Fallback if elevenlabs not installed yet
-    def generate(*args, **kwargs):
-        raise ImportError("elevenlabs package not installed")
-    def set_api_key(*args, **kwargs):
-        pass
+    ELEVENLABS_AVAILABLE = False
+    ElevenLabs = None
 from game_parser import parse_game_actions
 from mystery_generator import generate_mystery, prepare_game_prompt
 from game_state import GameState
@@ -27,10 +26,25 @@ load_dotenv()
 # Initialize OpenAI client
 openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-# Set ElevenLabs API key
+# Initialize ElevenLabs client
 elevenlabs_api_key = os.getenv("ELEVENLABS_API_KEY")
-if elevenlabs_api_key:
-    set_api_key(elevenlabs_api_key)
+elevenlabs_client = None
+if elevenlabs_api_key and ELEVENLABS_AVAILABLE:
+    try:
+        elevenlabs_client = ElevenLabs(api_key=elevenlabs_api_key)
+    except Exception as e:
+        # Logger not yet initialized, use print for early errors
+        print(f"Warning: Failed to initialize ElevenLabs client: {e}")
+
+# Voice mapping for different characters
+# You can customize these voice IDs based on your ElevenLabs account
+VOICE_MAP = {
+    "game_master": "JBFqnCBsd6RMkjVDRZzb",  # Default voice, replace with your preferred Game Master voice ID
+    "default": "JBFqnCBsd6RMkjVDRZzb",  # Default for unknown speakers
+    # Add suspect-specific voices here if desired
+    # "Zara Orion": "voice_id_here",
+    # "Max Stellar": "voice_id_here",
+}
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -96,30 +110,51 @@ def transcribe_audio(audio_file_path: str) -> str:
         return ""
 
 
-def text_to_speech(text: str) -> str:
-    """Convert text to speech using ElevenLabs.
+def text_to_speech(text: str, speaker_name: str = None) -> str:
+    """Convert text to speech using ElevenLabs client API.
     
     Args:
         text: Text to convert to speech
+        speaker_name: Name of the speaker (Game Master, suspect name, etc.)
+                     Used to select appropriate voice
         
     Returns:
         Path to the generated audio file
     """
-    if not elevenlabs_api_key:
-        logger.warning("ElevenLabs API key not set, skipping TTS")
+    if not elevenlabs_client:
+        logger.warning("ElevenLabs client not available, skipping TTS")
+        return None
+    
+    if not text or not text.strip():
         return None
         
     try:
-        # Generate audio using ElevenLabs
-        audio = generate(
+        # Determine voice ID based on speaker
+        voice_id = VOICE_MAP.get("default")
+        if speaker_name:
+            # Check if there's a specific voice for this speaker
+            voice_id = VOICE_MAP.get(speaker_name, VOICE_MAP.get("game_master", VOICE_MAP.get("default")))
+        else:
+            # Default to game master voice
+            voice_id = VOICE_MAP.get("game_master", VOICE_MAP.get("default"))
+        
+        # Generate audio using ElevenLabs client
+        audio_stream = elevenlabs_client.text_to_speech.convert(
+            voice_id=voice_id,
             text=text,
-            voice="Rachel",  # Default voice, can be customized
-            model="eleven_monolingual_v1"
+            model_id="eleven_multilingual_v2",
+            output_format="mp3_44100_128"
         )
+        
+        # Collect all audio chunks
+        audio_bytes = b""
+        for chunk in audio_stream:
+            if chunk:
+                audio_bytes += chunk
         
         # Save to temporary file
         with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmp_file:
-            tmp_file.write(audio)
+            tmp_file.write(audio_bytes)
             return tmp_file.name
     except Exception as e:
         logger.error(f"Error generating speech: {str(e)}", exc_info=True)
@@ -266,32 +301,11 @@ def process_voice_input(audio, history: list, session_id: str):
     logger.info(f"Transcribed voice input: {transcription}")
     
     # Process the transcribed message through the chat function
+    # chat_fn now returns: (history, audio_response_path, status_card, suspects_card, objective_card, locations_card, clues_card, logs)
     result = chat_fn(transcription, history, session_id)
-    updated_history = result[0]
-    response_text = None
     
-    # Extract the last assistant message for TTS
-    if updated_history and len(updated_history) > 0:
-        last_message = updated_history[-1]
-        if isinstance(last_message, dict) and last_message.get("role") == "assistant":
-            # Remove markdown formatting for cleaner speech
-            response_text = last_message.get("content", "")
-            # Remove markdown bold/italics
-            response_text = response_text.replace("**", "").replace("*", "")
-            # Remove speaker name prefix if present (e.g., "**Game Master:**" or "**Zara Orion:**")
-            if ":" in response_text:
-                response_text = response_text.split(":", 1)[1].strip()
-    
-    # Generate audio response
-    audio_response_path = None
-    if response_text:
-        audio_response_path = text_to_speech(response_text)
-        logger.info(f"Generated audio response: {audio_response_path}")
-    
-    # Return all results including audio
-    # result is: (history, status_card, suspects_card, objective_card, locations_card, clues_card, logs)
-    # We need: (history, audio_response, status_card, suspects_card, objective_card, locations_card, clues_card, logs)
-    return (result[0], audio_response_path, *result[1:])
+    # Return all results (audio is already included from chat_fn)
+    return result
 
 
 def chat_fn(message: str, history: list, session_id: str):
@@ -303,8 +317,9 @@ def chat_fn(message: str, history: list, session_id: str):
         session_id: Session identifier
 
     Returns:
-        Tuple of (updated_history, status_card, suspects_card, objective_card, locations_card, clues_card, logs)
+        Tuple of (updated_history, audio_response_path, status_card, suspects_card, objective_card, locations_card, clues_card, logs)
     """
+    audio_response_path = None
     # Set up UI logging handler for this session
     ui_handler = UILogHandler(session_id)
     ui_handler.setLevel(logging.INFO)
@@ -318,7 +333,7 @@ def chat_fn(message: str, history: list, session_id: str):
         if not message.strip():
             state = get_or_create_game_state(session_id)
             logs = get_ui_logs(session_id)
-            return history, *get_card_updates(state), logs
+            return history, audio_response_path, *get_card_updates(state), logs
 
         state = get_or_create_game_state(session_id)
 
@@ -342,7 +357,7 @@ def chat_fn(message: str, history: list, session_id: str):
                     {"role": "assistant", "content": formatted_error},
                 ]
                 logs = get_ui_logs(session_id)
-                return error_history, *get_card_updates(state), logs
+                return error_history, audio_response_path, *get_card_updates(state), logs
         else:
             # Use continue prompt
             state.system_prompt = state.get_continue_prompt()
@@ -376,6 +391,23 @@ def chat_fn(message: str, history: list, session_id: str):
             # Update game state messages (store original response without formatting)
             state.messages.append({"role": "user", "content": message})
             state.messages.append({"role": "assistant", "content": response})
+            
+            # Generate audio for the response
+            # Clean the response text for TTS (remove markdown formatting)
+            clean_response = response
+            clean_response = clean_response.replace("**", "").replace("*", "")
+            
+            # Remove speaker name prefix if present at the START of the text
+            # Only remove if it looks like "Speaker Name:" at the beginning
+            # Don't split on colons in the middle of the text
+            if speaker_name:
+                prefix = f"{speaker_name}:"
+                if clean_response.startswith(prefix):
+                    clean_response = clean_response[len(prefix):].strip()
+            elif clean_response.startswith("Game Master:"):
+                clean_response = clean_response[len("Game Master:"):].strip()
+            
+            audio_response_path = text_to_speech(clean_response, speaker_name or "Game Master")
 
             # Parse response to auto-update game state
             # This detects: suspects talked to, locations searched, clues found, accusations
@@ -405,12 +437,16 @@ def chat_fn(message: str, history: list, session_id: str):
             formatted_error = f"**Game Master:** {friendly_error}"
             history.append({"role": "user", "content": message})
             history.append({"role": "assistant", "content": formatted_error})
+            # Generate audio for error message too
+            clean_error = friendly_error.split("---")[0].strip()  # Just the friendly message
+            audio_response_path = text_to_speech(clean_error, "Game Master")
     finally:
         # Remove handler after processing
         root_logger.removeHandler(ui_handler)
 
     logs = get_ui_logs(session_id)
-    return history, *get_card_updates(state), logs
+    # Return history, audio_response, and card updates
+    return history, audio_response_path, *get_card_updates(state), logs
 
 
 def create_interface():
@@ -591,6 +627,7 @@ def create_interface():
                 )
 
             # Get updated history and cards from chat function
+            # chat_fn returns: (history, audio_response_path, status_card, suspects_card, objective_card, locations_card, clues_card, logs)
             result = chat_fn(message, history, session)
             # Check if this was a new game request
             state = get_or_create_game_state(session)
@@ -598,8 +635,7 @@ def create_interface():
             new_started = started or is_new_game
 
             return (
-                *result,
-                None,  # voice_output
+                *result,  # Includes history, audio_response_path, and all cards
                 new_started,  # game_started
                 gr.update(visible=False),  # start_btn
                 gr.update(visible=True),  # msg
@@ -625,22 +661,15 @@ def create_interface():
                 )
             
             # Process voice input
+            # process_voice_input returns: (history, audio_response_path, status_card, suspects_card, objective_card, locations_card, clues_card, logs)
             result = process_voice_input(audio, history, session)
-            # result is: (history, audio_response, status_card, suspects_card, objective_card, locations_card, clues_card, logs)
             
             state = get_or_create_game_state(session)
             is_new_game = state.mystery is not None and started == False
             new_started = started or is_new_game
             
             return (
-                result[0],  # history
-                result[1],  # voice_output
-                result[2],  # status_card
-                result[3],  # suspects_card
-                result[4],  # objective_card
-                result[5],  # locations_card
-                result[6],  # clues_card
-                result[7],  # logs
+                *result,  # Includes history, audio_response_path, and all cards
                 new_started,  # game_started
                 gr.update(visible=False),  # start_btn
                 gr.update(visible=True),  # msg
