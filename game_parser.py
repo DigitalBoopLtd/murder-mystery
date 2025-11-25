@@ -89,12 +89,24 @@ def parse_game_actions(user_message: str, response: str, state: GameState) -> di
             logger.info(f"📍 Detected search of: {location}")
 
     # === DETECT CLUE DISCOVERIES ===
-    # Check if the response mentions any clue descriptions
-    found_clues = find_clues_in_response(response_lower, state)
-    for clue_id, clue_desc in found_clues:
-        state.add_clue(clue_id, clue_desc)
-        actions["clues_found"].append(clue_desc)
-        logger.info(f"🔍 Detected clue found: {clue_id}")
+    # Only mark clues as found when a location has been searched
+    # and the searched location matches the clue's location
+    if actions.get("location_searched"):
+        searched_location = actions["location_searched"]
+        found_clues = find_clues_in_response_for_location(
+            response_lower, state, searched_location
+        )
+        for clue_id, clue_desc in found_clues:
+            state.add_clue(clue_id, clue_desc)
+            actions["clues_found"].append(clue_desc)
+            logger.info(f"🔍 Detected clue found: {clue_id} at {searched_location}")
+        
+        # Debug: log if location was searched but no clues found
+        if not found_clues and state.mystery:
+            logger.debug(
+                f"📍 Location '{searched_location}' searched but no clues detected. "
+                f"Available clue locations: {[c.location for c in state.mystery.clues]}"
+            )
 
     # === DETECT ACCUSATIONS ===
     accusation_keywords = [
@@ -221,35 +233,129 @@ def find_location_in_message(message_lower: str, state: GameState) -> Optional[s
     return None
 
 
-def find_clues_in_response(
-    response_lower: str, state: GameState
+def find_clues_in_response_for_location(
+    response_lower: str, state: GameState, searched_location: str
 ) -> List[Tuple[str, str]]:
-    """Find clue revelations in the AI response.
+    """Find clue revelations in the AI response for a specific searched location.
 
-    Returns list of (clue_id, clue_description) tuples.
+    Only returns clues that:
+    1. Are at the searched location
+    2. Have not been found yet
+    3. Are mentioned in the response
+
+    Args:
+        response_lower: The AI response in lowercase
+        state: Current game state
+        searched_location: The location that was searched
+
+    Returns:
+        List of (clue_id, clue_description) tuples.
     """
     if not state.mystery:
         return []
 
     found_clues = []
+    searched_location_lower = searched_location.lower()
 
     for clue in state.mystery.clues:
         # Skip clues already found
         if clue.id in state.clue_ids_found:
             continue
 
+        # Only check clues at the searched location
+        clue_location_lower = clue.location.lower()
+        
+        # Check if the searched location matches the clue's location
+        # First try exact match (normalized)
+        location_matches = (
+            clue_location_lower == searched_location_lower
+            or clue_location_lower in searched_location_lower
+            or searched_location_lower in clue_location_lower
+        )
+        
+        # If no exact match, try word-based matching for variations
+        # e.g., "Beneath Zara Orion's bed" vs "Zara Orion's bed"
+        if not location_matches:
+            # Extract meaningful words (skip common words and short words)
+            clue_words = {
+                word.strip(".,!?;:'\"")
+                for word in clue_location_lower.split()
+                if len(word.strip(".,!?;:'\"")) > 3
+                and word.strip(".,!?;:'\"") not in ["the", "a", "an", "of", "in", "at", "on"]
+            }
+            searched_words = {
+                word.strip(".,!?;:'\"")
+                for word in searched_location_lower.split()
+                if len(word.strip(".,!?;:'\"")) > 3
+                and word.strip(".,!?;:'\"") not in ["the", "a", "an", "of", "in", "at", "on"]
+            }
+            # Match if most meaningful words overlap
+            if clue_words and searched_words:
+                overlap = clue_words & searched_words
+                # Match if at least 50% of words overlap or if there's significant overlap
+                location_matches = (
+                    len(overlap) >= min(2, len(clue_words), len(searched_words))
+                    or len(overlap) / max(len(clue_words), len(searched_words)) >= 0.5
+                )
+
+        if not location_matches:
+            continue
+
         clue_desc_lower = clue.description.lower()
 
-        # Check for significant portions of the clue description (at least 20 chars)
+        # Check for significant portions of the clue description
         # This helps detect when the GM narratively reveals a clue
         desc_words = clue_desc_lower.split()
 
         # Look for sequences of 3+ consecutive words from the description
+        phrase_found = False
         for i in range(len(desc_words) - 2):
             phrase = " ".join(desc_words[i : i + 3])
             if phrase in response_lower:
-                found_clues.append((clue.id, clue.description))
+                phrase_found = True
                 break
+
+        # If no 3-word phrase found, try 2-word phrases (more flexible)
+        if not phrase_found and len(desc_words) >= 2:
+            for i in range(len(desc_words) - 1):
+                phrase = " ".join(desc_words[i : i + 2])
+                # Only use 2-word phrases if they're meaningful (not common words)
+                if len(phrase) > 8 and phrase not in ["the", "a", "an", "of", "in", "at", "on", "to", "for", "with", "from", "about"]:
+                    if phrase in response_lower:
+                        phrase_found = True
+                        break
+
+        # Extract key words (nouns, names, important terms) for flexible matching
+        # This is used for both the 2-key-word check and the discovery-language fallback
+        key_words = [
+            word.strip(".,!?;:'\"")
+            for word in desc_words
+            if len(word.strip(".,!?;:'\"")) > 4  # Longer words are more likely to be key entities
+            and word.strip(".,!?;:'\"") not in ["the", "a", "an", "of", "in", "at", "on", "to", "for", "with", "from", "about", "that", "this", "these", "those"]
+        ]
+
+        # Also check for key entities: extract important nouns/names from clue description
+        # and see if they appear together in the response
+        if not phrase_found and len(key_words) >= 2:
+            # Check if at least 2 key words from the clue appear in the response
+            matches = sum(1 for word in key_words if word in response_lower)
+            # If at least 2 key words match, consider it found
+            if matches >= 2:
+                phrase_found = True
+
+        # If still no match, but response suggests discovery, try even more lenient matching
+        if not phrase_found and len(key_words) >= 1:
+            discovery_keywords = ["find", "discover", "notice", "see", "read", "unfold", "letter", "document", "note", "paper", "envelope", "evidence", "threat", "threatening", "accus", "court", "inheritance"]
+            has_discovery_language = any(keyword in response_lower for keyword in discovery_keywords)
+            
+            if has_discovery_language:
+                # If response has discovery language and at least 1 key word matches, consider it found
+                matches = sum(1 for word in key_words if word in response_lower)
+                if matches >= 1:
+                    phrase_found = True
+
+        if phrase_found:
+            found_clues.append((clue.id, clue.description))
 
         # Also check for the clue ID being mentioned
         if clue.id.lower() in response_lower:

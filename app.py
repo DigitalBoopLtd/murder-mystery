@@ -4,11 +4,12 @@ import os
 import logging
 import gradio as gr
 from dotenv import load_dotenv
+from game_parser import parse_game_actions
 from mystery_generator import generate_mystery, prepare_game_prompt
 from game_state import GameState
 from agent import create_game_master_agent, process_message
 from ui_components import get_all_card_content
-from game_parser import parse_game_actions
+
 
 # Load environment variables
 load_dotenv()
