@@ -1,865 +1,1141 @@
-"""Main Gradio application with info cards."""
+"""Voice-First Murder Mystery Game - 90s Point-and-Click Adventure Style.
+
+A reimagined interface that prioritizes voice output with streaming captions,
+styled like classic adventure games (Monkey Island, Gabriel Knight, etc.)
+"""
 
 import os
-import logging
 import re
+import logging
 import tempfile
-import wave
-from typing import Optional
+import uuid
+from typing import Optional, Tuple, List, Dict
+from concurrent.futures import ThreadPoolExecutor
 import gradio as gr
 from dotenv import load_dotenv
 from openai import OpenAI
+
 try:
     from elevenlabs import ElevenLabs
+
     ELEVENLABS_AVAILABLE = True
 except ImportError:
-    # Fallback if elevenlabs not installed yet
     ELEVENLABS_AVAILABLE = False
     ElevenLabs = None
-from game_parser import parse_game_actions
-from mystery_generator import generate_mystery, prepare_game_prompt
+from image_service import generate_all_mystery_images
 from game_state import GameState
+from mystery_generator import generate_mystery, prepare_game_prompt
 from agent import create_game_master_agent, process_message
-from ui_components import get_all_card_content
-
+from game_parser import parse_game_actions
 
 # Load environment variables
 load_dotenv()
 
-# Initialize OpenAI client
+# Initialize clients
 openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-# Initialize ElevenLabs client
-elevenlabs_api_key = os.getenv("ELEVENLABS_API_KEY")
 elevenlabs_client = None
-if elevenlabs_api_key and ELEVENLABS_AVAILABLE:
+if os.getenv("ELEVENLABS_API_KEY") and ELEVENLABS_AVAILABLE:
     try:
-        elevenlabs_client = ElevenLabs(api_key=elevenlabs_api_key)
+        elevenlabs_client = ElevenLabs(api_key=os.getenv("ELEVENLABS_API_KEY"))
     except Exception as e:
-        # Logger not yet initialized, use print for early errors
-        print(f"Warning: Failed to initialize ElevenLabs client: {e}")
+        print(f"Warning: Failed to initialize ElevenLabs: {e}")
 
-# Voice mapping for different characters
-# You can customize these voice IDs based on your ElevenLabs account
-VOICE_MAP = {
-    "game_master": "JBFqnCBsd6RMkjVDRZzb",  # Default voice, replace with your preferred Game Master voice ID
-    "default": "JBFqnCBsd6RMkjVDRZzb",  # Default for unknown speakers
-    # Add suspect-specific voices here if desired
-    # "Zara Orion": "voice_id_here",
-    # "Max Stellar": "voice_id_here",
-}
+# Game Master voice
+GAME_MASTER_VOICE_ID = "JBFqnCBsd6RMkjVDRZzb"
 
-# Set up logging
+# Logging
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Global state storage (in production, use a proper database)
-game_states: dict[str, GameState] = {}
+# Global state
+game_states: Dict[str, GameState] = {}
+mystery_images: Dict[str, Dict[str, str]] = {}  # session_id -> {name: path}
 
-# Global log storage for UI display
-ui_logs: dict[str, list] = {}
+# ============================================================================
+# CSS STYLING - 90s Point-and-Click Adventure Game Aesthetic
+# ============================================================================
+
+RETRO_CSS = """
+/* Import Roblox-style fonts */
+@import url('https://fonts.googleapis.com/css2?family=Source+Sans+Pro:wght@400;600;700&family=Inter:wght@400;500;600;700&display=swap');
+
+/* Root variables for theming - Roblox inspired palette */
+:root {
+    --bg-primary: #F7F7F7; /* Roblox light gray - main background */
+    --bg-secondary: #FFFFFF; /* White - secondary background */
+    --bg-panel: #F2F2F2; /* Light gray - panel background */
+    --bg-card: #FFFFFF; /* White - card background */
+    --text-primary: #1E1E1E; /* Dark gray - primary text */
+    --text-secondary: #6B6B6B; /* Medium gray - secondary text */
+    --accent-blue: #00A2FF; /* Roblox blue - primary accent */
+    --accent-blue-dark: #0088CC; /* Darker blue - hover states */
+    --accent-green: #00C853; /* Green - positive indicators */
+    --accent-red: #E53935; /* Red - warnings/accusations */
+    --accent-orange: #FF6F00; /* Orange - highlights */
+    --border-color: #E0E0E0; /* Light gray - borders */
+    --shadow-color: rgba(0, 0, 0, 0.1);
+    --shadow-hover: rgba(0, 162, 255, 0.2);
+}
+
+/* Main container */
+.adventure-game {
+    background: var(--bg-primary) !important;
+    min-height: 100vh;
+    font-family: 'Source Sans Pro', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
+}
+
+/* Title bar - top of screen Roblox style */
+.title-bar {
+    background: var(--bg-secondary);
+    border-bottom: 2px solid var(--border-color);
+    padding: 16px 24px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    box-shadow: 0 2px 4px var(--shadow-color);
+}
+
+.game-title {
+    font-family: 'Source Sans Pro', sans-serif;
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--accent-blue);
+    letter-spacing: -0.5px;
+}
+
+/* The Stage - main viewing area */
+.stage-container {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    margin: 16px;
+    padding: 24px;
+    min-height: 350px;
+    position: relative;
+    box-shadow: 0 2px 8px var(--shadow-color);
+}
+
+/* Speaker indicator */
+.speaker-name {
+    font-family: 'Source Sans Pro', sans-serif;
+    font-size: 24px;
+    font-weight: 600;
+    color: var(--accent-blue);
+    text-align: center;
+    margin-bottom: 16px;
+}
+
+/* Caption display area */
+.caption-display {
+    font-family: 'Source Sans Pro', sans-serif;
+    font-size: 16px;
+    line-height: 1.6;
+    color: var(--text-primary);
+    text-align: center;
+    padding: 20px 24px;
+    min-height: 120px;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.caption-display em {
+    color: var(--text-secondary);
+}
+
+/* Portrait display */
+.portrait-container {
+    text-align: center;
+    margin: 10px 0;
+}
+
+.portrait-image {
+    max-width: 600px;
+    max-height: 600px;
+    width: 100%;
+    height: auto;
+    border: 2px solid var(--border-color);
+    border-radius: 12px;
+    box-shadow: 0 4px 12px var(--shadow-color);
+}
+
+/* Waveform/speaking indicator */
+.speaking-indicator {
+    display: flex;
+    justify-content: center;
+    gap: 4px;
+    margin: 15px 0;
+}
+
+.speaking-indicator .bar {
+    width: 4px;
+    height: 20px;
+    background: var(--accent-blue);
+    animation: pulse 0.5s ease-in-out infinite;
+    border-radius: 2px;
+}
+
+.speaking-indicator .bar:nth-child(2) { animation-delay: 0.1s; }
+.speaking-indicator .bar:nth-child(3) { animation-delay: 0.2s; }
+.speaking-indicator .bar:nth-child(4) { animation-delay: 0.3s; }
+.speaking-indicator .bar:nth-child(5) { animation-delay: 0.4s; }
+
+@keyframes pulse {
+    0%, 100% { transform: scaleY(0.5); opacity: 0.5; }
+    50% { transform: scaleY(1); opacity: 1; }
+}
+
+/* Suspect buttons - Roblox card style */
+.suspect-bar {
+    display: flex;
+    justify-content: center;
+    gap: 12px;
+    padding: 16px;
+    background: var(--bg-primary);
+    flex-wrap: wrap;
+}
+
+.suspect-button {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 12px 16px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-align: center;
+    min-width: 140px;
+    color: var(--text-primary);
+    box-shadow: 0 2px 4px var(--shadow-color);
+}
+
+.suspect-button:hover {
+    border-color: var(--accent-blue);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px var(--shadow-hover);
+    background: #F8FBFF;
+}
+
+.suspect-button img {
+    width: 80px;
+    height: 80px;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    margin-bottom: 8px;
+}
+
+.suspect-button .name {
+    font-family: 'Source Sans Pro', sans-serif;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.suspect-button .role {
+    font-family: 'Source Sans Pro', sans-serif;
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
+/* Action bar - Roblox style */
+.action-bar {
+    display: flex;
+    justify-content: center;
+    gap: 12px;
+    padding: 16px;
+    background: var(--bg-primary);
+}
+
+.action-button {
+    font-family: 'Source Sans Pro', sans-serif !important;
+    font-size: 14px !important;
+    font-weight: 600 !important;
+    background: var(--accent-blue) !important;
+    border: none !important;
+    color: #FFFFFF !important;
+    padding: 10px 20px !important;
+    border-radius: 6px !important;
+    cursor: pointer !important;
+    transition: all 0.2s ease !important;
+    box-shadow: 0 2px 4px var(--shadow-color) !important;
+}
+
+.action-button:hover {
+    background: var(--accent-blue-dark) !important;
+    transform: translateY(-1px) !important;
+    box-shadow: 0 4px 8px var(--shadow-hover) !important;
+}
+
+/* Input area */
+.input-bar {
+    display: flex;
+    gap: 12px;
+    padding: 16px;
+    background: var(--bg-primary);
+    border-top: 1px solid var(--border-color);
+    align-items: center;
+    justify-content: center;
+}
+
+.text-input {
+    font-family: 'Source Sans Pro', sans-serif !important;
+    font-size: 14px !important;
+    background: var(--bg-card) !important;
+    border: 1px solid var(--border-color) !important;
+    color: var(--text-primary) !important;
+    padding: 10px 16px !important;
+    border-radius: 6px !important;
+    flex-grow: 1 !important;
+    max-width: 500px !important;
+}
+
+.text-input:focus {
+    border-color: var(--accent-blue) !important;
+    outline: none !important;
+    box-shadow: 0 0 0 3px rgba(0, 162, 255, 0.1) !important;
+}
+
+/* Side panel - Roblox card style */
+.side-panel {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 16px;
+    height: fit-content;
+    box-shadow: 0 2px 4px var(--shadow-color);
+    margin-bottom: 12px;
+}
+
+.panel-title {
+    font-family: 'Source Sans Pro', sans-serif;
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--accent-blue);
+    border-bottom: 2px solid var(--border-color);
+    padding-bottom: 8px;
+    margin-bottom: 12px;
+}
+
+.clue-item {
+    font-family: 'Source Sans Pro', sans-serif;
+    font-size: 13px;
+    color: var(--text-primary);
+    padding: 8px 12px;
+    border-left: 3px solid var(--accent-blue);
+    margin-bottom: 6px;
+    background: #F8FBFF;
+    border-radius: 4px;
+}
+
+.location-item {
+    font-family: 'Source Sans Pro', sans-serif;
+    font-size: 14px;
+    padding: 6px 12px;
+    color: var(--text-primary);
+    border-radius: 4px;
+    margin-bottom: 4px;
+}
+
+.location-item.searched {
+    color: var(--text-secondary);
+    text-decoration: line-through;
+    background: var(--bg-panel);
+}
+
+/* Status bar - bottom of screen */
+.status-bar {
+    background: var(--bg-card);
+    border-top: 1px solid var(--border-color);
+    padding: 12px 24px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    box-shadow: 0 -2px 4px var(--shadow-color);
+}
+
+.accusations-display {
+    font-family: 'Source Sans Pro', sans-serif;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+.accusations-pip {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    background: var(--accent-blue);
+    border-radius: 50%;
+    margin: 0 4px;
+}
+
+.accusations-pip.used {
+    background: var(--accent-red);
+}
+
+/* Audio player styling */
+.audio-player {
+    background: var(--bg-card) !important;
+    border: 1px solid var(--border-color) !important;
+    border-radius: 6px !important;
+}
+
+/* Transcript panel */
+.transcript-panel {
+    max-height: 300px;
+    overflow-y: auto;
+    font-family: 'Source Sans Pro', sans-serif;
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+.transcript-entry {
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.transcript-speaker {
+    font-family: 'Source Sans Pro', sans-serif;
+    font-weight: 600;
+    color: var(--accent-blue);
+    font-size: 13px;
+}
+
+.transcript-text {
+    color: var(--text-secondary);
+    margin-top: 4px;
+}
+
+/* New game splash */
+.splash-screen {
+    text-align: center;
+    padding: 60px 20px;
+}
+
+.splash-title {
+    font-family: 'Source Sans Pro', sans-serif;
+    font-size: 32px;
+    font-weight: 700;
+    color: var(--accent-blue);
+    margin-bottom: 16px;
+}
+
+.splash-subtitle {
+    font-family: 'Source Sans Pro', sans-serif;
+    font-size: 16px;
+    color: var(--text-secondary);
+    margin-bottom: 32px;
+}
+
+.start-button {
+    font-family: 'Source Sans Pro', sans-serif !important;
+    font-size: 16px !important;
+    font-weight: 600 !important;
+    background: var(--accent-blue) !important;
+    border: none !important;
+    color: #FFFFFF !important;
+    padding: 14px 32px !important;
+    border-radius: 8px !important;
+    cursor: pointer !important;
+    box-shadow: 0 4px 12px var(--shadow-hover) !important;
+    transition: all 0.2s ease !important;
+}
+
+.start-button:hover {
+    background: var(--accent-blue-dark) !important;
+    transform: translateY(-2px) !important;
+    box-shadow: 0 6px 16px var(--shadow-hover) !important;
+}
+
+/* Theme toggle */
+.theme-toggle {
+    font-family: 'Source Sans Pro', sans-serif !important;
+    font-size: 13px !important;
+    font-weight: 500 !important;
+    background: var(--bg-card) !important;
+    border: 1px solid var(--border-color) !important;
+    color: var(--text-primary) !important;
+    padding: 6px 12px !important;
+    border-radius: 6px !important;
+    cursor: pointer !important;
+    transition: all 0.2s ease !important;
+}
+
+.theme-toggle:hover {
+    border-color: var(--accent-blue) !important;
+    color: var(--accent-blue) !important;
+    background: #F8FBFF !important;
+}
+
+/* Loading state */
+.loading-indicator {
+    font-family: 'Source Sans Pro', sans-serif;
+    font-size: 16px;
+    font-weight: 500;
+    color: var(--accent-blue);
+    text-align: center;
+    animation: blink 1s infinite;
+}
+
+@keyframes blink {
+    0%, 50% { opacity: 1; }
+    51%, 100% { opacity: 0; }
+}
+
+/* Gradio overrides */
+.gradio-container {
+    background: var(--bg-primary) !important;
+    max-width: 100% !important;
+}
+
+.gr-button {
+    font-family: 'Source Sans Pro', sans-serif !important;
+}
+
+.gr-box {
+    background: var(--bg-card) !important;
+    border-color: var(--border-color) !important;
+    border-radius: 8px !important;
+}
+
+footer {
+    display: none !important;
+}
+"""
 
 
-class UILogHandler(logging.Handler):
-    """Custom logging handler that stores logs for UI display."""
-
-    def __init__(self, session_id: str):
-        super().__init__()
-        self.session_id = session_id
-        self.setFormatter(
-            logging.Formatter(
-                "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-                datefmt="%H:%M:%S",
-            )
-        )
-
-    def emit(self, record):
-        """Store log record for UI display."""
-        if self.session_id not in ui_logs:
-            ui_logs[self.session_id] = []
-
-        log_entry = self.format(record)
-        ui_logs[self.session_id].append(log_entry)
-
-        # Keep only last 100 log entries per session
-        if len(ui_logs[self.session_id]) > 100:
-            ui_logs[self.session_id] = ui_logs[self.session_id][-100:]
+# ============================================================================
+# HELPER FUNCTIONS
+# ============================================================================
 
 
-def get_ui_logs(session_id: str) -> str:
-    """Get formatted logs for a session."""
-    if session_id not in ui_logs:
-        return "No logs yet..."
-    return "\n".join(ui_logs.get(session_id, []))
-
-
-def transcribe_audio(audio_file_path: str) -> str:
-    """Transcribe audio to text using OpenAI Whisper.
-    
-    Args:
-        audio_file_path: Path to the audio file
-        
-    Returns:
-        Transcribed text
-    """
-    try:
-        with open(audio_file_path, "rb") as audio_file:
-            transcript = openai_client.audio.transcriptions.create(
-                model="whisper-1",
-                file=audio_file
-            )
-            return transcript.text
-    except Exception as e:
-        logger.error(f"Error transcribing audio: {str(e)}", exc_info=True)
-        return ""
-
-
-def validate_audio_file(audio_path: Optional[str]) -> Optional[str]:
-    """Validate that an audio file exists and is readable.
-    
-    Args:
-        audio_path: Path to audio file
-        
-    Returns:
-        Valid audio path or None if invalid
-    """
-    if not audio_path:
-        return None
-    
-    if not os.path.exists(audio_path):
-        logger.warning(f"Audio file does not exist: {audio_path}")
-        return None
-    
-    try:
-        # Try to read the file to ensure it's valid
-        with open(audio_path, 'rb') as f:
-            header = f.read(4)
-            if len(header) < 4:
-                logger.warning(f"Audio file is too small or empty: {audio_path}")
-                return None
-        return audio_path
-    except (IOError, OSError) as e:
-        logger.warning(f"Audio file is not readable: {audio_path}, error: {e}")
-        return None
-
-
-def text_to_speech(text: str, speaker_name: str = None, voice_id: str = None) -> str:
-    """Convert text to speech using ElevenLabs client API.
-    
-    Args:
-        text: Text to convert to speech
-        speaker_name: Name of the speaker (Game Master, suspect name, etc.)
-                     Used to select appropriate voice if voice_id not provided
-        voice_id: Optional specific voice ID to use (from suspect assignment)
-        
-    Returns:
-        Path to the generated audio file
-    """
-    if not elevenlabs_client:
-        logger.warning("ElevenLabs client not available, skipping TTS")
-        return None
-    
-    if not text or not text.strip():
-        return None
-        
-    try:
-        # Use provided voice_id, or fall back to VOICE_MAP
-        if not voice_id:
-            voice_id = VOICE_MAP.get("default")
-            if speaker_name:
-                # Check if there's a specific voice for this speaker
-                voice_id = VOICE_MAP.get(speaker_name, VOICE_MAP.get("game_master", VOICE_MAP.get("default")))
-            else:
-                # Default to game master voice
-                voice_id = VOICE_MAP.get("game_master", VOICE_MAP.get("default"))
-        
-        logger.info(f"Generating TTS for '{speaker_name or 'Game Master'}' using voice: {voice_id}")
-        
-        # Generate audio using ElevenLabs client
-        audio_stream = elevenlabs_client.text_to_speech.convert(
-            voice_id=voice_id,
-            text=text,
-            model_id="eleven_multilingual_v2",
-            output_format="mp3_44100_128"
-        )
-        
-        # Collect all audio chunks
-        audio_bytes = b""
-        for chunk in audio_stream:
-            if chunk:
-                audio_bytes += chunk
-        
-        # Save to temporary file
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmp_file:
-            tmp_file.write(audio_bytes)
-            return tmp_file.name
-    except Exception as e:
-        logger.error(f"Error generating speech: {str(e)}", exc_info=True)
-        return None
-
-
-def format_friendly_error(error: Exception) -> str:
-    """Convert technical error messages to user-friendly ones.
-
-    Returns a tuple of (friendly_message, raw_error_string)
-    """
-    error_str = str(error)
-    error_type = type(error).__name__
-
-    # Friendly error messages based on error type and content
-    friendly_messages = {
-        "OUTPUT_PARSING_FAILURE": "I'm having trouble generating a new mystery. The AI returned an unexpected format. Please try starting a new game again.",
-        "Invalid json output": "I'm having trouble generating a new mystery. The AI returned an unexpected format. Please try starting a new game again.",
-        "Error generating mystery": "I'm having trouble generating a new mystery. Please try starting a new game again.",
-        "Error processing message": "I'm having trouble processing your message. Please try rephrasing your question or try again.",
-        "ConnectionError": "I'm having trouble connecting to the AI service. Please check your internet connection and try again.",
-        "TimeoutError": "The request took too long to process. Please try again.",
-        "APIError": "There was an issue with the AI service. Please try again in a moment.",
-    }
-
-    # Check for specific error patterns
-    friendly_msg = None
-    for pattern, message in friendly_messages.items():
-        if (
-            pattern.lower() in error_str.lower()
-            or pattern.lower() in error_type.lower()
-        ):
-            friendly_msg = message
-            break
-
-    # Default friendly message if no pattern matches
-    if not friendly_msg:
-        if "mystery" in error_str.lower() or "generate" in error_str.lower():
-            friendly_msg = "I'm having trouble generating a new mystery. Please try starting a new game again."
-        elif "process" in error_str.lower() or "message" in error_str.lower():
-            friendly_msg = "I'm having trouble processing your message. Please try rephrasing your question or try again."
-        else:
-            friendly_msg = "Something went wrong. Please try again. If the problem persists, check the debug logs for details."
-
-    # Format the response with both friendly message and raw error
-    # Use markdown format that works well in Gradio
-    return f"""{friendly_msg}
-
----
-
-**Technical Details:**
-
-*Error Type:* `{error_type}`
-
-*Error Message:*
-```
-{error_str[:500]}{'...' if len(error_str) > 500 else ''}
-```
-
-*Full error details are available in the Debug Logs section below.*"""
-
-
-def get_or_create_game_state(session_id: str) -> GameState:
-    """Get or create a game state for a session."""
+def get_or_create_state(session_id: str) -> GameState:
+    """Get or create game state for session."""
     if session_id not in game_states:
         game_states[session_id] = GameState()
     return game_states[session_id]
 
 
-def get_card_updates(state: GameState) -> tuple:
-    """Get all card content updates from game state.
-
-    Returns:
-        Tuple of (status, suspects, objective, locations, clues) markdown strings
-    """
-    cards = get_all_card_content(
-        mystery=state.mystery,
-        wrong_accusations=state.wrong_accusations,
-        clues_found=state.clues_found,
-        searched_locations=state.searched_locations,
-        game_over=state.game_over,
-        won=state.won,
-    )
-    return (
-        cards["status"],
-        cards["suspects"],
-        cards["objective"],
-        cards["locations"],
-        cards["clues"],
-    )
+def transcribe_audio(audio_path: str) -> str:
+    """Transcribe audio using OpenAI Whisper."""
+    try:
+        with open(audio_path, "rb") as audio_file:
+            transcript = openai_client.audio.transcriptions.create(
+                model="whisper-1", file=audio_file
+            )
+        return transcript.text
+    except Exception as e:
+        logger.error(f"Transcription error: {e}")
+        return ""
 
 
-def process_voice_input(audio, history: list, session_id: str):
-    """Process voice input: transcribe, get response, convert to speech.
-    
-    Args:
-        audio: Audio input from Gradio (can be tuple or file path)
-        history: Chat history
-        session_id: Session identifier
-        
-    Returns:
-        Tuple of (updated_history, audio_response_path, status_card, suspects_card, objective_card, locations_card, clues_card, logs)
-    """
-    if audio is None:
-        state = get_or_create_game_state(session_id)
-        logs = get_ui_logs(session_id)
-        return history, None, *get_card_updates(state), logs
-    
-    # Extract audio file path from Gradio audio input
-    # In Gradio 5+, audio can be a tuple (sample_rate, audio_data) or a file path string
-    audio_path = None
-    if isinstance(audio, tuple):
-        # Convert numpy array to WAV file
-        import numpy as np
-        sample_rate, audio_data = audio
-        tmp_file_path = tempfile.mktemp(suffix=".wav")
-        # Note: 'wb' mode returns Wave_write which has setnchannels/setsampwidth/setframerate
-        # The linter incorrectly infers Wave_read, but the code is correct
-        wav_file = wave.open(tmp_file_path, 'wb')  # type: ignore[assignment]
-        try:
-            wav_file.setnchannels(1)  # type: ignore[attr-defined]  # Mono
-            wav_file.setsampwidth(2)  # type: ignore[attr-defined]  # 16-bit
-            wav_file.setframerate(sample_rate)  # type: ignore[attr-defined]
-            # Convert float array to int16
-            audio_int16 = (audio_data * 32767).astype(np.int16)
-            wav_file.writeframes(audio_int16.tobytes())  # type: ignore[attr-defined]
-        finally:
-            wav_file.close()
-        audio_path = tmp_file_path
-    elif isinstance(audio, str):
-        # It's already a file path
-        audio_path = audio
-    else:
-        logger.error(f"Unexpected audio format: {type(audio)}")
-        state = get_or_create_game_state(session_id)
-        logs = get_ui_logs(session_id)
-        return history, None, *get_card_updates(state), logs
-    
-    # Transcribe audio
-    transcription = transcribe_audio(audio_path)
-    
-    if not transcription.strip():
-        logger.warning("Empty transcription from audio")
-        state = get_or_create_game_state(session_id)
-        logs = get_ui_logs(session_id)
-        return history, None, *get_card_updates(state), logs
-    
-    logger.info(f"Transcribed voice input: {transcription}")
-    
-    # Process the transcribed message through the chat function
-    # chat_fn now returns: (history, audio_response_path, status_card, suspects_card, objective_card, locations_card, clues_card, logs)
-    result = chat_fn(transcription, history, session_id)
-    
-    # Return all results (audio is already included from chat_fn)
-    return result
-
-
-def chat_fn(message: str, history: list, session_id: str):
-    """Handle chat messages.
-
-    Args:
-        message: User's message
-        history: List of message dicts in format [{"role": "user", "content": "..."}, {"role": "assistant", "content": "..."}]
-        session_id: Session identifier
-
-    Returns:
-        Tuple of (updated_history, audio_response_path, status_card, suspects_card, objective_card, locations_card, clues_card, logs)
-    """
-    audio_response_path = None
-    # Set up UI logging handler for this session
-    ui_handler = UILogHandler(session_id)
-    ui_handler.setLevel(logging.INFO)
-
-    # Get root logger and add handler
-    root_logger = logging.getLogger()
-    root_logger.addHandler(ui_handler)
-    root_logger.setLevel(logging.INFO)
+def text_to_speech(text: str, voice_id: str = None) -> Optional[str]:
+    """Generate speech from text."""
+    if not elevenlabs_client or not text.strip():
+        return None
 
     try:
-        if not message.strip():
-            state = get_or_create_game_state(session_id)
-            logs = get_ui_logs(session_id)
-            return history, audio_response_path, *get_card_updates(state), logs
+        voice_id = voice_id or GAME_MASTER_VOICE_ID
+        audio_stream = elevenlabs_client.text_to_speech.convert(
+            voice_id=voice_id,
+            text=text,
+            model_id="eleven_multilingual_v2",
+            output_format="mp3_44100_128",
+        )
 
-        state = get_or_create_game_state(session_id)
+        audio_bytes = b"".join(chunk for chunk in audio_stream if chunk)
 
-        # Check if this is a new game request
-        if state.is_new_game(message) or state.mystery is None:
-            # Generate new mystery
-            try:
-                mystery = generate_mystery()
-                state.reset_game()  # Reset all state
-                state.mystery = mystery
-                state.system_prompt = prepare_game_prompt(mystery)
-                # Cards will be updated after agent processes the message
-            except Exception as e:
-                # Log the raw error
-                logger.error(f"Error generating mystery: {str(e)}", exc_info=True)
-                # Return friendly error with card updates
-                friendly_error = format_friendly_error(e)
-                formatted_error = f"**Game Master:** {friendly_error}"
-                error_history = history + [
-                    {"role": "user", "content": message},
-                    {"role": "assistant", "content": formatted_error},
-                ]
-                logs = get_ui_logs(session_id)
-                return error_history, audio_response_path, *get_card_updates(state), logs
-        else:
-            # Use continue prompt
-            state.system_prompt = state.get_continue_prompt()
-
-        # Create agent if not exists (shared across sessions)
-        if not hasattr(chat_fn, "agent_app"):
-            chat_fn.agent_app = create_game_master_agent()
-
-        agent_app = chat_fn.agent_app
-
-        # Process the message
-        try:
-            response, speaker_name = process_message(
-                agent_app,
-                message,
-                state.system_prompt,
-                session_id,
-                thread_id=session_id,
-            )
-
-            # Extract audio path marker if present (from interrogate_suspect tool)
-            # Format: [AUDIO:/path/to/file.mp3]text response
-            audio_path_from_tool = None
-            clean_response = response
-            audio_marker_pattern = r'\[AUDIO:([^\]]+)\]'
-            match = re.search(audio_marker_pattern, response)
-            if match:
-                audio_path_from_tool = match.group(1)
-                # Remove the audio marker from the text
-                clean_response = re.sub(audio_marker_pattern, '', response).strip()
-                logger.info(f"Extracted audio path from tool: {audio_path_from_tool}")
-            
-            # Format response with speaker name (using cleaned response)
-            if speaker_name:
-                formatted_response = f"**{speaker_name}:** {clean_response}"
-            else:
-                formatted_response = f"**Game Master:** {clean_response}"
-
-            # Update history in Gradio 6 format
-            history.append({"role": "user", "content": message})
-            history.append({"role": "assistant", "content": formatted_response})
-
-            # Update game state messages (store cleaned response without formatting)
-            state.messages.append({"role": "user", "content": message})
-            state.messages.append({"role": "assistant", "content": clean_response})
-            
-            # Generate audio for the response
-            # Use audio from tool if available, otherwise generate new audio
-            audio_response_path = None
-            if audio_path_from_tool:
-                audio_response_path = validate_audio_file(audio_path_from_tool)
-                if audio_response_path:
-                    logger.info(f"Using validated audio from tool: {audio_response_path}")
-                else:
-                    logger.warning("Audio file from tool failed validation, generating new audio")
-            
-            if not audio_response_path:
-                # Generate new audio
-                # Clean the response text for TTS (remove markdown formatting)
-                tts_text = clean_response.replace("**", "").replace("*", "")
-                
-                # Remove speaker name prefix if present at the START of the text
-                if speaker_name:
-                    prefix = f"{speaker_name}:"
-                    if tts_text.startswith(prefix):
-                        tts_text = tts_text[len(prefix):].strip()
-                elif tts_text.startswith("Game Master:"):
-                    tts_text = tts_text[len("Game Master:"):].strip()
-                
-                # Look up voice_id from suspect if this is a suspect speaking
-                voice_id = None
-                if speaker_name and state.mystery:
-                    for suspect in state.mystery.suspects:
-                        if suspect.name == speaker_name and suspect.voice_id:
-                            voice_id = suspect.voice_id
-                            logger.info(f"Using assigned voice {voice_id} for suspect {speaker_name}")
-                            break
-                
-                audio_response_path = text_to_speech(tts_text, speaker_name or "Game Master", voice_id)
-                # Validate the generated audio file
-                audio_response_path = validate_audio_file(audio_response_path)
-
-            # Parse response to auto-update game state
-            # This detects: suspects talked to, locations searched, clues found, accusations
-            # Use clean_response (without audio markers) for parsing
-            actions = parse_game_actions(message, clean_response, state)
-
-            if actions:
-                if actions.get("suspect_talked_to"):
-                    logger.info(
-                        f"Updated suspects_talked_to: {state.suspects_talked_to}"
-                    )
-                if actions.get("location_searched"):
-                    logger.info(
-                        f"Updated searched_locations: {state.searched_locations}"
-                    )
-                if actions.get("clues_found"):
-                    logger.info(f"Updated clues_found: {state.clues_found}")
-                if actions.get("accusation_made"):
-                    logger.info(
-                        f"Accusation made against: {actions['accusation_made']}, correct: {actions.get('accusation_correct')}"
-                    )
-
-        except Exception as e:
-            # Log the raw error
-            logger.error(f"Error processing message: {str(e)}", exc_info=True)
-            # Show friendly error to user
-            friendly_error = format_friendly_error(e)
-            formatted_error = f"**Game Master:** {friendly_error}"
-            history.append({"role": "user", "content": message})
-            history.append({"role": "assistant", "content": formatted_error})
-            # Generate audio for error message too
-            clean_error = friendly_error.split("---")[0].strip()  # Just the friendly message
-            audio_response_path = text_to_speech(clean_error, "Game Master")
-            # Validate the generated audio file
-            audio_response_path = validate_audio_file(audio_response_path)
-    finally:
-        # Remove handler after processing
-        root_logger.removeHandler(ui_handler)
-
-    logs = get_ui_logs(session_id)
-    # Return history, audio_response, and card updates
-    return history, audio_response_path, *get_card_updates(state), logs
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as f:
+            f.write(audio_bytes)
+            return f.name
+    except Exception as e:
+        logger.error(f"TTS error: {e}")
+        return None
 
 
-def create_interface():
-    """Create the Gradio interface with info cards."""
+def get_suspect_voice_id(suspect_name: str, state: GameState) -> Optional[str]:
+    """Get voice ID for a suspect."""
+    if not state.mystery:
+        return None
+    for suspect in state.mystery.suspects:
+        if suspect.name == suspect_name:
+            return suspect.voice_id
+    return None
 
-    # Custom CSS for better card styling
-    custom_css = """
-    .info-card {
-        border: 1px solid #e0e0e0;
-        border-radius: 8px;
-        padding: 12px;
-        background: #fafafa;
-        height: 100%;
-    }
-    .info-card h3 {
-        margin-top: 0;
-        color: #333;
-    }
-    .game-chat {
-        min-height: 500px;
-    }
-    .logs-display {
-        font-family: monospace;
-        font-size: 11px;
-    }
+
+def format_victim_scene_html(mystery) -> str:
+    """Format victim and scene information as HTML."""
+    if not mystery:
+        return "<em>Start a game to see case details...</em>"
+    
+    return f"""
+    <div style="margin-bottom: 12px;">
+        <div style="font-weight: 600; color: var(--accent-blue); margin-bottom: 8px;">Victim:</div>
+        <div style="color: var(--text-primary); margin-bottom: 12px;">{mystery.victim.name}</div>
+        <div style="font-weight: 600; color: var(--accent-blue); margin-bottom: 8px;">Scene:</div>
+        <div style="color: var(--text-primary);">{mystery.setting}</div>
+    </div>
     """
 
-    with gr.Blocks(title="Murder Mystery Game") as demo:
-        # Inject CSS using gr.HTML
-        gr.HTML(f"<style>{custom_css}</style>")
 
-        gr.Markdown(
-            """
-            # 🕵️ Murder Mystery Game
-            
-            Click **"Start New Game"** to begin a new mystery investigation!
-            """
+def format_clues_html(clues: List[str]) -> str:
+    """Format found clues as HTML."""
+    if not clues:
+        return "<em>No clues discovered yet...</em>"
+
+    return "".join(f'<div class="clue-item">• {clue}</div>' for clue in clues)
+
+
+def format_suspects_list_html(mystery, talked_to: List[str] = None) -> str:
+    """Format suspects list as HTML for quick reference."""
+    if not mystery:
+        return "<em>Start a game to see suspects</em>"
+    
+    talked_to = talked_to or []
+    html_parts = []
+    
+    for suspect in mystery.suspects:
+        talked_class = "location-item searched" if suspect.name in talked_to else "location-item"
+        check = " ✓" if suspect.name in talked_to else ""
+        html_parts.append(
+            f'<div class="{talked_class}">'
+            f'<strong>{suspect.name}</strong> - {suspect.role}{check}<br>'
+            f'<em style="font-size: 0.9em; color: var(--text-secondary);">Motive: {suspect.secret}</em>'
+            f'</div>'
         )
+    
+    return "".join(html_parts)
 
+
+def format_locations_html(mystery, searched: List[str]) -> str:
+    """Format locations as HTML."""
+    if not mystery:
+        return "<em>Start a game to see locations</em>"
+
+    locations = list(set(clue.location for clue in mystery.clues))
+    html_parts = []
+
+    for loc in locations:
+        cls = "location-item searched" if loc in searched else "location-item"
+        check = " ✓" if loc in searched else ""
+        html_parts.append(f'<div class="{cls}">{loc}{check}</div>')
+
+    return "".join(html_parts)
+
+
+# ============================================================================
+# GAME LOGIC
+# ============================================================================
+
+
+def start_new_game(session_id: str):
+    """Start a new mystery game with parallelized image generation."""
+    state = get_or_create_state(session_id)
+    state.reset_game()
+
+    # Generate mystery
+    logger.info("Generating new mystery...")
+    mystery = generate_mystery()
+    state.mystery = mystery
+    state.system_prompt = prepare_game_prompt(mystery)
+
+    # Start image generation and agent/narration in parallel
+    logger.info("Starting parallel initialization...")
+    
+    with ThreadPoolExecutor(max_workers=3) as executor:
+        # Submit image generation (takes longest)
+        images_future = executor.submit(generate_all_mystery_images, mystery)
+        
+        # While images generate, create agent and get narration
+        agent = create_game_master_agent()
+        response, speaker = process_message(
+            agent,
+            "The player has just arrived. Welcome them to the mystery with atmosphere.",
+            state.system_prompt,
+            session_id,
+            thread_id=session_id,
+        )
+        
+        # Wait for images to complete
+        images = images_future.result()
+        mystery_images[session_id] = images
+        
+        # Store portrait paths on suspects
+        for suspect in mystery.suspects:
+            if suspect.name in images:
+                suspect.portrait_path = images[suspect.name]
+        
+        # Generate audio (needs the response text)
+        audio_path = text_to_speech(response, GAME_MASTER_VOICE_ID)
+
+    # Store in messages
+    state.messages.append(
+        {"role": "assistant", "content": response, "speaker": "Game Master"}
+    )
+
+    return state, response, audio_path, "Game Master"
+
+
+def process_player_action(
+    action_type: str, target: str, custom_message: str, session_id: str
+) -> Tuple[str, Optional[str], str, GameState]:
+    """Process a player action and return response.
+
+    Args:
+        action_type: "talk", "search", "accuse", or "custom"
+        target: Suspect name, location, or None
+        custom_message: Free-form message if action_type is "custom"
+        session_id: Session identifier
+
+    Returns:
+        Tuple of (response_text, audio_path, speaker_name, state)
+    """
+    state = get_or_create_state(session_id)
+
+    if not state.mystery:
+        return "Please start a new game first.", None, "Game Master", state
+
+    # Build the message based on action type
+    if action_type == "talk" and target:
+        message = f"I want to talk to {target}. Hello, {target}."
+    elif action_type == "search" and target:
+        message = f"I want to search {target}."
+    elif action_type == "accuse" and target:
+        message = f"I accuse {target} of the murder!"
+    elif action_type == "custom" and custom_message:
+        message = custom_message
+    else:
+        return "I didn't understand that action.", None, "Game Master", state
+
+    # Store player message
+    state.messages.append({"role": "user", "content": message, "speaker": "You"})
+
+    # Get or create agent
+    if not hasattr(process_player_action, "agent"):
+        process_player_action.agent = create_game_master_agent()
+
+    # Update system prompt
+    state.system_prompt = state.get_continue_prompt()
+
+    # Process with agent
+    response, speaker = process_message(
+        process_player_action.agent,
+        message,
+        state.system_prompt,
+        session_id,
+        thread_id=session_id,
+    )
+
+    # Parse game actions
+    actions = parse_game_actions(message, response, state)
+
+    # Determine voice
+    voice_id = None
+    if speaker and speaker != "Game Master":
+        voice_id = get_suspect_voice_id(speaker, state)
+    voice_id = voice_id or GAME_MASTER_VOICE_ID
+
+    # Extract audio path marker if present (from interrogate_suspect tool)
+    # Format: [AUDIO:/path/to/file.mp3]text response
+    audio_path_from_tool = None
+    clean_response = response
+    audio_marker_pattern = r'\[AUDIO:([^\]]+)\]'
+    match = re.search(audio_marker_pattern, response)
+    if match:
+        audio_path_from_tool = match.group(1)
+        # Remove the audio marker from the text
+        clean_response = re.sub(audio_marker_pattern, '', response).strip()
+        logger.info(f"Extracted audio path from tool: {audio_path_from_tool}")
+
+    # Generate audio
+    tts_text = clean_response.replace("**", "").replace("*", "")
+    audio_path = audio_path_from_tool or text_to_speech(tts_text, voice_id)
+
+    # Store response (without audio marker)
+    state.messages.append(
+        {"role": "assistant", "content": clean_response, "speaker": speaker or "Game Master"}
+    )
+
+    return clean_response, audio_path, speaker or "Game Master", state
+
+
+# ============================================================================
+# GRADIO UI
+# ============================================================================
+
+
+def create_app():
+    """Create the Gradio application."""
+
+    with gr.Blocks(title="Murder Mystery") as app:
+
+        # Inject CSS via HTML component (works across Gradio versions)
+        gr.HTML(f"<style>{RETRO_CSS}</style>")
+
+        # Session state
+        session_id = gr.State(lambda: str(uuid.uuid4()))
+
+        # ====== TITLE BAR ======
+        with gr.Row(elem_classes="title-bar"):
+            gr.HTML('<div class="game-title">🔍 MURDER MYSTERY</div>')
+
+        # ====== MAIN LAYOUT ======
         with gr.Row():
-            # Left column - Game info cards
-            with gr.Column(scale=1):
-                status_card = gr.Markdown(
-                    value='### 🕵️ Murder Mystery\n\nType **"start"** to begin!',
-                    elem_classes=["info-card"],
+
+            # === LEFT: SIDE PANEL ===
+            with gr.Column(scale=1, min_width=200):
+                # Victim and Scene - first card
+                with gr.Group(elem_classes="side-panel"):
+                    gr.HTML('<div class="panel-title">🔍 Case Details</div>')
+                    victim_scene_html = gr.HTML(
+                        "<em>Start a game to see case details...</em>",
+                        elem_classes="transcript-panel",
+                    )
+
+                # Suspects list - show who can be questioned
+                with gr.Group(elem_classes="side-panel"):
+                    gr.HTML('<div class="panel-title">🎭 Suspects</div>')
+                    suspects_list_html = gr.HTML(
+                        "<em>Start a game to see suspects...</em>",
+                        elem_classes="transcript-panel",
+                    )
+
+                # Locations card - above clues
+                with gr.Group(elem_classes="side-panel"):
+                    gr.HTML('<div class="panel-title">📍 Locations</div>')
+                    locations_html = gr.HTML("<em>Start a game...</em>")
+
+                # Clues card - below locations
+                with gr.Group(elem_classes="side-panel"):
+                    gr.HTML('<div class="panel-title">🔎 Clues Found</div>')
+                    clues_html = gr.HTML("<em>No clues yet...</em>")
+
+                # Accusations remaining
+                accusations_html = gr.HTML(
+                    '<div class="accusations-display">Accusations: <span class="accusations-pip"></span><span class="accusations-pip"></span><span class="accusations-pip"></span></div>'
                 )
 
-                suspects_card = gr.Markdown(
-                    value="### 🎭 Suspects\n\n*Start a new game to see suspects*",
-                    elem_classes=["info-card"],
-                )
+            # === CENTER: MAIN STAGE ===
+            with gr.Column(scale=3):
 
-                objective_card = gr.Markdown(
-                    value="### 🎯 Objective\n\n*Start a new game to begin*",
-                    elem_classes=["info-card"],
-                )
+                # Stage container
+                with gr.Group(elem_classes="stage-container"):
 
-            # Center column - Chat
-            with gr.Column(scale=2):
-                chatbot = gr.Chatbot(
-                    label="Investigation", height=600, elem_classes=["game-chat"]
-                )
+                    # Portrait display - larger size for better visibility
+                    portrait_image = gr.Image(
+                        value=None,
+                        show_label=False,
+                        elem_classes="portrait-image",
+                        height=500,
+                        width=500,
+                        visible=True,  # Visible by default, will show image when set
+                    )
 
-                # Start button (visible initially)
+                    # Speaker name
+                    speaker_html = gr.HTML(
+                        '<div class="speaker-name">Game Master</div>'
+                    )
+
+                    # Caption display
+                    caption_html = gr.HTML(
+                        '<div class="caption-display"><div class="splash-screen"><div class="splash-title">MURDER MYSTERY</div><div class="splash-subtitle">A Voice-First Adventure</div></div></div>'
+                    )
+
+                    # Audio player (hidden controls, auto-play)
+                    audio_output = gr.Audio(
+                        label=None,
+                        show_label=False,
+                        autoplay=True,
+                        elem_classes="audio-player",
+                    )
+
+                # Start game button (shown initially)
                 start_btn = gr.Button(
-                    "🎮 Start New Game",
-                    variant="primary",
-                    size="lg",
-                    visible=True,
+                    "▶ START NEW MYSTERY", elem_classes="start-button", size="lg"
                 )
 
-                # Message input and send button (hidden initially)
-                with gr.Row():
-                    msg = gr.Textbox(
-                        label="Your Action",
-                        placeholder="What do you want to do? (talk to suspect, search location, make accusation...)",
-                        scale=4,
-                        container=False,
-                        visible=False,
-                    )
-                    submit_btn = gr.Button(
-                        "Send", variant="primary", scale=1, visible=False
-                    )
-                
-                # Voice input and output (hidden initially)
-                with gr.Row(visible=False) as voice_row:
+                # Input bar
+                with gr.Row(elem_classes="input-bar", visible=False) as input_row:
                     voice_input = gr.Audio(
-                        label="🎤 Speak Your Action",
                         sources=["microphone"],
                         type="filepath",
-                        format="wav",
+                        label="🎤 Voice",
                         scale=1,
                     )
-                    voice_output = gr.Audio(
-                        label="🔊 Response",
-                        type="filepath",
-                        scale=1,
-                        autoplay=True,  # Auto-play audio when generated
+                    text_input = gr.Textbox(
+                        placeholder="Type your question or action...",
+                        show_label=False,
+                        elem_classes="text-input",
+                        scale=3,
                     )
-                    voice_submit_btn = gr.Button(
-                        "🎤 Process Voice", variant="secondary", scale=1
-                    )
+                    send_btn = gr.Button("📤", elem_classes="action-button", scale=0)
 
-            # Right column - Locations and Clues
-            with gr.Column(scale=1):
-                locations_card = gr.Markdown(
-                    value="### 📍 Locations\n\n*Start a new game to explore*",
-                    elem_classes=["info-card"],
-                )
-
-                clues_card = gr.Markdown(
-                    value="### 🔍 Clues Found\n\n*No clues discovered yet*",
-                    elem_classes=["info-card"],
-                )
-
-        # Logs section (collapsible)
-        with gr.Accordion("🔍 Debug Logs", open=False):
-            logs_display = gr.Textbox(
-                label="Agent Logs",
-                value="No logs yet...",
-                lines=15,
-                max_lines=20,
-                interactive=False,
-                elem_classes=["logs-display"],
+        # ====== STATUS BAR ======
+        with gr.Row(elem_classes="status-bar"):
+            status_text = gr.HTML(
+                '<span style="color: var(--text-secondary);">Press START to begin your investigation...</span>'
             )
 
-        # Generate a unique session ID
-        session_id = gr.State(value=lambda: f"session_{os.urandom(8).hex()}")
-        # Track if game has started
-        game_started = gr.State(value=False)
+        # ====== EVENT HANDLERS ======
 
-        def start_game(history, session, started):
-            """Handle start game button click."""
-            if started:
-                # Game already started, just return current state
-                state = get_or_create_game_state(session)
-                logs = get_ui_logs(session)
-                return (
-                    history,
-                    None,  # voice_output
-                    *get_card_updates(state),
-                    logs,
-                    True,  # game_started
-                    gr.update(visible=False),  # start_btn
-                    gr.update(visible=True),  # msg
-                    gr.update(visible=True),  # submit_btn
-                    gr.update(visible=True),  # voice_row
-                )
+        def on_start_game(sess_id):
+            """Handle game start."""
+            state, response, audio_path, speaker = start_new_game(sess_id)
 
-            # Start a new game
-            result = chat_fn("start", history, session)
-            # Return result + visibility updates (hide start button, show input)
-            return (
-                *result,
-                None,  # voice_output
-                True,  # game_started
-                gr.update(visible=False),  # start_btn
-                gr.update(visible=True),  # msg
-                gr.update(visible=True),  # submit_btn
-                gr.update(visible=True),  # voice_row
-            )
-
-        def respond(message, history, session, started):
-            """Handle user message and generate response."""
-            if not message.strip():
-                state = get_or_create_game_state(session)
-                logs = get_ui_logs(session)
-                return (
-                    history,
-                    None,  # voice_output
-                    *get_card_updates(state),
-                    logs,
-                    started,  # game_started
-                    gr.update(visible=False),  # start_btn
-                    gr.update(visible=True),  # msg
-                    gr.update(visible=True),  # submit_btn
-                    gr.update(visible=True),  # voice_row
-                )
-
-            # Get updated history and cards from chat function
-            # chat_fn returns: (history, audio_response_path, status_card, suspects_card, objective_card, locations_card, clues_card, logs)
-            result = chat_fn(message, history, session)
-            # Check if this was a new game request
-            state = get_or_create_game_state(session)
-            is_new_game = state.mystery is not None and started == False
-            new_started = started or is_new_game
-
-            return (
-                *result,  # Includes history, audio_response_path, and all cards
-                new_started,  # game_started
-                gr.update(visible=False),  # start_btn
-                gr.update(visible=True),  # msg
-                gr.update(visible=True),  # submit_btn
-                gr.update(visible=True),  # voice_row
-            )
-        
-        def respond_voice(audio, history, session, started):
-            """Handle voice input and generate audio response."""
-            if audio is None:
-                state = get_or_create_game_state(session)
-                logs = get_ui_logs(session)
-                return (
-                    history,
-                    None,  # voice_output
-                    *get_card_updates(state),
-                    logs,
-                    started,  # game_started
-                    gr.update(visible=False),  # start_btn
-                    gr.update(visible=True),  # msg
-                    gr.update(visible=True),  # submit_btn
-                    gr.update(visible=True),  # voice_row
-                )
+            # Get images - retrieve after start_new_game has stored them
+            images = mystery_images.get(sess_id, {})
             
-            # Process voice input
-            # process_voice_input returns: (history, audio_response_path, status_card, suspects_card, objective_card, locations_card, clues_card, logs)
-            result = process_voice_input(audio, history, session)
+            # Debug logging
+            logger.info(f"Retrieving images for session {sess_id}")
+            logger.info(f"Available image keys: {list(images.keys())}")
+            logger.info(f"All mystery_images keys: {list(mystery_images.keys())}")
             
-            state = get_or_create_game_state(session)
-            is_new_game = state.mystery is not None and started == False
-            new_started = started or is_new_game
+            # Build portrait for game master (use title image if available)
+            portrait = images.get("_title", None)
+            logger.info(f"Portrait path: {portrait}")
             
-            return (
-                *result,  # Includes history, audio_response_path, and all cards
-                new_started,  # game_started
-                gr.update(visible=False),  # start_btn
-                gr.update(visible=True),  # msg
-                gr.update(visible=True),  # submit_btn
-                gr.update(visible=True),  # voice_row
-            )
-
-        # Wire up the start button
-        getattr(start_btn, "click")(
-            start_game,
-            [chatbot, session_id, game_started],
-            [
-                chatbot,
-                voice_output,
-                status_card,
-                suspects_card,
-                objective_card,
-                locations_card,
-                clues_card,
-                logs_display,
-                game_started,
-                start_btn,
-                msg,
-                submit_btn,
-                voice_row,
-            ],
-        )
-
-        # Wire up the message input and send button
-        getattr(msg, "submit")(
-            respond,
-            [msg, chatbot, session_id, game_started],
-            [
-                chatbot,
-                voice_output,
-                status_card,
-                suspects_card,
-                objective_card,
-                locations_card,
-                clues_card,
-                logs_display,
-                game_started,
-                start_btn,
-                msg,
-                submit_btn,
-                voice_row,
-            ],
-        ).then(lambda: "", None, msg)
-
-        getattr(submit_btn, "click")(
-            respond,
-            [msg, chatbot, session_id, game_started],
-            [
-                chatbot,
-                voice_output,
-                status_card,
-                suspects_card,
-                objective_card,
-                locations_card,
-                clues_card,
-                logs_display,
-                game_started,
-                start_btn,
-                msg,
-                submit_btn,
-                voice_row,
-            ],
-        ).then(lambda: "", None, msg)
-        
-        # Wire up the voice input button
-        getattr(voice_submit_btn, "click")(
-            respond_voice,
-            [voice_input, chatbot, session_id, game_started],
-            [
-                chatbot,
-                voice_output,
-                status_card,
-                suspects_card,
-                objective_card,
-                locations_card,
-                clues_card,
-                logs_display,
-                game_started,
-                start_btn,
-                msg,
-                submit_btn,
-                voice_row,
-            ],
-        )
-
-        # Instructions accordion
-        with gr.Accordion("How to Play", open=False):
-            gr.Markdown(
-                """
-                ### Commands:
-                - **Start a new game**: Click the "Start New Game" button
-                - **Talk to suspect**: "talk to [name]" or "question [name]" or "ask [name] about..."
-                - **Search location**: "search [location]" or "investigate [location]"
-                - **Make accusation**: "I accuse [name]" or "The murderer is [name]"
+            if portrait:
+                # Ensure path is absolute and file exists
+                if not os.path.isabs(portrait):
+                    # If relative, make it absolute
+                    portrait = os.path.abspath(portrait)
                 
-                ### Rules:
-                - You have **3 wrong accusations** before you lose
-                - Win by correctly identifying the murderer **with evidence**
-                - Search locations to find clues
-                - Interview suspects to gather information
-                """
+                if not os.path.exists(portrait):
+                    logger.warning(f"Portrait image file does not exist: {portrait}")
+                    portrait = None
+                else:
+                    logger.info(f"Portrait image file exists: {portrait}")
+            else:
+                logger.warning("No _title image found in images dict")
+
+            return [
+                # Caption
+                f'<div class="caption-display">{response}</div>',
+                # Speaker
+                f'<div class="speaker-name">{speaker}</div>',
+                # Audio
+                audio_path,
+                # Portrait - return path directly
+                portrait,
+                # Show game UI
+                gr.update(visible=True),  # input_row
+                gr.update(visible=False),  # start_btn
+                # Side panels
+                format_victim_scene_html(state.mystery),
+                format_suspects_list_html(state.mystery, state.suspects_talked_to),
+                format_locations_html(state.mystery, state.searched_locations),
+                format_clues_html(state.clues_found),
+                # Accusations
+                _format_accusations_html(state.wrong_accusations),
+                # Status
+                f'<span style="color: var(--accent-blue);">Case: The Murder of {state.mystery.victim.name}</span>',
+            ]
+
+        def _format_accusations_html(wrong: int):
+            pips = ""
+            for i in range(3):
+                cls = "accusations-pip used" if i < wrong else "accusations-pip"
+                pips += f'<span class="{cls}"></span>'
+            return f'<div class="accusations-display">Accusations: {pips}</div>'
+
+        def on_talk_to_suspect(suspect_idx: int, sess_id: str):
+            """Handle clicking on a suspect."""
+            state = get_or_create_state(sess_id)
+            if not state.mystery or suspect_idx >= len(state.mystery.suspects):
+                return [gr.update()] * 8
+
+            suspect = state.mystery.suspects[suspect_idx]
+            response, audio_path, speaker, state = process_player_action(
+                "talk", suspect.name, "", sess_id
             )
 
-    return demo
+            # Get portrait
+            images = mystery_images.get(sess_id, {})
+            portrait = images.get(suspect.name, images.get("_title", None))
 
+            return [
+                f'<div class="caption-display">{response}</div>',
+                f'<div class="speaker-name">{speaker}</div>',
+                audio_path,
+                gr.update(value=portrait, visible=bool(portrait)),
+                format_victim_scene_html(state.mystery),
+                format_suspects_list_html(state.mystery, state.suspects_talked_to),
+                format_locations_html(state.mystery, state.searched_locations),
+                format_clues_html(state.clues_found),
+                _format_accusations_html(state.wrong_accusations),
+            ]
+
+        def on_search(location: str, sess_id: str):
+            """Handle location search."""
+            if not location:
+                return [gr.update()] * 9
+
+            response, audio_path, speaker, state = process_player_action(
+                "search", location, "", sess_id
+            )
+
+            images = mystery_images.get(sess_id, {})
+            portrait = images.get(location, images.get("_title", None))
+
+            return [
+                f'<div class="caption-display">{response}</div>',
+                f'<div class="speaker-name">{speaker}</div>',
+                audio_path,
+                gr.update(value=portrait, visible=bool(portrait)),
+                format_victim_scene_html(state.mystery),
+                format_suspects_list_html(state.mystery, state.suspects_talked_to),
+                format_locations_html(state.mystery, state.searched_locations),
+                format_clues_html(state.clues_found),
+                _format_accusations_html(state.wrong_accusations),
+            ]
+
+        def on_accuse(suspect_name: str, sess_id: str):
+            """Handle accusation."""
+            if not suspect_name:
+                return [gr.update()] * 9
+
+            response, audio_path, speaker, state = process_player_action(
+                "accuse", suspect_name, "", sess_id
+            )
+
+            images = mystery_images.get(sess_id, {})
+            portrait = images.get("_title", None)
+
+            return [
+                f'<div class="caption-display">{response}</div>',
+                f'<div class="speaker-name">{speaker}</div>',
+                audio_path,
+                gr.update(value=portrait, visible=bool(portrait)),
+                format_victim_scene_html(state.mystery),
+                format_suspects_list_html(state.mystery, state.suspects_talked_to),
+                format_locations_html(state.mystery, state.searched_locations),
+                format_clues_html(state.clues_found),
+                _format_accusations_html(state.wrong_accusations),
+            ]
+
+        def on_custom_message(message: str, sess_id: str):
+            """Handle free-form text input."""
+            if not message.strip():
+                return [gr.update()] * 9
+
+            response, audio_path, speaker, state = process_player_action(
+                "custom", "", message, sess_id
+            )
+
+            images = mystery_images.get(sess_id, {})
+
+            # Determine portrait based on speaker
+            portrait = None
+            if speaker and speaker != "Game Master":
+                portrait = images.get(speaker, None)
+            if not portrait:
+                portrait = images.get("_title", None)
+
+            return [
+                f'<div class="caption-display">{response}</div>',
+                f'<div class="speaker-name">{speaker}</div>',
+                audio_path,
+                gr.update(value=portrait, visible=bool(portrait)),
+                format_victim_scene_html(state.mystery),
+                format_suspects_list_html(state.mystery, state.suspects_talked_to),
+                format_locations_html(state.mystery, state.searched_locations),
+                format_clues_html(state.clues_found),
+                _format_accusations_html(state.wrong_accusations),
+                "",  # Clear text input
+            ]
+
+        def on_voice_input(audio_path: str, sess_id: str):
+            """Handle voice input."""
+            if not audio_path:
+                return [gr.update()] * 9
+
+            # Transcribe
+            text = transcribe_audio(audio_path)
+            if not text.strip():
+                return [gr.update()] * 9
+
+            response, audio_resp, speaker, state = process_player_action(
+                "custom", "", text, sess_id
+            )
+
+            images = mystery_images.get(sess_id, {})
+            portrait = None
+            if speaker and speaker != "Game Master":
+                portrait = images.get(speaker, None)
+            if not portrait:
+                portrait = images.get("_title", None)
+
+            return [
+                f'<div class="caption-display">{response}</div>',
+                f'<div class="speaker-name">{speaker}</div>',
+                audio_resp,
+                gr.update(value=portrait, visible=bool(portrait)),
+                format_victim_scene_html(state.mystery),
+                format_suspects_list_html(state.mystery, state.suspects_talked_to),
+                format_locations_html(state.mystery, state.searched_locations),
+                format_clues_html(state.clues_found),
+                _format_accusations_html(state.wrong_accusations),
+            ]
+
+        # ====== WIRE UP EVENTS ======
+
+        # Common outputs for game actions
+        game_outputs = [
+            caption_html,
+            speaker_html,
+            audio_output,
+            portrait_image,
+            victim_scene_html,
+            suspects_list_html,
+            locations_html,
+            clues_html,
+            accusations_html,
+        ]
+
+        # Start game
+        getattr(start_btn, "click")(
+            on_start_game,
+            inputs=[session_id],
+            outputs=[
+                caption_html,
+                speaker_html,
+                audio_output,
+                portrait_image,
+                input_row,
+                start_btn,
+                victim_scene_html,
+                suspects_list_html,
+                locations_html,
+                clues_html,
+                accusations_html,
+                status_text,
+            ],
+        )
+
+        # Text input
+        getattr(text_input, "submit")(
+            on_custom_message,
+            inputs=[text_input, session_id],
+            outputs=game_outputs + [text_input],
+        )
+        getattr(send_btn, "click")(
+            on_custom_message,
+            inputs=[text_input, session_id],
+            outputs=game_outputs + [text_input],
+        )
+
+        # Voice input
+        getattr(voice_input, "stop_recording")(
+            on_voice_input, inputs=[voice_input, session_id], outputs=game_outputs
+        )
+
+
+    return app
+
+
+# ============================================================================
+# MAIN
+# ============================================================================
 
 if __name__ == "__main__":
-    # Verify API key is set
-    if not os.getenv("OPENAI_API_KEY"):
-        print("Warning: OPENAI_API_KEY not found in environment variables.")
-        print("Please create a .env file with your OpenAI API key.")
-
-    demo = create_interface()
-    demo.launch(share=False, server_name="0.0.0.0", server_port=7860)
+    app = create_app()
+    app.launch(server_name="0.0.0.0", server_port=7860, share=False)

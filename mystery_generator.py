@@ -2,6 +2,7 @@
 
 import os
 import re
+import json
 import logging
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
@@ -46,7 +47,6 @@ def strip_markdown_json(message) -> str:
 
 def generate_mystery() -> Mystery:
     """Generate a unique murder mystery scenario."""
-    import json
 
     llm = ChatOpenAI(
         model="gpt-4o", temperature=0.9, api_key=os.getenv("OPENAI_API_KEY")

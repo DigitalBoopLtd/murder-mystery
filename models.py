@@ -24,10 +24,14 @@ class Suspect(BaseModel):
     clue_they_know: str = Field(description="Info they share if asked right questions")
     isGuilty: bool
     gender: Optional[str] = Field(
-        default=None, description="Gender for voice matching (male/female). Not displayed to players."
+        default=None,
+        description="Gender for voice matching (male/female). Not displayed to players.",
     )
     voice_id: Optional[str] = Field(
         default=None, description="ElevenLabs voice ID for TTS"
+    )
+    portrait_path: Optional[str] = Field(
+        default=None, description="Path to generated portrait image"
     )
 
 
