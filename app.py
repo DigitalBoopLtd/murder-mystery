@@ -176,9 +176,10 @@ def chat_fn(message: str, history: list, session_id: str):
                 logger.error(f"Error generating mystery: {str(e)}", exc_info=True)
                 # Return friendly error with card updates
                 friendly_error = format_friendly_error(e)
+                formatted_error = f"**Game Master:** {friendly_error}"
                 error_history = history + [
                     {"role": "user", "content": message},
-                    {"role": "assistant", "content": friendly_error},
+                    {"role": "assistant", "content": formatted_error},
                 ]
                 logs = get_ui_logs(session_id)
                 return error_history, *get_card_updates(state), logs
@@ -194,15 +195,21 @@ def chat_fn(message: str, history: list, session_id: str):
 
         # Process the message
         try:
-            response = process_message(
+            response, speaker_name = process_message(
                 agent_app, message, state.system_prompt, session_id, thread_id=session_id
             )
 
+            # Format response with speaker name
+            if speaker_name:
+                formatted_response = f"**{speaker_name}:** {response}"
+            else:
+                formatted_response = f"**Game Master:** {response}"
+
             # Update history in Gradio 6 format
             history.append({"role": "user", "content": message})
-            history.append({"role": "assistant", "content": response})
+            history.append({"role": "assistant", "content": formatted_response})
 
-            # Update game state messages
+            # Update game state messages (store original response without formatting)
             state.messages.append({"role": "user", "content": message})
             state.messages.append({"role": "assistant", "content": response})
 
@@ -214,8 +221,9 @@ def chat_fn(message: str, history: list, session_id: str):
             logger.error(f"Error processing message: {str(e)}", exc_info=True)
             # Show friendly error to user
             friendly_error = format_friendly_error(e)
+            formatted_error = f"**Game Master:** {friendly_error}"
             history.append({"role": "user", "content": message})
-            history.append({"role": "assistant", "content": friendly_error})
+            history.append({"role": "assistant", "content": formatted_error})
     finally:
         # Remove handler after processing
         root_logger.removeHandler(ui_handler)
