@@ -2,8 +2,18 @@
 
 import os
 import logging
+import tempfile
 import gradio as gr
 from dotenv import load_dotenv
+from openai import OpenAI
+try:
+    from elevenlabs import generate, set_api_key
+except ImportError:
+    # Fallback if elevenlabs not installed yet
+    def generate(*args, **kwargs):
+        raise ImportError("elevenlabs package not installed")
+    def set_api_key(*args, **kwargs):
+        pass
 from game_parser import parse_game_actions
 from mystery_generator import generate_mystery, prepare_game_prompt
 from game_state import GameState
@@ -13,6 +23,14 @@ from ui_components import get_all_card_content
 
 # Load environment variables
 load_dotenv()
+
+# Initialize OpenAI client
+openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+# Set ElevenLabs API key
+elevenlabs_api_key = os.getenv("ELEVENLABS_API_KEY")
+if elevenlabs_api_key:
+    set_api_key(elevenlabs_api_key)
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -55,6 +73,57 @@ def get_ui_logs(session_id: str) -> str:
     if session_id not in ui_logs:
         return "No logs yet..."
     return "\n".join(ui_logs.get(session_id, []))
+
+
+def transcribe_audio(audio_file_path: str) -> str:
+    """Transcribe audio to text using OpenAI Whisper.
+    
+    Args:
+        audio_file_path: Path to the audio file
+        
+    Returns:
+        Transcribed text
+    """
+    try:
+        with open(audio_file_path, "rb") as audio_file:
+            transcript = openai_client.audio.transcriptions.create(
+                model="whisper-1",
+                file=audio_file
+            )
+            return transcript.text
+    except Exception as e:
+        logger.error(f"Error transcribing audio: {str(e)}", exc_info=True)
+        return ""
+
+
+def text_to_speech(text: str) -> str:
+    """Convert text to speech using ElevenLabs.
+    
+    Args:
+        text: Text to convert to speech
+        
+    Returns:
+        Path to the generated audio file
+    """
+    if not elevenlabs_api_key:
+        logger.warning("ElevenLabs API key not set, skipping TTS")
+        return None
+        
+    try:
+        # Generate audio using ElevenLabs
+        audio = generate(
+            text=text,
+            voice="Rachel",  # Default voice, can be customized
+            model="eleven_monolingual_v1"
+        )
+        
+        # Save to temporary file
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmp_file:
+            tmp_file.write(audio)
+            return tmp_file.name
+    except Exception as e:
+        logger.error(f"Error generating speech: {str(e)}", exc_info=True)
+        return None
 
 
 def format_friendly_error(error: Exception) -> str:
@@ -141,6 +210,88 @@ def get_card_updates(state: GameState) -> tuple:
         cards["locations"],
         cards["clues"],
     )
+
+
+def process_voice_input(audio, history: list, session_id: str):
+    """Process voice input: transcribe, get response, convert to speech.
+    
+    Args:
+        audio: Audio input from Gradio (can be tuple or file path)
+        history: Chat history
+        session_id: Session identifier
+        
+    Returns:
+        Tuple of (updated_history, audio_response_path, status_card, suspects_card, objective_card, locations_card, clues_card, logs)
+    """
+    if audio is None:
+        state = get_or_create_game_state(session_id)
+        logs = get_ui_logs(session_id)
+        return history, None, *get_card_updates(state), logs
+    
+    # Extract audio file path from Gradio audio input
+    # In Gradio 5+, audio can be a tuple (sample_rate, audio_data) or a file path string
+    audio_path = None
+    if isinstance(audio, tuple):
+        # Convert numpy array to WAV file
+        import numpy as np
+        import wave
+        sample_rate, audio_data = audio
+        tmp_file_path = tempfile.mktemp(suffix=".wav")
+        with wave.open(tmp_file_path, 'wb') as wav_file:
+            wav_file.setnchannels(1)  # Mono
+            wav_file.setsampwidth(2)  # 16-bit
+            wav_file.setframerate(sample_rate)
+            # Convert float array to int16
+            audio_int16 = (audio_data * 32767).astype(np.int16)
+            wav_file.writeframes(audio_int16.tobytes())
+        audio_path = tmp_file_path
+    elif isinstance(audio, str):
+        # It's already a file path
+        audio_path = audio
+    else:
+        logger.error(f"Unexpected audio format: {type(audio)}")
+        state = get_or_create_game_state(session_id)
+        logs = get_ui_logs(session_id)
+        return history, None, *get_card_updates(state), logs
+    
+    # Transcribe audio
+    transcription = transcribe_audio(audio_path)
+    
+    if not transcription.strip():
+        logger.warning("Empty transcription from audio")
+        state = get_or_create_game_state(session_id)
+        logs = get_ui_logs(session_id)
+        return history, None, *get_card_updates(state), logs
+    
+    logger.info(f"Transcribed voice input: {transcription}")
+    
+    # Process the transcribed message through the chat function
+    result = chat_fn(transcription, history, session_id)
+    updated_history = result[0]
+    response_text = None
+    
+    # Extract the last assistant message for TTS
+    if updated_history and len(updated_history) > 0:
+        last_message = updated_history[-1]
+        if isinstance(last_message, dict) and last_message.get("role") == "assistant":
+            # Remove markdown formatting for cleaner speech
+            response_text = last_message.get("content", "")
+            # Remove markdown bold/italics
+            response_text = response_text.replace("**", "").replace("*", "")
+            # Remove speaker name prefix if present (e.g., "**Game Master:**" or "**Zara Orion:**")
+            if ":" in response_text:
+                response_text = response_text.split(":", 1)[1].strip()
+    
+    # Generate audio response
+    audio_response_path = None
+    if response_text:
+        audio_response_path = text_to_speech(response_text)
+        logger.info(f"Generated audio response: {audio_response_path}")
+    
+    # Return all results including audio
+    # result is: (history, status_card, suspects_card, objective_card, locations_card, clues_card, logs)
+    # We need: (history, audio_response, status_card, suspects_card, objective_card, locations_card, clues_card, logs)
+    return (result[0], audio_response_path, *result[1:])
 
 
 def chat_fn(message: str, history: list, session_id: str):
@@ -343,6 +494,25 @@ def create_interface():
                     submit_btn = gr.Button(
                         "Send", variant="primary", scale=1, visible=False
                     )
+                
+                # Voice input and output (hidden initially)
+                with gr.Row(visible=False) as voice_row:
+                    voice_input = gr.Audio(
+                        label="🎤 Speak Your Action",
+                        sources=["microphone"],
+                        type="filepath",
+                        format="wav",
+                        scale=1,
+                    )
+                    voice_output = gr.Audio(
+                        label="🔊 Response",
+                        type="filepath",
+                        scale=1,
+                        autoplay=True,
+                    )
+                    voice_submit_btn = gr.Button(
+                        "🎤 Process Voice", variant="secondary", scale=1
+                    )
 
             # Right column - Locations and Clues
             with gr.Column(scale=1):
@@ -380,12 +550,14 @@ def create_interface():
                 logs = get_ui_logs(session)
                 return (
                     history,
+                    None,  # voice_output
                     *get_card_updates(state),
                     logs,
                     True,  # game_started
                     gr.update(visible=False),  # start_btn
                     gr.update(visible=True),  # msg
                     gr.update(visible=True),  # submit_btn
+                    gr.update(visible=True),  # voice_row
                 )
 
             # Start a new game
@@ -393,10 +565,12 @@ def create_interface():
             # Return result + visibility updates (hide start button, show input)
             return (
                 *result,
+                None,  # voice_output
                 True,  # game_started
                 gr.update(visible=False),  # start_btn
                 gr.update(visible=True),  # msg
                 gr.update(visible=True),  # submit_btn
+                gr.update(visible=True),  # voice_row
             )
 
         def respond(message, history, session, started):
@@ -406,12 +580,14 @@ def create_interface():
                 logs = get_ui_logs(session)
                 return (
                     history,
+                    None,  # voice_output
                     *get_card_updates(state),
                     logs,
                     started,  # game_started
                     gr.update(visible=False),  # start_btn
                     gr.update(visible=True),  # msg
                     gr.update(visible=True),  # submit_btn
+                    gr.update(visible=True),  # voice_row
                 )
 
             # Get updated history and cards from chat function
@@ -423,10 +599,53 @@ def create_interface():
 
             return (
                 *result,
+                None,  # voice_output
                 new_started,  # game_started
                 gr.update(visible=False),  # start_btn
                 gr.update(visible=True),  # msg
                 gr.update(visible=True),  # submit_btn
+                gr.update(visible=True),  # voice_row
+            )
+        
+        def respond_voice(audio, history, session, started):
+            """Handle voice input and generate audio response."""
+            if audio is None:
+                state = get_or_create_game_state(session)
+                logs = get_ui_logs(session)
+                return (
+                    history,
+                    None,  # voice_output
+                    *get_card_updates(state),
+                    logs,
+                    started,  # game_started
+                    gr.update(visible=False),  # start_btn
+                    gr.update(visible=True),  # msg
+                    gr.update(visible=True),  # submit_btn
+                    gr.update(visible=True),  # voice_row
+                )
+            
+            # Process voice input
+            result = process_voice_input(audio, history, session)
+            # result is: (history, audio_response, status_card, suspects_card, objective_card, locations_card, clues_card, logs)
+            
+            state = get_or_create_game_state(session)
+            is_new_game = state.mystery is not None and started == False
+            new_started = started or is_new_game
+            
+            return (
+                result[0],  # history
+                result[1],  # voice_output
+                result[2],  # status_card
+                result[3],  # suspects_card
+                result[4],  # objective_card
+                result[5],  # locations_card
+                result[6],  # clues_card
+                result[7],  # logs
+                new_started,  # game_started
+                gr.update(visible=False),  # start_btn
+                gr.update(visible=True),  # msg
+                gr.update(visible=True),  # submit_btn
+                gr.update(visible=True),  # voice_row
             )
 
         # Wire up the start button
@@ -435,6 +654,7 @@ def create_interface():
             [chatbot, session_id, game_started],
             [
                 chatbot,
+                voice_output,
                 status_card,
                 suspects_card,
                 objective_card,
@@ -445,6 +665,7 @@ def create_interface():
                 start_btn,
                 msg,
                 submit_btn,
+                voice_row,
             ],
         )
 
@@ -454,6 +675,7 @@ def create_interface():
             [msg, chatbot, session_id, game_started],
             [
                 chatbot,
+                voice_output,
                 status_card,
                 suspects_card,
                 objective_card,
@@ -464,6 +686,7 @@ def create_interface():
                 start_btn,
                 msg,
                 submit_btn,
+                voice_row,
             ],
         ).then(lambda: "", None, msg)
 
@@ -472,6 +695,7 @@ def create_interface():
             [msg, chatbot, session_id, game_started],
             [
                 chatbot,
+                voice_output,
                 status_card,
                 suspects_card,
                 objective_card,
@@ -482,8 +706,30 @@ def create_interface():
                 start_btn,
                 msg,
                 submit_btn,
+                voice_row,
             ],
         ).then(lambda: "", None, msg)
+        
+        # Wire up the voice input button
+        getattr(voice_submit_btn, "click")(
+            respond_voice,
+            [voice_input, chatbot, session_id, game_started],
+            [
+                chatbot,
+                voice_output,
+                status_card,
+                suspects_card,
+                objective_card,
+                locations_card,
+                clues_card,
+                logs_display,
+                game_started,
+                start_btn,
+                msg,
+                submit_btn,
+                voice_row,
+            ],
+        )
 
         # Instructions accordion
         with gr.Accordion("How to Play", open=False):
