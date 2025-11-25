@@ -1,16 +1,21 @@
 """Data models for the murder mystery game."""
-from typing import List
+
+from typing import List, Optional
 from pydantic import BaseModel, Field
 
 
 class Victim(BaseModel):
     """Victim information."""
+
     name: str
-    background: str = Field(description="Who they were, why someone might want them dead")
+    background: str = Field(
+        description="Who they were, why someone might want them dead"
+    )
 
 
 class Suspect(BaseModel):
     """Suspect information."""
+
     name: str
     role: str = Field(description="Relationship to victim")
     personality: str = Field(description="2-3 key traits")
@@ -18,10 +23,17 @@ class Suspect(BaseModel):
     secret: str = Field(description="What they are hiding")
     clue_they_know: str = Field(description="Info they share if asked right questions")
     isGuilty: bool
+    gender: Optional[str] = Field(
+        default=None, description="Gender for voice matching (male/female). Not displayed to players."
+    )
+    voice_id: Optional[str] = Field(
+        default=None, description="ElevenLabs voice ID for TTS"
+    )
 
 
 class Clue(BaseModel):
     """Clue information."""
+
     id: str
     description: str
     location: str
@@ -30,7 +42,10 @@ class Clue(BaseModel):
 
 class Mystery(BaseModel):
     """Complete murder mystery scenario."""
-    setting: str = Field(description="Brief evocative description of location and occasion")
+
+    setting: str = Field(
+        description="Brief evocative description of location and occasion"
+    )
     victim: Victim
     murderer: str = Field(description="Full name of the guilty suspect")
     weapon: str

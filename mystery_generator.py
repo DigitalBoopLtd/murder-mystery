@@ -2,11 +2,15 @@
 
 import os
 import re
+import logging
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import PydanticOutputParser
 from langchain_core.runnables import RunnableLambda
 from models import Mystery
+from voice_service import get_voice_service
+
+logger = logging.getLogger(__name__)
 
 
 def strip_markdown_json(message) -> str:
@@ -28,22 +32,22 @@ def strip_markdown_json(message) -> str:
     text = re.sub(r"```", "", text)
     # Clean up any leading/trailing whitespace
     text = text.strip()
-    
+
     # If text doesn't start with {, try to find the JSON object
     if not text.startswith("{"):
         # Try to find the first { and last }
         start_idx = text.find("{")
         end_idx = text.rfind("}")
         if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
-            text = text[start_idx:end_idx + 1]
-    
+            text = text[start_idx : end_idx + 1]
+
     return text.strip()
 
 
 def generate_mystery() -> Mystery:
     """Generate a unique murder mystery scenario."""
     import json
-    
+
     llm = ChatOpenAI(
         model="gpt-4o", temperature=0.9, api_key=os.getenv("OPENAI_API_KEY")
     )
@@ -62,6 +66,8 @@ Be creative with the setting - could be a mansion, cruise ship, theater, space s
 
 Create an interesting victim with enemies, 4 distinct suspects with secrets and motives, and 5 clues that lead to solving the case. One suspect is the murderer. Include one red herring clue.
 
+IMPORTANT: For each suspect, include a "gender" field set to either "male" or "female". This is used for voice matching and will not be displayed to players.
+
 CRITICAL: Return ONLY valid JSON. Do NOT wrap it in markdown code blocks. Do NOT include any text before or after the JSON. Start with {{ and end with }}.""",
             ),
             ("human", "Generate a unique murder mystery scenario."),
@@ -70,7 +76,7 @@ CRITICAL: Return ONLY valid JSON. Do NOT wrap it in markdown code blocks. Do NOT
 
     # Add a step to strip markdown before parsing
     strip_markdown = RunnableLambda(strip_markdown_json)
-    
+
     # Add validation step to ensure JSON is valid
     def validate_and_parse_json(text: str):
         """Validate JSON and parse it."""
@@ -83,19 +89,69 @@ CRITICAL: Return ONLY valid JSON. Do NOT wrap it in markdown code blocks. Do NOT
             start_idx = text.find("{")
             end_idx = text.rfind("}")
             if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
-                json_text = text[start_idx:end_idx + 1]
+                json_text = text[start_idx : end_idx + 1]
                 try:
                     json.loads(json_text)
                     return json_text
                 except json.JSONDecodeError:
                     pass
-            raise ValueError(f"Invalid JSON from LLM: {str(e)}\n\nReceived text:\n{text[:500]}")
-    
+            raise ValueError(
+                f"Invalid JSON from LLM: {str(e)}\n\nReceived text:\n{text[:500]}"
+            )
+
     validate_json = RunnableLambda(validate_and_parse_json)
     chain = prompt | llm | strip_markdown | validate_json | parser
 
     mystery = chain.invoke({"format_instructions": parser.get_format_instructions()})
+
+    # Assign voices to suspects
+    mystery = assign_voices_to_mystery(mystery)
+
     return mystery
+
+
+def assign_voices_to_mystery(mystery: Mystery) -> Mystery:
+    """Assign ElevenLabs voices to suspects based on their characteristics.
+
+    Args:
+        mystery: The generated mystery
+
+    Returns:
+        Mystery with voice_id assigned to each suspect
+    """
+    try:
+
+        voice_service = get_voice_service()
+
+        if not voice_service.is_available:
+            logger.info("ElevenLabs not configured, skipping voice assignment")
+            return mystery
+
+        # Convert suspects to dicts for voice matching
+        suspect_dicts = [
+            {
+                "name": s.name,
+                "role": s.role,
+                "personality": s.personality,
+                "gender": s.gender,  # Include explicit gender if available
+            }
+            for s in mystery.suspects
+        ]
+
+        # Get voice assignments
+        assignments = voice_service.assign_voices_to_suspects(suspect_dicts)
+
+        # Update suspects with voice IDs
+        for suspect in mystery.suspects:
+            if suspect.name in assignments:
+                suspect.voice_id = assignments[suspect.name]
+                logger.info(f"Assigned voice {suspect.voice_id} to {suspect.name}")
+
+        return mystery
+
+    except Exception as e:
+        logger.error(f"Error assigning voices: {e}")
+        return mystery
 
 
 def prepare_game_prompt(mystery: Mystery) -> str:
@@ -114,7 +170,8 @@ Personality: {s.personality}
 Alibi: "{s.alibi}"
 Secret: {s.secret}
 Will share if asked: {s.clue_they_know}
-Guilty: {s.isGuilty}{f'''
+Guilty: {s.isGuilty}
+Voice ID: {s.voice_id or 'None'}{f'''
 Murder details: Used {mystery.weapon} because {mystery.motive}''' if s.isGuilty else ''}"""
             for s in mystery.suspects
         ]
@@ -138,7 +195,7 @@ Murder details: Used {mystery.weapon} because {mystery.motive}''' if s.isGuilty 
 {suspect_profiles}
 
 ## YOUR ROLE
-1. When player wants to TALK to a suspect → Use "Interrogate Suspect" tool. IMPORTANT: Pass the suspect's FULL PROFILE from above.
+1. When player wants to TALK to a suspect → Use "Interrogate Suspect" tool. IMPORTANT: Pass the suspect's FULL PROFILE from above INCLUDING their Voice ID.
 2. When player wants to SEARCH a location → Describe findings, reveal clues if correct location
 3. When player makes ACCUSATION → Check if correct with evidence
 

@@ -2,6 +2,7 @@
 
 import os
 import logging
+import re
 import tempfile
 import wave
 import gradio as gr
@@ -111,13 +112,14 @@ def transcribe_audio(audio_file_path: str) -> str:
         return ""
 
 
-def text_to_speech(text: str, speaker_name: str = None) -> str:
+def text_to_speech(text: str, speaker_name: str = None, voice_id: str = None) -> str:
     """Convert text to speech using ElevenLabs client API.
     
     Args:
         text: Text to convert to speech
         speaker_name: Name of the speaker (Game Master, suspect name, etc.)
-                     Used to select appropriate voice
+                     Used to select appropriate voice if voice_id not provided
+        voice_id: Optional specific voice ID to use (from suspect assignment)
         
     Returns:
         Path to the generated audio file
@@ -130,14 +132,17 @@ def text_to_speech(text: str, speaker_name: str = None) -> str:
         return None
         
     try:
-        # Determine voice ID based on speaker
-        voice_id = VOICE_MAP.get("default")
-        if speaker_name:
-            # Check if there's a specific voice for this speaker
-            voice_id = VOICE_MAP.get(speaker_name, VOICE_MAP.get("game_master", VOICE_MAP.get("default")))
-        else:
-            # Default to game master voice
-            voice_id = VOICE_MAP.get("game_master", VOICE_MAP.get("default"))
+        # Use provided voice_id, or fall back to VOICE_MAP
+        if not voice_id:
+            voice_id = VOICE_MAP.get("default")
+            if speaker_name:
+                # Check if there's a specific voice for this speaker
+                voice_id = VOICE_MAP.get(speaker_name, VOICE_MAP.get("game_master", VOICE_MAP.get("default")))
+            else:
+                # Default to game master voice
+                voice_id = VOICE_MAP.get("game_master", VOICE_MAP.get("default"))
+        
+        logger.info(f"Generating TTS for '{speaker_name or 'Game Master'}' using voice: {voice_id}")
         
         # Generate audio using ElevenLabs client
         audio_stream = elevenlabs_client.text_to_speech.convert(
@@ -383,40 +388,66 @@ def chat_fn(message: str, history: list, session_id: str):
                 thread_id=session_id,
             )
 
-            # Format response with speaker name
+            # Extract audio path marker if present (from interrogate_suspect tool)
+            # Format: [AUDIO:/path/to/file.mp3]text response
+            audio_path_from_tool = None
+            clean_response = response
+            audio_marker_pattern = r'\[AUDIO:([^\]]+)\]'
+            match = re.search(audio_marker_pattern, response)
+            if match:
+                audio_path_from_tool = match.group(1)
+                # Remove the audio marker from the text
+                clean_response = re.sub(audio_marker_pattern, '', response).strip()
+                logger.info(f"Extracted audio path from tool: {audio_path_from_tool}")
+            
+            # Format response with speaker name (using cleaned response)
             if speaker_name:
-                formatted_response = f"**{speaker_name}:** {response}"
+                formatted_response = f"**{speaker_name}:** {clean_response}"
             else:
-                formatted_response = f"**Game Master:** {response}"
+                formatted_response = f"**Game Master:** {clean_response}"
 
             # Update history in Gradio 6 format
             history.append({"role": "user", "content": message})
             history.append({"role": "assistant", "content": formatted_response})
 
-            # Update game state messages (store original response without formatting)
+            # Update game state messages (store cleaned response without formatting)
             state.messages.append({"role": "user", "content": message})
-            state.messages.append({"role": "assistant", "content": response})
+            state.messages.append({"role": "assistant", "content": clean_response})
             
             # Generate audio for the response
-            # Clean the response text for TTS (remove markdown formatting)
-            clean_response = response
-            clean_response = clean_response.replace("**", "").replace("*", "")
-            
-            # Remove speaker name prefix if present at the START of the text
-            # Only remove if it looks like "Speaker Name:" at the beginning
-            # Don't split on colons in the middle of the text
-            if speaker_name:
-                prefix = f"{speaker_name}:"
-                if clean_response.startswith(prefix):
-                    clean_response = clean_response[len(prefix):].strip()
-            elif clean_response.startswith("Game Master:"):
-                clean_response = clean_response[len("Game Master:"):].strip()
-            
-            audio_response_path = text_to_speech(clean_response, speaker_name or "Game Master")
+            # Use audio from tool if available, otherwise generate new audio
+            if audio_path_from_tool and os.path.exists(audio_path_from_tool):
+                # Use the audio file generated by the tool
+                audio_response_path = audio_path_from_tool
+                logger.info(f"Using audio from tool: {audio_response_path}")
+            else:
+                # Generate new audio
+                # Clean the response text for TTS (remove markdown formatting)
+                tts_text = clean_response.replace("**", "").replace("*", "")
+                
+                # Remove speaker name prefix if present at the START of the text
+                if speaker_name:
+                    prefix = f"{speaker_name}:"
+                    if tts_text.startswith(prefix):
+                        tts_text = tts_text[len(prefix):].strip()
+                elif tts_text.startswith("Game Master:"):
+                    tts_text = tts_text[len("Game Master:"):].strip()
+                
+                # Look up voice_id from suspect if this is a suspect speaking
+                voice_id = None
+                if speaker_name and state.mystery:
+                    for suspect in state.mystery.suspects:
+                        if suspect.name == speaker_name and suspect.voice_id:
+                            voice_id = suspect.voice_id
+                            logger.info(f"Using assigned voice {voice_id} for suspect {speaker_name}")
+                            break
+                
+                audio_response_path = text_to_speech(tts_text, speaker_name or "Game Master", voice_id)
 
             # Parse response to auto-update game state
             # This detects: suspects talked to, locations searched, clues found, accusations
-            actions = parse_game_actions(message, response, state)
+            # Use clean_response (without audio markers) for parsing
+            actions = parse_game_actions(message, clean_response, state)
 
             if actions:
                 if actions.get("suspect_talked_to"):

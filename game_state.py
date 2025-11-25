@@ -94,7 +94,8 @@ Personality: {s.personality}
 Alibi: "{s.alibi}"
 Secret: {s.secret}
 Will share if asked: {s.clue_they_know}
-Guilty: {s.isGuilty}{f'''
+Guilty: {s.isGuilty}
+Voice ID: {s.voice_id or 'None'}{f'''
 Murder details: Used {self.mystery.weapon} because {self.mystery.motive}''' if s.isGuilty else ''}"""
                     for s in self.mystery.suspects
                 ]
@@ -128,7 +129,7 @@ Murder details: Used {self.mystery.weapon} because {self.mystery.motive}''' if s
 {suspect_profiles}
 
 ## YOUR ROLE
-1. When player wants to TALK to a suspect → Use "Interrogate Suspect" tool. IMPORTANT: Pass the suspect's FULL PROFILE from above.
+1. When player wants to TALK to a suspect → Use "Interrogate Suspect" tool. IMPORTANT: Pass the suspect's FULL PROFILE from above INCLUDING their Voice ID.
 2. When player wants to SEARCH a location → Describe findings. If they search the right location, reveal the clue with atmosphere!
 3. When player makes ACCUSATION → Check against the murderer
 
