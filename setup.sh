@@ -45,3 +45,4 @@ echo "  2. Make sure your .env file has your OPENAI_API_KEY"
 echo "  3. Run: python app.py"
 echo ""
 
+

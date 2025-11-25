@@ -3,6 +3,7 @@
 import os
 import logging
 import tempfile
+import wave
 import gradio as gr
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -269,16 +270,20 @@ def process_voice_input(audio, history: list, session_id: str):
     if isinstance(audio, tuple):
         # Convert numpy array to WAV file
         import numpy as np
-        import wave
         sample_rate, audio_data = audio
         tmp_file_path = tempfile.mktemp(suffix=".wav")
-        with wave.open(tmp_file_path, 'wb') as wav_file:
-            wav_file.setnchannels(1)  # Mono
-            wav_file.setsampwidth(2)  # 16-bit
-            wav_file.setframerate(sample_rate)
+        # Note: 'wb' mode returns Wave_write which has setnchannels/setsampwidth/setframerate
+        # The linter incorrectly infers Wave_read, but the code is correct
+        wav_file = wave.open(tmp_file_path, 'wb')  # type: ignore[assignment]
+        try:
+            wav_file.setnchannels(1)  # type: ignore[attr-defined]  # Mono
+            wav_file.setsampwidth(2)  # type: ignore[attr-defined]  # 16-bit
+            wav_file.setframerate(sample_rate)  # type: ignore[attr-defined]
             # Convert float array to int16
             audio_int16 = (audio_data * 32767).astype(np.int16)
-            wav_file.writeframes(audio_int16.tobytes())
+            wav_file.writeframes(audio_int16.tobytes())  # type: ignore[attr-defined]
+        finally:
+            wav_file.close()
         audio_path = tmp_file_path
     elif isinstance(audio, str):
         # It's already a file path
