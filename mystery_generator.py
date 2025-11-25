@@ -1,9 +1,27 @@
 """Mystery generation logic."""
 import os
+import re
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import PydanticOutputParser
+from langchain_core.runnables import RunnableLambda
 from models import Mystery
+
+
+def strip_markdown_json(message) -> str:
+    """Strip markdown code blocks from JSON output."""
+    # Extract content if it's an AIMessage object
+    if hasattr(message, 'content'):
+        text = message.content
+    elif isinstance(message, str):
+        text = message
+    else:
+        text = str(message)
+    
+    # Remove markdown code blocks (```json ... ``` or ``` ... ```)
+    text = re.sub(r'^```(?:json)?\s*\n', '', text, flags=re.MULTILINE)
+    text = re.sub(r'\n```\s*$', '', text, flags=re.MULTILINE)
+    return text.strip()
 
 
 def generate_mystery() -> Mystery:
@@ -23,11 +41,15 @@ def generate_mystery() -> Mystery:
 
 Be creative with the setting - could be a mansion, cruise ship, theater, space station, etc.
 
-Create an interesting victim with enemies, 4 distinct suspects with secrets and motives, and 5 clues that lead to solving the case. One suspect is the murderer. Include one red herring clue."""),
+Create an interesting victim with enemies, 4 distinct suspects with secrets and motives, and 5 clues that lead to solving the case. One suspect is the murderer. Include one red herring clue.
+
+IMPORTANT: Return ONLY valid JSON. Do not wrap it in markdown code blocks."""),
         ("human", "Generate a unique murder mystery scenario.")
     ])
     
-    chain = prompt | llm | parser
+    # Add a step to strip markdown before parsing
+    strip_markdown = RunnableLambda(strip_markdown_json)
+    chain = prompt | llm | strip_markdown | parser
     
     mystery = chain.invoke({"format_instructions": parser.get_format_instructions()})
     return mystery

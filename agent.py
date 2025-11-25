@@ -226,4 +226,3 @@ def process_message(
                         break
     
     return final_response or "I'm processing your request..."
-

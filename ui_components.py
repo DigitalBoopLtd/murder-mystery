@@ -1,169 +1,139 @@
-"""UI components for displaying game information cards."""
-from typing import Optional
+"""UI components for displaying game information."""
+
+from typing import Optional, List
 from models import Mystery
 
 
 def format_suspects_card(mystery: Optional[Mystery]) -> str:
-    """Format suspects information as a markdown card."""
+    """Format suspects information for display card."""
     if not mystery:
-        return """### 🎭 Suspects
-        
-*Start a new game to see suspects*"""
-    
-    suspects_md = "### 🎭 Suspects\n\n"
-    for i, suspect in enumerate(mystery.suspects, 1):
-        suspects_md += f"""**{i}. {suspect.name}**  
-*{suspect.role}*  
-_{suspect.personality}_
+        return "### 🎭 Suspects\n\n*Start a new game to see suspects*"
 
----
-"""
-    return suspects_md.strip()
+    lines = ["### 🎭 Suspects\n"]
+
+    for suspect in mystery.suspects:
+        lines.append(f"**{suspect.name}**")
+        lines.append(f"- *{suspect.role}*")
+        lines.append(f"- {suspect.personality}")
+        lines.append("")
+
+    return "\n".join(lines)
 
 
-def format_objective_card(mystery: Optional[Mystery], wrong_accusations: int = 0) -> str:
-    """Format the objective/rules card."""
+def format_objective_card(
+    mystery: Optional[Mystery], wrong_accusations: int = 0
+) -> str:
+    """Format objective/rules for display card."""
     if not mystery:
-        return """### 🎯 Objective
+        return "### 🎯 Objective\n\n*Start a new game to begin*"
 
-*Start a new game to begin*"""
-    
-    remaining = 3 - wrong_accusations
-    status_emoji = "🟢" if remaining == 3 else "🟡" if remaining == 2 else "🔴"
-    
+    accusations_left = 3 - wrong_accusations
+    status_emoji = (
+        "🟢" if accusations_left == 3 else "🟡" if accusations_left == 2 else "🔴"
+    )
+
     return f"""### 🎯 Objective
 
-**Solve the murder of {mystery.victim.name}**
+**Victim:** {mystery.victim.name}
 
-- Interrogate suspects
-- Search for clues  
-- Make your accusation
+**Your Mission:**
+- Investigate the crime scene
+- Interrogate suspects  
+- Gather evidence
+- Identify the murderer
+
+**Accusations:** {status_emoji} {accusations_left} remaining
 
 ---
-
-**Accusations remaining:** {status_emoji} {remaining}/3
-
-*Three wrong accusations = Game Over*"""
+*Make your accusation with evidence when ready!*"""
 
 
-def format_locations_card(mystery: Optional[Mystery], searched_locations: list[str] = None) -> str:
-    """Format the locations card with searchable areas."""
-    if not mystery:
-        return """### 📍 Locations
-
-*Start a new game to explore*"""
-    
-    searched = searched_locations or []
-    
-    # Extract locations from clues
-    clue_locations = list(set(clue.location for clue in mystery.clues))
-    
-    locations_md = "### 📍 Locations to Search\n\n"
-    
-    for loc in clue_locations:
-        checked = "✅" if loc in searched else "⬜"
-        locations_md += f"{checked} {loc}\n\n"
-    
-    return locations_md.strip()
-
-
-def format_clues_card(clues_found: list[str] = None) -> str:
-    """Format the clues found card."""
-    clues = clues_found or []
-    
-    if not clues:
-        return """### 🔍 Clues Found
-
-*No clues discovered yet*
-
-Search locations to find evidence!"""
-    
-    clues_md = "### 🔍 Clues Found\n\n"
-    for i, clue in enumerate(clues, 1):
-        clues_md += f"**{i}.** {clue}\n\n"
-    
-    return clues_md.strip()
-
-
-def format_progress_card(
-    mystery: Optional[Mystery],
-    suspects_talked_to: list[str] = None,
-    clues_found: list[str] = None
+def format_locations_card(
+    mystery: Optional[Mystery], searched_locations: Optional[List[str]] = None
 ) -> str:
-    """Format the investigation progress card."""
+    """Format available locations for display card."""
     if not mystery:
-        return """### 📊 Progress
+        return "### 📍 Locations\n\n*Start a new game to explore*"
 
-*Start a new game to track progress*"""
-    
-    talked = suspects_talked_to or []
-    clues = clues_found or []
-    
-    total_suspects = len(mystery.suspects)
-    total_clues = len(mystery.clues)
-    
-    suspects_progress = len(talked)
-    clues_progress = len(clues)
-    
-    # Progress bars using unicode blocks
-    def progress_bar(current, total, width=10):
-        filled = int((current / total) * width) if total > 0 else 0
-        empty = width - filled
-        return "█" * filled + "░" * empty
-    
-    return f"""### 📊 Investigation Progress
+    searched = searched_locations or []
 
-**Suspects Interviewed**  
-{progress_bar(suspects_progress, total_suspects)} {suspects_progress}/{total_suspects}
+    # Extract unique locations from clues
+    clue_locations = list(set(clue.location for clue in mystery.clues))
 
-**Clues Discovered**  
-{progress_bar(clues_progress, total_clues)} {clues_progress}/{total_clues}
+    lines = ["### 📍 Locations to Search\n"]
 
----
+    for location in clue_locations:
+        if location in searched:
+            lines.append(f"- ~~{location}~~ ✓")
+        else:
+            lines.append(f"- {location}")
 
-*Interviewed:* {', '.join(talked) if talked else 'None yet'}"""
+    lines.append("")
+    lines.append("*Type 'search [location]' to investigate*")
+
+    return "\n".join(lines)
 
 
-def format_victim_card(mystery: Optional[Mystery]) -> str:
-    """Format the victim information card."""
+def format_clues_card(clues_found: Optional[List[str]] = None) -> str:
+    """Format discovered clues for display card."""
+    if not clues_found:
+        return "### 🔍 Clues Found\n\n*No clues discovered yet*"
+
+    lines = ["### 🔍 Clues Found\n"]
+
+    for i, clue in enumerate(clues_found, 1):
+        lines.append(f"{i}. {clue}")
+
+    return "\n".join(lines)
+
+
+def format_game_status(
+    mystery: Optional[Mystery], game_over: bool = False, won: bool = False
+) -> str:
+    """Format current game status."""
     if not mystery:
-        return """### 💀 The Victim
+        return """### 🕵️ Murder Mystery
 
-*Start a new game to see case details*"""
-    
-    return f"""### 💀 The Victim
+Type **"start"**, **"new game"**, **"begin"**, or **"play"** to begin!"""
 
-**{mystery.victim.name}**
+    if game_over:
+        if won:
+            return """### 🎉 Case Solved!
 
-{mystery.victim.background}"""
+**Congratulations!** You've identified the murderer and brought them to justice.
+
+Type **"new game"** to play again!"""
+        else:
+            return f"""### 💀 Game Over
+
+You've run out of accusations. The murderer was **{mystery.murderer}**.
+
+Type **"new game"** to try again!"""
+
+    return f"""### 🕵️ Active Investigation
+
+**Case:** The murder of {mystery.victim.name}
+
+**Setting:** {mystery.setting[:100]}{'...' if len(mystery.setting) > 100 else ''}"""
 
 
-def format_setting_card(mystery: Optional[Mystery]) -> str:
-    """Format the setting/location card."""
-    if not mystery:
-        return """### 🏛️ Setting
-
-*Start a new game to see the scene*"""
-    
-    return f"""### 🏛️ The Scene
-
-{mystery.setting}"""
-
-
-def get_all_card_data(
+def get_all_card_content(
     mystery: Optional[Mystery],
     wrong_accusations: int = 0,
-    suspects_talked_to: list[str] = None,
-    clues_found: list[str] = None,
-    searched_locations: list[str] = None
+    clues_found: Optional[List[str]] = None,
+    searched_locations: Optional[List[str]] = None,
+    game_over: bool = False,
+    won: bool = False,
 ) -> dict:
-    """Get all card data as a dictionary for easy updating."""
+    """Get all card content as a dictionary.
+
+    Returns:
+        dict with keys: status, suspects, objective, locations, clues
+    """
     return {
-        "setting": format_setting_card(mystery),
-        "victim": format_victim_card(mystery),
+        "status": format_game_status(mystery, game_over, won),
         "suspects": format_suspects_card(mystery),
         "objective": format_objective_card(mystery, wrong_accusations),
         "locations": format_locations_card(mystery, searched_locations),
         "clues": format_clues_card(clues_found),
-        "progress": format_progress_card(mystery, suspects_talked_to, clues_found)
     }

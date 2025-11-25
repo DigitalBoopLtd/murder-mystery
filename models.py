@@ -37,4 +37,3 @@ class Mystery(BaseModel):
     motive: str
     suspects: List[Suspect] = Field(min_length=4, max_length=4)
     clues: List[Clue] = Field(min_length=5, max_length=5)
-
