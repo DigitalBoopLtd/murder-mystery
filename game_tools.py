@@ -1,9 +1,12 @@
 """Tools for the game master agent."""
+import logging
 from typing import Annotated
 from langchain_core.tools import tool
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
 import os
+
+logger = logging.getLogger(__name__)
 
 
 @tool
@@ -19,6 +22,13 @@ def interrogate_suspect(
     2) Their FULL profile (role, personality, alibi, secret, what they know, isGuilty status), 
     3) Player's question. 
     The tool needs all this info to roleplay correctly."""
+    
+    logger.info(f"\n{'='*60}")
+    logger.info(f"INTERROGATE_SUSPECT TOOL CALLED")
+    logger.info(f"Suspect: {suspect_name}")
+    logger.info(f"Player question: {player_question}")
+    logger.info(f"Profile length: {len(suspect_profile)} chars")
+    logger.info(f"{'='*60}\n")
     
     llm = ChatOpenAI(
         model="gpt-4o",

@@ -1,6 +1,7 @@
 """Main Gradio application with info cards."""
 
 import os
+import logging
 import gradio as gr
 from dotenv import load_dotenv
 from mystery_generator import generate_mystery, prepare_game_prompt
@@ -13,6 +14,38 @@ load_dotenv()
 
 # Global state storage (in production, use a proper database)
 game_states: dict[str, GameState] = {}
+
+# Global log storage for UI display
+ui_logs: dict[str, list] = {}
+
+
+class UILogHandler(logging.Handler):
+    """Custom logging handler that stores logs for UI display."""
+    
+    def __init__(self, session_id: str):
+        super().__init__()
+        self.session_id = session_id
+        self.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s', 
+                                           datefmt='%H:%M:%S'))
+    
+    def emit(self, record):
+        """Store log record for UI display."""
+        if self.session_id not in ui_logs:
+            ui_logs[self.session_id] = []
+        
+        log_entry = self.format(record)
+        ui_logs[self.session_id].append(log_entry)
+        
+        # Keep only last 100 log entries per session
+        if len(ui_logs[self.session_id]) > 100:
+            ui_logs[self.session_id] = ui_logs[self.session_id][-100:]
+
+
+def get_ui_logs(session_id: str) -> str:
+    """Get formatted logs for a session."""
+    if session_id not in ui_logs:
+        return "No logs yet..."
+    return "\n".join(ui_logs.get(session_id, []))
 
 
 def get_or_create_game_state(session_id: str) -> GameState:
@@ -54,62 +87,78 @@ def chat_fn(message: str, history: list, session_id: str):
         session_id: Session identifier
 
     Returns:
-        Tuple of (updated_history, status_card, suspects_card, objective_card, locations_card, clues_card)
+        Tuple of (updated_history, status_card, suspects_card, objective_card, locations_card, clues_card, logs)
     """
-    if not message.strip():
-        state = get_or_create_game_state(session_id)
-        return history, *get_card_updates(state)
-
-    state = get_or_create_game_state(session_id)
-
-    # Check if this is a new game request
-    if state.is_new_game(message) or state.mystery is None:
-        # Generate new mystery
-        try:
-            mystery = generate_mystery()
-            state.reset_game()  # Reset all state
-            state.mystery = mystery
-            state.system_prompt = prepare_game_prompt(mystery)
-        except Exception as e:
-            # Return error with card updates
-            error_history = history + [
-                {"role": "user", "content": message},
-                {"role": "assistant", "content": f"Error generating mystery: {str(e)}"},
-            ]
-            return error_history, *get_card_updates(state)
-    else:
-        # Use continue prompt
-        state.system_prompt = state.get_continue_prompt()
-
-    # Create agent if not exists (shared across sessions)
-    if not hasattr(chat_fn, "agent_app"):
-        chat_fn.agent_app = create_game_master_agent()
-
-    agent_app = chat_fn.agent_app
-
-    # Process the message
+    # Set up UI logging handler for this session
+    ui_handler = UILogHandler(session_id)
+    ui_handler.setLevel(logging.INFO)
+    
+    # Get root logger and add handler
+    root_logger = logging.getLogger()
+    root_logger.addHandler(ui_handler)
+    root_logger.setLevel(logging.INFO)
+    
     try:
-        response = process_message(
-            agent_app, message, state.system_prompt, session_id, thread_id=session_id
-        )
+        if not message.strip():
+            state = get_or_create_game_state(session_id)
+            logs = get_ui_logs(session_id)
+            return history, *get_card_updates(state), logs
 
-        # Update history in Gradio 6 format
-        history.append({"role": "user", "content": message})
-        history.append({"role": "assistant", "content": response})
+        state = get_or_create_game_state(session_id)
 
-        # Update game state messages
-        state.messages.append({"role": "user", "content": message})
-        state.messages.append({"role": "assistant", "content": response})
+        # Check if this is a new game request
+        if state.is_new_game(message) or state.mystery is None:
+            # Generate new mystery
+            try:
+                mystery = generate_mystery()
+                state.reset_game()  # Reset all state
+                state.mystery = mystery
+                state.system_prompt = prepare_game_prompt(mystery)
+            except Exception as e:
+                # Return error with card updates
+                error_history = history + [
+                    {"role": "user", "content": message},
+                    {"role": "assistant", "content": f"Error generating mystery: {str(e)}"},
+                ]
+                logs = get_ui_logs(session_id)
+                return error_history, *get_card_updates(state), logs
+        else:
+            # Use continue prompt
+            state.system_prompt = state.get_continue_prompt()
 
-        # TODO: Parse response to auto-update clues_found, searched_locations, suspects_talked_to
-        # This would require response parsing or tool callbacks
+        # Create agent if not exists (shared across sessions)
+        if not hasattr(chat_fn, "agent_app"):
+            chat_fn.agent_app = create_game_master_agent()
 
-    except Exception as e:
-        error_msg = f"Error processing message: {str(e)}"
-        history.append({"role": "user", "content": message})
-        history.append({"role": "assistant", "content": error_msg})
+        agent_app = chat_fn.agent_app
 
-    return history, *get_card_updates(state)
+        # Process the message
+        try:
+            response = process_message(
+                agent_app, message, state.system_prompt, session_id, thread_id=session_id
+            )
+
+            # Update history in Gradio 6 format
+            history.append({"role": "user", "content": message})
+            history.append({"role": "assistant", "content": response})
+
+            # Update game state messages
+            state.messages.append({"role": "user", "content": message})
+            state.messages.append({"role": "assistant", "content": response})
+
+            # TODO: Parse response to auto-update clues_found, searched_locations, suspects_talked_to
+            # This would require response parsing or tool callbacks
+
+        except Exception as e:
+            error_msg = f"Error processing message: {str(e)}"
+            history.append({"role": "user", "content": message})
+            history.append({"role": "assistant", "content": error_msg})
+    finally:
+        # Remove handler after processing
+        root_logger.removeHandler(ui_handler)
+    
+    logs = get_ui_logs(session_id)
+    return history, *get_card_updates(state), logs
 
 
 def create_interface():
@@ -130,6 +179,10 @@ def create_interface():
     }
     .game-chat {
         min-height: 500px;
+    }
+    .logs-display {
+        font-family: monospace;
+        font-size: 11px;
     }
     """
 
@@ -189,6 +242,17 @@ def create_interface():
                     value="### 🔍 Clues Found\n\n*No clues discovered yet*",
                     elem_classes=["info-card"],
                 )
+        
+        # Logs section (collapsible)
+        with gr.Accordion("🔍 Debug Logs", open=False):
+            logs_display = gr.Textbox(
+                label="Agent Logs",
+                value="No logs yet...",
+                lines=15,
+                max_lines=20,
+                interactive=False,
+                elem_classes=["logs-display"],
+            )
 
         # Generate a unique session ID
         session_id = gr.State(value=lambda: f"session_{os.urandom(8).hex()}")
@@ -197,7 +261,8 @@ def create_interface():
             """Handle user message and generate response."""
             if not message.strip():
                 state = get_or_create_game_state(session)
-                return history, *get_card_updates(state)
+                logs = get_ui_logs(session)
+                return history, *get_card_updates(state), logs
 
             # Get updated history and cards from chat function
             result = chat_fn(message, history, session)
@@ -214,6 +279,7 @@ def create_interface():
                 objective_card,
                 locations_card,
                 clues_card,
+                logs_display,
             ],
         ).then(lambda: "", None, msg)
 
@@ -227,6 +293,7 @@ def create_interface():
                 objective_card,
                 locations_card,
                 clues_card,
+                logs_display,
             ],
         ).then(lambda: "", None, msg)
 

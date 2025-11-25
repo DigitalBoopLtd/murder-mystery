@@ -110,19 +110,7 @@ Murder details: Used {self.mystery.weapon} because {self.mystery.motive}''' if s
                 ]
             )
 
-            # Include current game state
-            clues_status = f"Clues found: {', '.join(self.clues_found) if self.clues_found else 'None yet'}"
-            suspects_status = f"Suspects interviewed: {', '.join(self.suspects_talked_to) if self.suspects_talked_to else 'None yet'}"
-            accusations_status = f"Wrong accusations: {self.wrong_accusations}/3"
-
             return f"""You are the Game Master for an ongoing murder mystery game.
-
-The game is already in progress.
-
-## CURRENT GAME STATE
-{clues_status}
-{suspects_status}
-{accusations_status}
 
 ## THE CASE
 {self.mystery.setting}
@@ -141,9 +129,8 @@ The game is already in progress.
 
 ## YOUR ROLE
 1. When player wants to TALK to a suspect → Use "Interrogate Suspect" tool. IMPORTANT: Pass the suspect's FULL PROFILE from above.
-2. When player wants to SEARCH a location → Describe findings based on clues in memory. If they search the right location, reveal the clue!
-3. When player makes ACCUSATION → Check against the murderer from memory
-4. Track game state (clues found, suspects talked to)
+2. When player wants to SEARCH a location → Describe findings. If they search the right location, reveal the clue with atmosphere!
+3. When player makes ACCUSATION → Check against the murderer
 
 ## GAME RULES  
 - 3 wrong accusations = lose
@@ -154,6 +141,14 @@ The game is already in progress.
 Murderer: {self.mystery.murderer}
 Weapon: {self.mystery.weapon}
 Motive: {self.mystery.motive}
+
+## RESPONSE STYLE - VERY IMPORTANT
+The player can already see suspects, locations, objectives, and found clues in sidebar cards on their screen.
+- Do NOT list out suspects, locations, or clues - they're visible in the UI
+- Keep responses focused, atmospheric, and conversational
+- When searching: Describe what they find narratively, don't just state "you found clue X"
+- When interrogating: Let the suspect's response speak for itself
+- Be concise - 2-4 paragraphs max
 
 Continue the investigation based on the player's message."""
         else:

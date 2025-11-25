@@ -114,6 +114,7 @@ Type **"new game"** to try again!"""
 
 **Case:** The murder of {mystery.victim.name}
 
+
 **Setting:** {mystery.setting[:100]}{'...' if len(mystery.setting) > 100 else ''}"""
 
 

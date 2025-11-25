@@ -1,4 +1,5 @@
 """Mystery generation logic."""
+
 import os
 import re
 from langchain_openai import ChatOpenAI
@@ -11,31 +12,32 @@ from models import Mystery
 def strip_markdown_json(message) -> str:
     """Strip markdown code blocks from JSON output."""
     # Extract content if it's an AIMessage object
-    if hasattr(message, 'content'):
+    if hasattr(message, "content"):
         text = message.content
     elif isinstance(message, str):
         text = message
     else:
         text = str(message)
-    
+
     # Remove markdown code blocks (```json ... ``` or ``` ... ```)
-    text = re.sub(r'^```(?:json)?\s*\n', '', text, flags=re.MULTILINE)
-    text = re.sub(r'\n```\s*$', '', text, flags=re.MULTILINE)
+    text = re.sub(r"^```(?:json)?\s*\n", "", text, flags=re.MULTILINE)
+    text = re.sub(r"\n```\s*$", "", text, flags=re.MULTILINE)
     return text.strip()
 
 
 def generate_mystery() -> Mystery:
     """Generate a unique murder mystery scenario."""
     llm = ChatOpenAI(
-        model="gpt-4o",
-        temperature=0.9,
-        api_key=os.getenv("OPENAI_API_KEY")
+        model="gpt-4o", temperature=0.9, api_key=os.getenv("OPENAI_API_KEY")
     )
-    
+
     parser = PydanticOutputParser(pydantic_object=Mystery)
-    
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", """You are a creative murder mystery writer. Generate a unique murder mystery scenario.
+
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            (
+                "system",
+                """You are a creative murder mystery writer. Generate a unique murder mystery scenario.
         
 {format_instructions}
 
@@ -43,14 +45,16 @@ Be creative with the setting - could be a mansion, cruise ship, theater, space s
 
 Create an interesting victim with enemies, 4 distinct suspects with secrets and motives, and 5 clues that lead to solving the case. One suspect is the murderer. Include one red herring clue.
 
-IMPORTANT: Return ONLY valid JSON. Do not wrap it in markdown code blocks."""),
-        ("human", "Generate a unique murder mystery scenario.")
-    ])
-    
+IMPORTANT: Return ONLY valid JSON. Do not wrap it in markdown code blocks.""",
+            ),
+            ("human", "Generate a unique murder mystery scenario."),
+        ]
+    )
+
     # Add a step to strip markdown before parsing
     strip_markdown = RunnableLambda(strip_markdown_json)
     chain = prompt | llm | strip_markdown | parser
-    
+
     mystery = chain.invoke({"format_instructions": parser.get_format_instructions()})
     return mystery
 
@@ -58,10 +62,13 @@ IMPORTANT: Return ONLY valid JSON. Do not wrap it in markdown code blocks."""),
 def prepare_game_prompt(mystery: Mystery) -> str:
     """Prepare the system prompt for the game master."""
     suspect_list = "\n".join([f"- {s.name} ({s.role})" for s in mystery.suspects])
-    clue_list = "\n".join([f"- \"{c.id}\": {c.description} [Location: {c.location}]" for c in mystery.clues])
-    
-    suspect_profiles = "\n".join([
-        f"""
+    clue_list = "\n".join(
+        [f'- "{c.id}": {c.description} [Location: {c.location}]' for c in mystery.clues]
+    )
+
+    suspect_profiles = "\n".join(
+        [
+            f"""
 ### {s.name}
 Role: {s.role}
 Personality: {s.personality}
@@ -70,9 +77,10 @@ Secret: {s.secret}
 Will share if asked: {s.clue_they_know}
 Guilty: {s.isGuilty}{f'''
 Murder details: Used {mystery.weapon} because {mystery.motive}''' if s.isGuilty else ''}"""
-        for s in mystery.suspects
-    ])
-    
+            for s in mystery.suspects
+        ]
+    )
+
     system_prompt = f"""You are the Game Master for a murder mystery game.
 
 ## THE CASE
@@ -94,7 +102,6 @@ Murder details: Used {mystery.weapon} because {mystery.motive}''' if s.isGuilty 
 1. When player wants to TALK to a suspect → Use "Interrogate Suspect" tool. IMPORTANT: Pass the suspect's FULL PROFILE from above.
 2. When player wants to SEARCH a location → Describe findings, reveal clues if correct location
 3. When player makes ACCUSATION → Check if correct with evidence
-4. Track game state (clues found, suspects talked to)
 
 ## GAME RULES
 - 3 wrong accusations = lose
@@ -106,7 +113,15 @@ Murderer: {mystery.murderer}
 Weapon: {mystery.weapon}
 Motive: {mystery.motive}
 
-Welcome the player and set the scene!"""
-    
-    return system_prompt
+## RESPONSE STYLE - VERY IMPORTANT
+The player can already see suspects, locations, objectives, and found clues in sidebar cards on their screen.
+- Do NOT list out all suspects or their roles
+- Do NOT list all locations to search  
+- Do NOT repeat the case summary or victim info
+- Keep responses focused, atmospheric, and conversational
+- When welcoming: Set the MOOD briefly (2-3 sentences), then ask what they'd like to do first
+- Be concise - no walls of text or bullet-point lists of what's available
 
+Welcome the player with atmosphere and ask what they'd like to investigate!"""
+
+    return system_prompt
