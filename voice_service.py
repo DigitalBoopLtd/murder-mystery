@@ -45,48 +45,68 @@ class VoiceService:
         """Get API headers."""
         return {"xi-api-key": self.api_key, "Content-Type": "application/json"}
 
-    def get_available_voices(self, force_refresh: bool = False) -> List[Voice]:
+    def get_available_voices(self, force_refresh: bool = False, english_only: bool = True) -> List[Voice]:
         """Fetch all available voices from ElevenLabs.
+
+        Args:
+            force_refresh: Force refresh of cached voices
+            english_only: Filter to only English-speaking voices (default: True)
 
         Returns:
             List of Voice objects with metadata
         """
         if self._voices_cache and not force_refresh:
-            return self._voices_cache
+            voices = self._voices_cache
+        else:
+            if not self.is_available:
+                logger.warning("ElevenLabs API key not set")
+                return []
 
-        if not self.is_available:
-            logger.warning("ElevenLabs API key not set")
-            return []
-
-        try:
-            response = requests.get(
-                f"{ELEVENLABS_API_URL}/voices", headers=self._get_headers(), timeout=10
-            )
-            response.raise_for_status()
-            data = response.json()
-
-            voices = []
-            for voice_data in data.get("voices", []):
-                labels = voice_data.get("labels", {})
-                voices.append(
-                    Voice(
-                        voice_id=voice_data["voice_id"],
-                        name=voice_data["name"],
-                        gender=labels.get("gender"),
-                        age=labels.get("age"),
-                        accent=labels.get("accent"),
-                        description=labels.get("description"),
-                        use_case=labels.get("use_case"),
-                    )
+            try:
+                response = requests.get(
+                    f"{ELEVENLABS_API_URL}/voices", headers=self._get_headers(), timeout=10
                 )
+                response.raise_for_status()
+                data = response.json()
 
-            self._voices_cache = voices
-            logger.info(f"Fetched {len(voices)} voices from ElevenLabs")
-            return voices
+                voices = []
+                for voice_data in data.get("voices", []):
+                    labels = voice_data.get("labels", {})
+                    voices.append(
+                        Voice(
+                            voice_id=voice_data["voice_id"],
+                            name=voice_data["name"],
+                            gender=labels.get("gender"),
+                            age=labels.get("age"),
+                            accent=labels.get("accent"),
+                            description=labels.get("description"),
+                            use_case=labels.get("use_case"),
+                        )
+                    )
 
-        except requests.RequestException as e:
-            logger.error(f"Error fetching voices: {e}")
-            return []
+                self._voices_cache = voices
+                logger.info(f"Fetched {len(voices)} voices from ElevenLabs")
+            except requests.RequestException as e:
+                logger.error(f"Error fetching voices: {e}")
+                return []
+        
+        # Filter to English-only voices if requested
+        if english_only:
+            english_accents = [
+                "american", "british", "english", "australian", "canadian", 
+                "irish", "scottish", "welsh", "new zealand", "south african"
+            ]
+            filtered_voices = []
+            for voice in voices:
+                accent = voice.accent.lower() if voice.accent else ""
+                # Include voices with English accents or no accent specified (assume English)
+                if not accent or any(eng_accent in accent for eng_accent in english_accents):
+                    filtered_voices.append(voice)
+            
+            logger.info(f"Filtered to {len(filtered_voices)} English-speaking voices (from {len(voices)} total)")
+            return filtered_voices
+        
+        return voices
 
     def extract_suspect_characteristics(self, suspect_profile: dict) -> dict:
         """Extract voice-relevant characteristics from a suspect profile.
@@ -469,11 +489,12 @@ class VoiceService:
 
         return best_voice
 
-    def assign_voices_to_suspects(self, suspects: List[dict]) -> Dict[str, str]:
+    def assign_voices_to_suspects(self, suspects: List[dict], english_only: bool = True) -> Dict[str, str]:
         """Assign voices to all suspects.
 
         Args:
             suspects: List of suspect profile dicts
+            english_only: Only use English-speaking voices (default: True)
 
         Returns:
             Dict mapping suspect name to voice_id
@@ -482,7 +503,7 @@ class VoiceService:
             logger.warning("ElevenLabs not available, skipping voice assignment")
             return {}
 
-        voices = self.get_available_voices()
+        voices = self.get_available_voices(english_only=english_only)
         if not voices:
             logger.warning("No voices available")
             return {}

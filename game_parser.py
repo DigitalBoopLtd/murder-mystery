@@ -160,16 +160,17 @@ def parse_game_actions(user_message: str, response: str, state: GameState) -> di
                     "try again",
                     "not guilty",
                 ]
-                if any(ind in response_lower for ind in rejection_indicators):
-                    state.wrong_accusations += 1
-                    actions["accusation_correct"] = False
-                    logger.info(
-                        f"❌ Wrong accusation! Count: {state.wrong_accusations}/3"
-                    )
+                # For wrong accusations, always increment if it's the wrong person
+                # Don't require rejection indicators - if they accused wrong person, it's wrong
+                state.wrong_accusations += 1
+                actions["accusation_correct"] = False
+                logger.info(
+                    f"❌ Wrong accusation! Count: {state.wrong_accusations}/3"
+                )
 
-                    if state.wrong_accusations >= 3:
-                        state.game_over = True
-                        logger.info(f"💀 Game over - too many wrong accusations")
+                if state.wrong_accusations >= 3:
+                    state.game_over = True
+                    logger.info(f"💀 Game over - too many wrong accusations")
 
     return actions
 
