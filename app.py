@@ -217,7 +217,7 @@ def convert_alignment_to_subtitles(alignment_data: Optional[List[Dict]]) -> Opti
 
 def create_app():
     """Create the Gradio application."""
-
+    
     with gr.Blocks(title="Murder Mystery") as app:
 
         # Create and inject favicon
@@ -230,7 +230,7 @@ def create_app():
         <link rel="shortcut icon" type="image/png" href="data:image/png;base64,{favicon_data}">
         '''
         
-        # Inject CSS and favicon via HTML component (works across Gradio versions)
+        # Inject CSS and favicon
         gr.HTML(f"<style>{RETRO_CSS}</style>{favicon_html}")
 
         # Session state
@@ -239,11 +239,9 @@ def create_app():
         # ====== TITLE BAR ======
         with gr.Row(elem_classes="title-bar"):
             gr.HTML('<div class="game-title">🕵️‍♀️ MURDER MYSTERY</div>')
-
-        # ====== STATUS BAR ======
-        with gr.Row(elem_classes="status-bar"):
-            status_text = gr.HTML(
-                '<span style="color: var(--text-secondary);">Press START to begin your investigation...</span>'
+            # Accusations counter - top right
+            accusations_html = gr.HTML(
+                '<div class="accusations-display accusations-title-bar">Accusations: <span class="accusations-pip"></span><span class="accusations-pip"></span><span class="accusations-pip"></span></div>'
             )
 
         # ====== MAIN LAYOUT ======
@@ -277,11 +275,6 @@ def create_app():
                     gr.HTML('<div class="panel-title">🔎 Clues Found</div>')
                     clues_html = gr.HTML("<em>No clues yet...</em>")
 
-                # Accusations remaining
-                accusations_html = gr.HTML(
-                    '<div class="accusations-display">Accusations: <span class="accusations-pip"></span><span class="accusations-pip"></span><span class="accusations-pip"></span></div>'
-                )
-
             # === CENTER: MAIN STAGE ===
             with gr.Column(scale=3):
 
@@ -308,7 +301,7 @@ def create_app():
                     audio_output = gr.Audio(
                         label=None,
                         show_label=False,
-                        autoplay=True,
+                        autoplay=True,  # Autoplay after user interaction (Start button click)
                         elem_classes="audio-player",
                     )
 
@@ -404,11 +397,21 @@ def create_app():
             # Convert alignment_data to Gradio subtitles format
             subtitles = convert_alignment_to_subtitles(alignment_data)
 
+            # Update audio component with game audio and subtitles
+            # Autoplay is allowed after user interaction (Start button click)
+            audio_update = None
+            if audio_path:
+                audio_update = gr.update(
+                    value=audio_path,
+                    subtitles=subtitles,
+                    autoplay=True  # Autoplay after user interaction
+                )
+
             return [
                 # Speaker - show when game starts
                 f'<div class="speaker-name">{speaker}</div>',
-                # Audio with subtitles - Gradio handles word highlighting
-                gr.update(value=audio_path, subtitles=subtitles) if audio_path else None,
+                # Audio with subtitles - will autoplay after user interaction (Start button click)
+                audio_update,
                 # Portrait - return path directly, or placeholder if not available
                 display_portrait,
                 # Show game UI
@@ -421,8 +424,6 @@ def create_app():
                 format_clues_html(state.clues_found),
                 # Accusations
                 _format_accusations_html(state.wrong_accusations),
-                # Status
-                f'<span style="color: var(--accent-blue);">Case: The Murder of {state.mystery.victim.name}</span>',
             ]
 
         def _format_accusations_html(wrong: int):
@@ -430,7 +431,7 @@ def create_app():
             for i in range(3):
                 cls = "accusations-pip used" if i < wrong else "accusations-pip"
                 pips += f'<span class="{cls}"></span>'
-            return f'<div class="accusations-display">Accusations: {pips}</div>'
+            return f'<div class="accusations-display accusations-title-bar">Accusations: {pips}</div>'
 
         def on_custom_message(message: str, sess_id: str):
             """Handle free-form text input."""
@@ -627,7 +628,6 @@ def create_app():
                 locations_html,
                 clues_html,
                 accusations_html,
-                status_text,
             ],
         )
 

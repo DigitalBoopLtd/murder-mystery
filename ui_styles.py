@@ -382,6 +382,14 @@ RETRO_CSS = """
     color: var(--text-primary);
 }
 
+.accusations-title-bar {
+    margin-left: auto;
+    text-align: right;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+}
+
 .accusations-pip {
     display: inline-block;
     width: 10px;
@@ -403,7 +411,8 @@ RETRO_CSS = """
     max-width: 100% !important;
     margin: 0 !important;
     padding: 0 !important;
-    background: var(--accent-green) !important;
+    background: #010101 !important;
+    opacity: 0.5 !important;
     border: none !important;
     border-radius: 0 !important;
     /* Reduced height for subtitles only */
@@ -423,29 +432,50 @@ RETRO_CSS = """
 }
 
 /* Position audio player to overlay the bottom of the portrait image */
-/* Since portrait and audio are siblings, we position audio absolutely */
-.stage-container:has(.portrait-image img[src]:not([src=""])) .audio-player {
+/* Gradio wraps components in .block divs, so we need to target those */
+.stage-container:has(.portrait-image img[src]:not([src=""])) {
+    position: relative !important;
+}
+
+/* Make the portrait-image block a positioning context and remove bottom spacing */
+.stage-container:has(.portrait-image img[src]:not([src=""])) .block.portrait-image {
+    position: relative !important;
+    margin-bottom: 0 !important;
+    padding-bottom: 0 !important;
+    z-index: 1 !important;
+}
+
+/* Position audio player block absolutely to overlay the portrait image block */
+/* Since they're siblings, we position relative to stage-container */
+.stage-container:has(.portrait-image img[src]:not([src=""])) .block.audio-player {
     position: absolute !important;
-    /* Position to overlay the bottom of the portrait image */
-    /* Since image and audio are siblings, we need to position relative to image */
-    /* Use a large negative margin-top to pull it up onto the image */
-    bottom: 24px !important;
+    /* Position at bottom of stage-container, then pull up to overlay image */
+    bottom: 24px !important; /* Match stage-container padding */
     left: 24px !important;
     right: 24px !important;
     width: calc(100% - 48px) !important;
+    z-index: 10 !important;
+    margin: 0 !important;
+    /* Use transform to pull it up onto the image - more reliable than margin */
+    /* Pull up by a fixed amount to overlay the bottom portion of the image */
+    /* This value should be adjusted based on typical image heights */
+    transform: translateY(-300px) !important; /* Pull up to overlay bottom of image */
+}
+
+/* Style the audio player content */
+.stage-container:has(.portrait-image img[src]:not([src=""])) .block.audio-player > div,
+.stage-container:has(.portrait-image img[src]:not([src=""])) .block.audio-player .minimal-audio-player {
     padding: 16px 20px !important;
-    /* Much darker background for better readability */
     background: linear-gradient(to top, rgba(0, 0, 0, 0.95) 0%, rgba(0, 0, 0, 0.85) 100%) !important;
     border-radius: 0 0 12px 12px !important;
-    z-index: 10 !important;
-    /* Pull up to overlay the image - use large negative margin */
-    margin-top: -400px !important; /* Large enough to pull up onto any image height */
 }
 
 /* Position speaker name above subtitles in the overlay */
 .stage-container:has(.portrait-image img[src]:not([src=""])) .speaker-name {
     position: absolute !important;
-    bottom: 120px !important; /* Position above the subtitle overlay */
+    /* Position above the subtitle overlay (which is at bottom: 24px) */
+    /* Subtitle area is ~60px tall, so position speaker above it */
+    bottom: 100px !important; /* 24px (subtitle bottom) + ~60px (subtitle height) + 16px (spacing) */
     left: 24px !important;
     right: 24px !important;
     width: calc(100% - 48px) !important;
@@ -462,8 +492,7 @@ RETRO_CSS = """
     display: block !important;
     visibility: visible !important;
     margin: 0 !important;
-    /* Pull up to align with image overlay */
-    margin-top: -400px !important; /* Match the audio player's negative margin */
+    margin-top: -200px !important; /* Match the audio player's negative margin */
 }
 
 /* When there's no portrait image (e.g., start screen), don't overlay */
