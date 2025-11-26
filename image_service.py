@@ -145,9 +145,11 @@ No text, no words, no letters, no writing, no labels, no captions, no name tags.
 
         try:
             logger.info(f"Generating portrait for {name}...")
+            negative_prompt = "text, words, letters, writing, labels, captions, name tags, titles, signage, signs, typography, subtitles, text overlay, watermark, logo"
             image = self.client.text_to_image(
                 prompt,
                 model="black-forest-labs/FLUX.1-schnell",
+                negative_prompt=negative_prompt,
             )
 
             path = self._save_to_cache(image, cache_key)
@@ -208,9 +210,11 @@ No text, no words, no letters, no writing, no labels, no captions, no name tags.
 
         try:
             logger.info(f"Generating scene for {location_name} with context...")
+            negative_prompt = "text, words, letters, writing, labels, captions, signage, signs, typography, subtitles, text overlay, watermark, logo, street signs, shop signs, billboards"
             image = self.client.text_to_image(
                 prompt,
                 model="black-forest-labs/FLUX.1-schnell",
+                negative_prompt=negative_prompt,
             )
 
             path = self._save_to_cache(image, cache_key)
@@ -251,9 +255,11 @@ Atmospheric scene only, no text overlay.
 
         try:
             logger.info(f"Generating title card...")
+            negative_prompt = "text, words, letters, writing, labels, captions, title text, signage, signs, typography, subtitles, text overlay, watermark, logo, title card text, movie title, game title"
             image = self.client.text_to_image(
                 prompt,
                 model="black-forest-labs/FLUX.1-schnell",
+                negative_prompt=negative_prompt,
             )
 
             path = self._save_to_cache(image, cache_key)

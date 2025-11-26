@@ -182,7 +182,7 @@ def convert_alignment_to_subtitles(alignment_data: Optional[List[Dict]]) -> Opti
     """Convert alignment_data format to Gradio subtitles format.
     
     Args:
-        alignment_data: List of dicts with 'word', 'start', 'end' keys
+        alignment_data: List of dicts with 'word', 'start', 'end' keys from TTS alignment
         
     Returns:
         List of dicts in format Gradio expects: [{"timestamp": [start, end], "text": str}, ...]
@@ -190,23 +190,32 @@ def convert_alignment_to_subtitles(alignment_data: Optional[List[Dict]]) -> Opti
         
     Note:
         Gradio expects 'timestamp' field as a list/tuple [start, end] and 'text' field for each subtitle.
+        Uses alignment data words directly - they represent what was actually spoken in the audio.
+        Preserves ALL words from alignment data to ensure perfect sync with audio.
     """
     if not alignment_data:
+        logger.warning("[Subtitles] No alignment data provided")
         return None
     
     # Gradio subtitles format: list of dicts with 'timestamp' (as [start, end]) and 'text' keys
+    # Use alignment data words exactly as they are - they match what's spoken in the audio
     subtitles = []
     for word_data in alignment_data:
-        word = word_data.get("word", "").strip()
+        word = word_data.get("word", "")
         start = word_data.get("start", 0.0)
         end = word_data.get("end", 0.0)
         
-        if word:  # Only add non-empty words
-            subtitles.append({
-                "timestamp": [float(start), float(end)],
-                "text": word
-            })
+        # Preserve the word as-is (don't strip - might remove important characters)
+        # Only skip if completely empty
+        if word or word == "":  # Include even empty strings if they're in alignment (spaces/punctuation)
+            # But actually, skip truly empty strings to avoid issues
+            if word.strip():  # Only add if word has content after stripping whitespace
+                subtitles.append({
+                    "timestamp": [float(start), float(end)],
+                    "text": word  # Use word exactly as it appears in alignment data
+                })
     
+    logger.info(f"[Subtitles] Converted {len(alignment_data)} alignment words to {len(subtitles)} subtitles")
     return subtitles if subtitles else None
 
 
@@ -301,7 +310,7 @@ def create_app():
                     audio_output = gr.Audio(
                         label=None,
                         show_label=False,
-                        autoplay=True,  # Autoplay after user interaction (Start button click)
+                        autoplay=False,  # Don't autoplay initially - no audio to play yet
                         elem_classes="audio-player",
                     )
 
@@ -395,6 +404,7 @@ def create_app():
             display_portrait = portrait if portrait else placeholder_img
 
             # Convert alignment_data to Gradio subtitles format
+            # Use alignment data directly - it represents what was actually spoken
             subtitles = convert_alignment_to_subtitles(alignment_data)
 
             # Update audio component with game audio and subtitles
@@ -451,7 +461,7 @@ def create_app():
                 else set()
             )
 
-            _response, audio_path, speaker, state, alignment_data = (
+            response, audio_path, speaker, state, alignment_data = (
                 process_player_action("custom", "", message, sess_id)
             )
 
@@ -500,6 +510,7 @@ def create_app():
                 logger.info("Using placeholder image")
 
             # Convert alignment_data to Gradio subtitles format
+            # Use alignment data directly - it represents what was actually spoken
             subtitles = convert_alignment_to_subtitles(alignment_data)
 
             return [
@@ -537,7 +548,7 @@ def create_app():
             if not text.strip():
                 return [gr.update()] * 8
 
-            _response, audio_resp, speaker, state, alignment_data = (
+            response, audio_resp, speaker, state, alignment_data = (
                 process_player_action("custom", "", text, sess_id)
             )
 
@@ -586,6 +597,7 @@ def create_app():
                 logger.info("Using placeholder image")
 
             # Convert alignment_data to Gradio subtitles format
+            # Use alignment data directly - it represents what was actually spoken
             subtitles = convert_alignment_to_subtitles(alignment_data)
 
             return [

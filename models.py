@@ -27,6 +27,14 @@ class Suspect(BaseModel):
         default=None,
         description="Gender for voice matching (male/female). Not displayed to players.",
     )
+    age: Optional[str] = Field(
+        default=None,
+        description="Age category for voice matching (young/middle_aged/old). Not displayed to players.",
+    )
+    nationality: Optional[str] = Field(
+        default=None,
+        description="Nationality/accent for voice matching (american/british/australian/etc). Not displayed to players.",
+    )
     voice_id: Optional[str] = Field(
         default=None, description="ElevenLabs voice ID for TTS"
     )

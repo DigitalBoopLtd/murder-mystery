@@ -66,7 +66,14 @@ Be creative with the setting - could be a mansion, cruise ship, theater, space s
 
 Create an interesting victim with enemies, 4 distinct suspects with secrets and motives, and 5 clues that lead to solving the case. One suspect is the murderer. Include one red herring clue.
 
-IMPORTANT: For each suspect, include a "gender" field set to either "male" or "female". This is used for voice matching and will not be displayed to players.
+IMPORTANT: For each suspect, include these fields for voice matching (not displayed to players):
+- "gender": MUST be exactly "male" or "female"
+- "age": MUST be exactly one of: "young", "middle_aged", or "old" (based on their age)
+- "nationality": MUST be exactly one of: "american", "british", "australian", or "standard" (based on their accent/nationality background)
+  - Use "american" for US/Canadian characters
+  - Use "british" for UK/English characters  
+  - Use "australian" for Australian characters
+  - Use "standard" for neutral/international accents
 
 CRITICAL: Return ONLY valid JSON. Do NOT wrap it in markdown code blocks. Do NOT include any text before or after the JSON. Start with {{ and end with }}.""",
             ),
@@ -134,6 +141,8 @@ def assign_voices_to_mystery(mystery: Mystery) -> Mystery:
                 "role": s.role,
                 "personality": s.personality,
                 "gender": s.gender,  # Include explicit gender if available
+                "age": s.age,  # Include explicit age if available
+                "nationality": s.nationality,  # Include explicit nationality/accent if available
             }
             for s in mystery.suspects
         ]
