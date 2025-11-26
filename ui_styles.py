@@ -45,12 +45,32 @@ RETRO_CSS = """
 }
 
 .game-title {
-    font-family: 'Source Sans Pro', sans-serif;
-    font-size: 20px;
+    font-family: 'Courier New', 'Courier', 'Monaco', 'Menlo', monospace;
+    font-size: 32px;
     font-weight: 700;
     color: var(--accent-blue);
-    letter-spacing: 1px;
+    letter-spacing: 3px;
     text-transform: uppercase;
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    text-shadow: 2px 2px 0px rgba(0, 0, 0, 0.8);
+}
+
+/* Detective avatar - circular frame */
+.detective-avatar {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 70px;
+    height: 70px;
+    border-radius: 50%;
+    border: 2px solid var(--accent-blue);
+    background: #1a1a2a;
+    font-size: 40px;
+    line-height: 1;
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.6), 0 0 10px rgba(0, 255, 255, 0.3);
+    flex-shrink: 0;
 }
 
 /* The Stage - main viewing area */
@@ -285,16 +305,202 @@ RETRO_CSS = """
     text-shadow: none !important;
 }
 
-/* Input area */
+/* Input area - use column layout to stack audio above text input */
 .input-bar {
-    display: flex;
-    gap: 12px;
-    padding: 16px;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 0 !important;
+    padding: 0 !important;
     background: var(--bg-secondary);
     border-top: 2px solid var(--accent-blue);
-    align-items: center;
-    justify-content: center;
     box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.5);
+}
+
+/* Text input accordion - dark theme styling */
+.text-input-accordion,
+.text-input-accordion .gr-accordion,
+.text-input-accordion .gr-accordion-item {
+    background: var(--bg-secondary) !important;
+    border: none !important;
+    border-top: 1px solid var(--border-dark) !important;
+    margin: 0 !important;
+    padding: 0 !important;
+}
+
+.text-input-accordion .gr-accordion-header,
+.text-input-accordion .gr-accordion-title,
+.text-input-accordion button[aria-expanded] {
+    background: var(--bg-secondary) !important;
+    color: var(--accent-blue) !important;
+    border: none !important;
+    padding: 12px 16px !important;
+    font-family: 'Source Sans Pro', sans-serif !important;
+    font-size: 13px !important;
+    font-weight: 600 !important;
+    text-transform: uppercase !important;
+    letter-spacing: 1px !important;
+    cursor: pointer !important;
+    transition: all 0.2s ease !important;
+}
+
+.text-input-accordion .gr-accordion-header:hover,
+.text-input-accordion button[aria-expanded]:hover {
+    background: var(--bg-panel) !important;
+    color: var(--accent-blue) !important;
+}
+
+.text-input-accordion .gr-accordion-content {
+    background: var(--bg-secondary) !important;
+    padding: 16px !important;
+    border-top: 1px solid var(--border-dark) !important;
+}
+
+/* Audio container - own row above text input */
+.audio-container,
+.audio-container.svelte-ocxd3m,
+[data-testid="waveform-Audio"].audio-container,
+.input-bar .audio-container,
+.input-bar [data-testid="waveform-Audio"] {
+    display: block !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 16px !important;
+    background: var(--bg-secondary) !important;
+    border-top: none !important;
+    border-bottom: 1px solid var(--border-dark) !important;
+    box-shadow: none !important;
+    order: -1 !important; /* Place above other elements */
+    flex: 0 0 auto !important;
+    pointer-events: auto !important; /* Ensure interactions work */
+}
+
+/* Ensure all audio container controls are interactive */
+.audio-container *,
+.audio-container button,
+.audio-container .record-button,
+.audio-container .stop-button,
+.audio-container .controls {
+    pointer-events: auto !important;
+    cursor: pointer !important;
+}
+
+/* Style microphone select dropdown - dark theme */
+.mic-select,
+.audio-container .mic-select,
+.audio-container select.mic-select,
+select.mic-select.svelte-ym1wxn {
+    background: var(--bg-card) !important;
+    background-color: var(--bg-card) !important;
+    border: 2px solid var(--border-dark) !important;
+    color: var(--text-primary) !important;
+    border-radius: 4px !important;
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.6) !important;
+    font-family: 'Source Sans Pro', sans-serif !important;
+    font-size: 10px !important;
+}
+
+.mic-select:focus,
+.audio-container .mic-select:focus {
+    border-color: var(--accent-blue) !important;
+    outline: none !important;
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.6), 0 0 10px rgba(0, 255, 255, 0.3) !important;
+}
+
+.mic-select option {
+    background: var(--bg-card) !important;
+    color: var(--text-primary) !important;
+}
+
+/* Style record button - dark theme */
+.record-button,
+.audio-container .record-button,
+.audio-container button.record-button,
+button.record-button.svelte-1xuh0j1 {
+    background: var(--bg-card) !important;
+    background-color: var(--bg-card) !important;
+    border: 2px solid var(--accent-blue) !important;
+    color: var(--accent-blue) !important;
+    border-radius: 4px !important;
+    font-family: 'Source Sans Pro', sans-serif !important;
+    font-size: 10px !important;
+    font-weight: 700 !important;
+    text-transform: uppercase !important;
+    letter-spacing: 1px !important;
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.5) !important;
+    cursor: pointer !important;
+    transition: all 0.2s ease !important;
+}
+
+.record-button:hover,
+.audio-container .record-button:hover {
+    background: var(--accent-blue) !important;
+    color: #000033 !important;
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.3), 0 0 15px rgba(0, 255, 255, 0.4) !important;
+}
+
+/* Style stop button - dark theme */
+.stop-button,
+.audio-container .stop-button,
+.audio-container button.stop-button,
+button.stop-button.svelte-1xuh0j1 {
+    background: var(--bg-card) !important;
+    background-color: var(--bg-card) !important;
+    border: 2px solid var(--accent-red) !important;
+    color: var(--accent-red) !important;
+    padding: 10px 20px !important;
+    border-radius: 4px !important;
+    font-family: 'Source Sans Pro', sans-serif !important;
+    font-size: 10px !important;
+    font-weight: 700 !important;
+    text-transform: uppercase !important;
+    letter-spacing: 1px !important;
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.5) !important;
+    cursor: pointer !important;
+    transition: all 0.2s ease !important;
+}
+
+.stop-button:hover,
+.audio-container .stop-button:hover {
+    background: var(--accent-red) !important;
+    color: #FFFFFF !important;
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.3), 0 0 15px rgba(255, 0, 136, 0.4) !important;
+}
+
+/* Style icon buttons in audio container (clear/refresh button) - dark theme */
+.audio-container .icon-button,
+.audio-container button.icon-button,
+.audio-container [class*="icon-button"],
+.audio-container button[aria-label*="Clear"],
+.audio-container button[aria-label*="clear"],
+.audio-container button[aria-label*="Refresh"],
+.audio-container button[aria-label*="refresh"] {
+    background: var(--bg-card) !important;
+    background-color: var(--bg-card) !important;
+    border: 2px solid var(--border-dark) !important;
+    color: var(--text-primary) !important;
+    border-radius: 4px !important;
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.6) !important;
+}
+
+.audio-container .icon-button:hover,
+.audio-container button.icon-button:hover,
+.audio-container [class*="icon-button"]:hover {
+    background: var(--bg-panel) !important;
+    border-color: var(--accent-blue) !important;
+    color: var(--accent-blue) !important;
+}
+
+/* Text input and button row - inside accordion */
+.text-input-accordion .text-input,
+.text-input-accordion .action-button,
+.text-input-accordion .gr-row,
+.text-input-accordion > div:has(.text-input) {
+    display: flex !important;
+    flex-direction: row !important;
+    gap: 12px !important;
+    align-items: center !important;
+    justify-content: center !important;
+    flex: 0 0 auto !important;
 }
 
 .text-input {
@@ -549,15 +755,14 @@ RETRO_CSS = """
 /* Hide the block container wrapper but keep subtitle-display visible */
 /* This removes the extra block that appears below subtitles */
 .block.audio-player {
-    background: transparent !important;
-    border: none !important;
-    padding: 0 !important;
+    border: 2px solid var(--border-dark) !important;
+    padding: 16px !important;
     margin: 0 !important;
-    box-shadow: none !important;
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.6) !important;
+    border-radius: 4px !important;
 }
 
-/* Remove black backgrounds from audio player wrappers - keep only dark blue subtitle block */
-.block.audio-player,
+/* Keep dark background on main block, but make child elements transparent where needed */
 .block.audio-player > div:not(:has(.subtitle-display)):not(:has([data-testid="subtitle-display"])),
 .audio-player:not(:has(.subtitle-display)):not(:has([data-testid="subtitle-display"])),
 .audio-player audio,
@@ -566,36 +771,10 @@ RETRO_CSS = """
     background-color: transparent !important;
 }
 
-/* Specifically target any black or #010101 backgrounds */
-.block.audio-player[style*="background"],
-.block.audio-player[style*="background-color"],
-.audio-player[style*="background"],
-.audio-player[style*="background-color"] {
-    background: transparent !important;
-    background-color: transparent !important;
-}
-
-/* Remove black backgrounds - target elements with black, #000, #010101, or rgba(0,0,0) */
-.block.audio-player,
+/* Remove black backgrounds from child elements only - keep dark theme on main block */
 .block.audio-player *:not(.subtitle-display):not([data-testid="subtitle-display"]):not([class*="subtitle"]):not([data-testid*="subtitle"]) {
     background: transparent !important;
     background-color: transparent !important;
-}
-
-/* Keep dark blue subtitle block visible */
-.block.audio-player .subtitle-display,
-.block.audio-player [data-testid="subtitle-display"],
-.block.audio-player [class*="subtitle"] {
-    background: #000033 !important;
-    background-color: #000033 !important;
-    border: 2px solid var(--accent-blue) !important;
-}
-
-/* Ensure subtitle-display is positioned absolutely to escape the block container */
-.audio-player .subtitle-display,
-.audio-player [data-testid="subtitle-display"] {
-    position: absolute !important;
-    z-index: 100 !important;
 }
 
 /* Overlay subtitles on portrait image */
@@ -631,16 +810,9 @@ RETRO_CSS = """
     position: relative !important;
 }
 
-/* Position audio player block absolutely to overlay the portrait image block */
-/* Since they're siblings, we position relative to stage-container */
+/* Style audio player block when portrait image is present */
 .stage-container:has(.portrait-image img[src]:not([src=""])) .block.audio-player {
-    position: absolute !important;
-    /* Position at the same location as subtitle-display (bottom: 10px from stage-container) */
-    bottom: 10px !important; /* Match subtitle-display position */
-    left: 50% !important;
-    transform: translateX(-50%) !important; /* Center horizontally */
-    width: 40% !important; /* Match subtitle-display width */
-    z-index: 10 !important;
+    /* Removed absolute positioning - let it flow naturally after portrait */
     margin: 0 !important;
     background: transparent !important;
     border: none !important;
@@ -651,8 +823,7 @@ RETRO_CSS = """
 .stage-container:has(.portrait-image img[src]:not([src=""])) .block.audio-player > div,
 .stage-container:has(.portrait-image img[src]:not([src=""])) .block.audio-player .minimal-audio-player {
     padding: 16px 20px !important;
-    background: #00004d !important;
-    border-radius: 0 0 12px 12px !important;
+    # background: #00004d !important;
     opacity: 1 !important;
 }
 
@@ -789,7 +960,7 @@ div[data-testid="waveform-controls"],
     padding: 0 !important;
 }
 
-/* Position component-wrapper at same location as subtitle-display when it contains subtitles */
+/* Style component-wrapper when it contains subtitles */
 .audio-player .component-wrapper:has(.subtitle-display),
 .audio-player .component-wrapper:has([data-testid="subtitle-display"]),
 .audio-player .component-wrapper.svelte-1ffmt2w:has(.subtitle-display),
@@ -798,24 +969,17 @@ div[data-testid="waveform-controls"],
     border: none !important;
     padding: 0 !important;
     margin: 0 !important;
-    position: absolute !important;
-    bottom: 10px !important;
-    left: 50% !important;
-    transform: translateX(-50%) !important;
-    width: 40% !important;
-    z-index: 100 !important;
+    /* Removed absolute positioning */
     display: flex !important;
     flex-direction: column !important;
     align-items: center !important;
     justify-content: center !important;
 }
 
-/* Ensure subtitle-display inside component-wrapper is centered and styled */
+/* Ensure subtitle-display inside component-wrapper is styled */
 .audio-player .component-wrapper .subtitle-display,
 .audio-player .component-wrapper [data-testid="subtitle-display"] {
-    position: relative !important;
-    left: auto !important;
-    transform: none !important;
+    /* Removed positioning overrides - let it flow naturally */
     width: 100% !important;
 }
 
@@ -834,12 +998,10 @@ div[data-testid="waveform-controls"],
     opacity: 1 !important;
     height: auto !important;
     width: auto !important;
-    min-height: 75px !important;
-    position: absolute !important;
-    left: auto !important;
-    right: auto !important;
+    min-height: 50px !important;
+    /* Removed absolute positioning - let it flow naturally */
     pointer-events: auto !important;
-    z-index: 1000 !important;
+    /* Removed z-index as it's no longer needed without absolute positioning */
 }
 
 /* Hide download/share buttons if present */
@@ -910,8 +1072,8 @@ div[data-testid="waveform-controls"],
     width: 100% !important;
     text-align: center !important;
     font-weight: 500 !important;
-    /* Ensure background is dark blue */
-    background: #00004d !important;
+    # /* Ensure background is dark blue */
+    # background: #00004d !important;
 }
 
 /* More aggressive: target any div that contains text after the audio element */
@@ -946,7 +1108,7 @@ div[data-testid="waveform-controls"],
     min-height: 60px !important;
     max-height: 150px !important;
     display: flex !important;
-    background: #00004d !important;
+    # background: #00004d !important;
     flex-direction: column !important;
     box-sizing: border-box !important;
     overflow: visible !important;
@@ -996,7 +1158,7 @@ div[data-testid="waveform-controls"],
     visibility: visible !important;
     opacity: 1 !important;
     text-align: center !important;
-    background: #00004d !important;
+    # background: #00004d !important;
     color: #FFFFFF !important;
     text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7) !important;
 }
@@ -1015,11 +1177,9 @@ div[data-testid="waveform-controls"],
     font-size: 20px !important;
     font-weight: 600 !important;
     text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8) !important;
-    padding: 16px 20px !important;
-    background: #00004d !important;
     margin: 0 !important;
     height: auto !important;
-    min-height: 75px !important;
+    min-height: 0px !important;
     z-index: 100 !important;
     position: absolute !important;
     bottom: 10px !important;
@@ -1095,6 +1255,24 @@ div[data-testid="waveform-controls"],
     font-family: 'Source Sans Pro', sans-serif;
     font-size: 13px;
     line-height: 1.5;
+}
+
+/* Suspects list - fully visible without scrolling */
+.suspects-list,
+.suspects-panel .transcript-panel,
+.side-panel.suspects-panel .transcript-panel {
+    max-height: none !important;
+    overflow-y: visible !important;
+    overflow: visible !important;
+    height: auto !important;
+}
+
+/* Suspects panel - allow it to grow to fit content */
+.suspects-panel,
+.side-panel.suspects-panel {
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
 }
 
 .transcript-entry {
@@ -1190,6 +1368,146 @@ div[data-testid="waveform-controls"],
 /* Hide when empty */
 .start-status-tracker:empty {
     display: none !important;
+}
+
+/* Hide the entire block wrapper by default - only show when it has content */
+/* But only hide if it's truly empty - check for empty prose element */
+.block.start-status-tracker:has(.prose.start-status-tracker:empty),
+.block.start-status-tracker:has(.html-container:has(.prose.start-status-tracker:empty)) {
+    display: none !important;
+    visibility: hidden !important;
+    height: 0 !important;
+    min-height: 0 !important;
+    max-height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+    opacity: 0 !important;
+    border: none !important;
+}
+
+/* Hide the entire block wrapper when status tracker is empty (additional specificity) */
+.block.start-status-tracker:has(.prose.start-status-tracker:empty),
+.block.start-status-tracker:has(.html-container:has(.prose.start-status-tracker:empty)),
+.block.start-status-tracker:not(:has(.prose.start-status-tracker:not(:empty))) {
+    display: none !important;
+    visibility: hidden !important;
+    height: 0 !important;
+    min-height: 0 !important;
+    max-height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+    opacity: 0 !important;
+    border: none !important;
+}
+
+/* Hide HTML containers that contain start-status-tracker - hide by default */
+.html-container:has(.start-status-tracker),
+.html-container:has(.prose.start-status-tracker),
+.html-container.svelte-1jts93g:has(.start-status-tracker) {
+    display: none !important;
+    visibility: hidden !important;
+    height: 0 !important;
+    min-height: 0 !important;
+    max-height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+    opacity: 0 !important;
+}
+
+/* Hide the prose div when empty */
+.prose.start-status-tracker:empty,
+.prose.gradio-style.start-status-tracker:empty {
+    display: none !important;
+    visibility: hidden !important;
+    height: 0 !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+}
+
+/* Show the block wrapper when status tracker has content - higher specificity */
+/* Check for any text content in the status tracker */
+.block.start-status-tracker:has(.prose.start-status-tracker:not(:empty)),
+.block.start-status-tracker:has(.html-container .prose.start-status-tracker:not(:empty)),
+.block.start-status-tracker:has(.prose.gradio-style.start-status-tracker:not(:empty)),
+.block.start-status-tracker:has(.start-status-tracker:not(:empty)),
+.block.start-status-tracker:has([class*="start-status"]:not(:empty)),
+/* Also show if any child has text content (more lenient) */
+.block.start-status-tracker:has(.prose.start-status-tracker *),
+.block.start-status-tracker:has(.html-container:has(*:not(:empty))) {
+    display: block !important;
+    visibility: visible !important;
+    height: auto !important;
+    min-height: auto !important;
+    max-height: none !important;
+    margin: inherit !important;
+    padding: inherit !important;
+    overflow: visible !important;
+    opacity: 1 !important;
+    border: inherit !important;
+}
+
+/* Show the HTML container only when status tracker has actual text content */
+.html-container:has(.start-status-tracker:not(:empty)),
+.html-container:has(.prose.start-status-tracker:not(:empty)),
+.html-container.svelte-1jts93g:has(.start-status-tracker:not(:empty)),
+.html-container:has(.prose.gradio-style.start-status-tracker:not(:empty)) {
+    display: block !important;
+    visibility: visible !important;
+    height: auto !important;
+    min-height: auto !important;
+    max-height: none !important;
+    margin: inherit !important;
+    padding: inherit !important;
+    overflow: visible !important;
+    opacity: 1 !important;
+}
+
+/* Show the prose div when it has content */
+.prose.start-status-tracker:not(:empty),
+.prose.gradio-style.start-status-tracker:not(:empty) {
+    display: block !important;
+    visibility: visible !important;
+    height: auto !important;
+    min-height: auto !important;
+}
+
+/* Hide prose containers that are empty */
+.prose.gradio-style:empty {
+    display: none !important;
+    visibility: hidden !important;
+    height: 0 !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+}
+
+/* Hide prose containers that only contain a hidden speaker-name */
+.prose.gradio-style:has(.speaker-name[style*="display: none"]):not(:has(*:not(.speaker-name[style*="display: none"]))) {
+    display: none !important;
+    visibility: hidden !important;
+    height: 0 !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+}
+
+/* Also hide the html-container parent when it only contains empty prose or hidden speaker-name */
+.html-container:has(.prose.gradio-style:empty),
+.html-container:has(.prose.gradio-style:has(.speaker-name[style*="display: none"]):not(:has(*:not(.speaker-name[style*="display: none"])))) {
+    display: none !important;
+    visibility: hidden !important;
+    height: 0 !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: hidden !important;
 }
 
 /* Ensure the HTML component wrapper shows the content */
@@ -1310,6 +1628,41 @@ footer {
     width: 0 !important;
     overflow: hidden !important;
     pointer-events: none !important;
+}
+
+/* Hide status tracker with wrap center full classes (especially with hide class) */
+/* Target all variations with maximum specificity */
+[data-testid="status-tracker"].wrap.center.full,
+[data-testid="status-tracker"].wrap.center.full.hide,
+[data-testid="status-tracker"].wrap.center.full.svelte-1uj8rng,
+[data-testid="status-tracker"].wrap.center.full.svelte-1uj8rng.hide,
+[data-testid="status-tracker"].wrap.center,
+[data-testid="status-tracker"].wrap.center.full[style*="position: absolute"],
+div[data-testid="status-tracker"].wrap.center.full,
+div[data-testid="status-tracker"].wrap.center.full.hide,
+div[data-testid="status-tracker"].wrap.center.full.svelte-1uj8rng,
+div[data-testid="status-tracker"].wrap.center.full.svelte-1uj8rng.hide,
+/* Also target by class combination directly */
+.wrap.center.full.svelte-1uj8rng.hide[data-testid="status-tracker"],
+.wrap.center.full.hide[data-testid="status-tracker"] {
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+    height: 0 !important;
+    width: 0 !important;
+    min-height: 0 !important;
+    min-width: 0 !important;
+    max-height: 0 !important;
+    max-width: 0 !important;
+    overflow: hidden !important;
+    pointer-events: none !important;
+    position: absolute !important;
+    left: -9999px !important;
+    top: -9999px !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    clip: rect(0, 0, 0, 0) !important;
 }
 
 /* Style the remaining status tracker with darker background for better text visibility */

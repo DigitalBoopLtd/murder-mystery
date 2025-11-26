@@ -135,40 +135,73 @@ def create_placeholder_image() -> str:
     Returns:
         Path to the placeholder image file
     """
-    # Create a 500x500 image with a light gray background
-    img = Image.new("RGB", (500, 500), color="#F2F2F2")
+    # Create a 500x500 image with dark theme background
+    img = Image.new("RGB", (500, 500), color="#0d0d26")  # --bg-card color
     draw = ImageDraw.Draw(img)
 
-    # Draw a simple icon/emoji representation
-    # Using a large question mark or mystery icon
+    # Draw a subtle magnifying glass icon (centered and smaller)
+    # Draw a circle for the glass - smaller and more subtle
+    glass_center_x, glass_center_y = 250, 200
+    glass_radius = 35
+    # Single circle (subtle)
+    draw.ellipse(
+        [
+            glass_center_x - glass_radius,
+            glass_center_y - glass_radius,
+            glass_center_x + glass_radius,
+            glass_center_y + glass_radius,
+        ],
+        outline="#006666",  # Darker cyan for subtlety
+        width=2,
+    )
+    
+    # Draw the handle (smaller and more subtle)
+    handle_start_x = glass_center_x + glass_radius - 8
+    handle_start_y = glass_center_y + glass_radius - 8
+    handle_end_x = handle_start_x + 30
+    handle_end_y = handle_start_y + 30
+    draw.line(
+        [(handle_start_x, handle_start_y), (handle_end_x, handle_end_y)],
+        fill="#006666",  # Darker cyan for subtlety
+        width=3,
+    )
+
+    # Add instructions text below the emoji
     try:
-        # Try to use a system font
-        font_size = 200
+        # Use a smaller font for instructions
+        instruction_font_size = 24
         try:
-            font = ImageFont.truetype(
-                "/System/Library/Fonts/Supplemental/Arial.ttf", font_size
+            instruction_font = ImageFont.truetype(
+                "/System/Library/Fonts/Supplemental/Arial.ttf", instruction_font_size
             )
         except:
             try:
-                font = ImageFont.truetype(
-                    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", font_size
+                instruction_font = ImageFont.truetype(
+                    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", instruction_font_size
                 )
             except:
-                font = ImageFont.load_default()
+                instruction_font = ImageFont.load_default()
     except:
-        font = ImageFont.load_default()
+        instruction_font = ImageFont.load_default()
 
-    # Draw a large question mark in the center
-    text = "?"
-    bbox = draw.textbbox((0, 0), text, font=font)
-    text_width = bbox[2] - bbox[0]
-    text_height = bbox[3] - bbox[1]
-
-    x = (500 - text_width) // 2
-    y = (500 - text_height) // 2 - 20  # Slight offset for visual balance
-
-    # Draw with a subtle color
-    draw.text((x, y), text, fill="#6B6B6B", font=font)
+    # Instructions text
+    instructions = [
+        "Click 'Start Mystery' to begin",
+        "your investigation!"
+    ]
+    
+    # Draw each line of instructions
+    line_height = 35
+    start_y = glass_center_y + glass_radius + 50
+    
+    for i, line in enumerate(instructions):
+        line_bbox = draw.textbbox((0, 0), line, font=instruction_font)
+        line_width = line_bbox[2] - line_bbox[0]
+        line_x = (500 - line_width) // 2
+        line_y = start_y + (i * line_height)
+        
+        # Draw text in light color (white/light gray) for contrast
+        draw.text((line_x, line_y), line, fill="#FFFFFF", font=instruction_font)
 
     # Save to a temporary file
     placeholder_path = os.path.join(
@@ -247,11 +280,7 @@ def create_app():
 
         # ====== TITLE BAR ======
         with gr.Row(elem_classes="title-bar"):
-            gr.HTML('<div class="game-title">🕵️‍♀️ MURDER MYSTERY</div>')
-            # Accusations counter - top right
-            accusations_html = gr.HTML(
-                '<div class="accusations-display accusations-title-bar">Accusations: <span class="accusations-pip"></span><span class="accusations-pip"></span><span class="accusations-pip"></span></div>'
-            )
+            gr.HTML('<div class="game-title"><span class="detective-avatar">🕵️‍♀️</span> MURDER MYSTERY</div>')
 
         # ====== MAIN LAYOUT ======
         with gr.Row():
@@ -267,22 +296,12 @@ def create_app():
                     )
 
                 # Suspects list - show who can be questioned
-                with gr.Group(elem_classes="side-panel"):
+                with gr.Group(elem_classes="side-panel suspects-panel"):
                     gr.HTML('<div class="panel-title">🎭 Suspects</div>')
                     suspects_list_html = gr.HTML(
                         "<em>Start a game to see suspects...</em>",
-                        elem_classes="transcript-panel",
+                        elem_classes="transcript-panel suspects-list",
                     )
-
-                # Locations card - above clues
-                with gr.Group(elem_classes="side-panel"):
-                    gr.HTML('<div class="panel-title">📍 Locations</div>')
-                    locations_html = gr.HTML("<em>Start a game...</em>")
-
-                # Clues card - below locations
-                with gr.Group(elem_classes="side-panel"):
-                    gr.HTML('<div class="panel-title">🔎 Clues Found</div>')
-                    clues_html = gr.HTML("<em>No clues yet...</em>")
 
             # === CENTER: MAIN STAGE ===
             with gr.Column(scale=3):
@@ -326,22 +345,34 @@ def create_app():
                         visible=True
                     )
 
-                # Input bar
-                with gr.Row(elem_classes="input-bar", visible=False) as input_row:
+                # Input bar - voice only
+                with gr.Column(elem_classes="input-bar", visible=False) as input_row:
+                    # Voice input - only input method
                     voice_input = gr.Audio(
                         sources=["microphone"],
                         type="filepath",
                         label=None,
                         show_label=False,
-                        scale=1,
                     )
-                    text_input = gr.Textbox(
-                        placeholder="Type your question or action...",
-                        show_label=False,
-                        elem_classes="text-input",
-                        scale=3,
+
+            # === RIGHT: SIDE PANEL ===
+            with gr.Column(scale=1, min_width=200):
+                # Locations card
+                with gr.Group(elem_classes="side-panel"):
+                    gr.HTML('<div class="panel-title">📍 Locations</div>')
+                    locations_html = gr.HTML("<em>Start a game...</em>")
+
+                # Clues card
+                with gr.Group(elem_classes="side-panel"):
+                    gr.HTML('<div class="panel-title">🔎 Clues Found</div>')
+                    clues_html = gr.HTML("<em>No clues yet...</em>")
+
+                # Accusations card
+                with gr.Group(elem_classes="side-panel"):
+                    gr.HTML('<div class="panel-title">⚖️ Accusations</div>')
+                    accusations_html = gr.HTML(
+                        '<div class="accusations-display">Accusations: <span class="accusations-pip"></span><span class="accusations-pip"></span><span class="accusations-pip"></span></div>'
                     )
-                    send_btn = gr.Button("📤", elem_classes="action-button", scale=0)
 
         # ====== EVENT HANDLERS ======
 
@@ -475,7 +506,7 @@ def create_app():
             for i in range(3):
                 cls = "accusations-pip used" if i < wrong else "accusations-pip"
                 pips += f'<span class="{cls}"></span>'
-            return f'<div class="accusations-display accusations-title-bar">Accusations: {pips}</div>'
+            return f'<div class="accusations-display">Accusations: {pips}</div>'
 
         def on_custom_message(message: str, sess_id: str):
             """Handle free-form text input."""
@@ -704,19 +735,7 @@ def create_app():
             ],
         )
 
-        # Text input
-        getattr(text_input, "submit")(
-            on_custom_message,
-            inputs=[text_input, session_id],
-            outputs=game_outputs + [text_input],
-        )
-        getattr(send_btn, "click")(
-            on_custom_message,
-            inputs=[text_input, session_id],
-            outputs=game_outputs + [text_input],
-        )
-
-        # Voice input
+        # Voice input - only input method
         getattr(voice_input, "stop_recording")(
             on_voice_input, inputs=[voice_input, session_id], outputs=game_outputs
         )
