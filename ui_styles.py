@@ -317,7 +317,7 @@ RETRO_CSS = """
     background: var(--accent-red);
 }
 
-/* Audio player styling - VISIBLE with full controls */
+/* Audio player styling - Fixed height to prevent resizing as captions appear */
 .audio-player {
     display: block !important;
     width: 100% !important;
@@ -327,12 +327,114 @@ RETRO_CSS = """
     background: var(--bg-panel) !important;
     border: 1px solid var(--border-color) !important;
     border-radius: 8px !important;
+    /* Fixed height to prevent resizing as captions appear */
+    height: 200px !important;
+    min-height: 200px !important;
+    max-height: 200px !important;
+    overflow: hidden !important;
+    box-sizing: border-box !important;
 }
 
+/* Hide extra controls above the waveform */
+.audio-player button,
+.audio-player [role="button"],
+.audio-player .controls,
+.audio-player .audio-controls {
+    display: none !important;
+}
+
+/* Hide download/share buttons if present */
+.audio-player [class*="download"],
+.audio-player [class*="share"],
+.audio-player [class*="button"]:not([class*="play"]):not([class*="pause"]) {
+    display: none !important;
+}
+
+/* Style the audio element itself */
 .audio-player audio {
     width: 100% !important;
     height: 50px !important;
     display: block !important;
+    flex-shrink: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+}
+
+/* Fix Gradio's subtitle/caption container - make it fully visible */
+/* Target all possible subtitle containers with very broad selectors */
+.audio-player [class*="subtitle"],
+.audio-player [class*="caption"],
+.audio-player [class*="text"],
+.audio-player [class*="transcript"],
+.audio-player div[role="region"],
+.audio-player > div > div:last-child,
+.audio-player > div:last-child,
+.audio-player [data-testid*="subtitle"],
+.audio-player [data-testid*="caption"],
+.audio-player div:has(span[data-timestamp]),
+.audio-player div:has([class*="word"]),
+.audio-player div:has([class*="highlight"]) {
+    /* Make subtitles fully visible without scrolling */
+    height: auto !important;
+    max-height: 140px !important;
+    min-height: 60px !important;
+    overflow-y: visible !important;
+    overflow-x: hidden !important;
+    flex-shrink: 0 !important;
+    box-sizing: border-box !important;
+    /* Ensure text wraps properly and is readable */
+    word-wrap: break-word !important;
+    line-height: 1.6 !important;
+    padding: 8px 0 !important;
+    margin: 0 !important;
+    font-size: 14px !important;
+}
+
+/* More aggressive: target any div that contains text after the audio element */
+.audio-player audio ~ div,
+.audio-player audio + div,
+.audio-player > div > div:not(:first-child) {
+    overflow-y: visible !important;
+    max-height: 140px !important;
+}
+
+/* Force remove any inline styles that might be causing scrolling */
+.audio-player * {
+    /* Override any inline max-height that might be set */
+}
+
+/* Specifically target Gradio's subtitle rendering area */
+.audio-player [style*="max-height"],
+.audio-player [style*="overflow"] {
+    max-height: 140px !important;
+    overflow-y: visible !important;
+    overflow: visible !important;
+}
+
+/* Ensure the audio component wrapper maintains fixed height */
+.audio-player > div {
+    height: 100% !important;
+    max-height: 200px !important;
+    display: flex !important;
+    flex-direction: column !important;
+    box-sizing: border-box !important;
+    overflow: hidden !important;
+    gap: 8px !important;
+}
+
+/* Target Gradio's internal structure more specifically */
+.audio-player .minimal-audio-player,
+.audio-player .minimal-audio-player > div {
+    height: auto !important;
+    max-height: 200px !important;
+    overflow: hidden !important;
+}
+
+/* Ensure waveform doesn't take up too much space */
+.audio-player canvas,
+.audio-player [class*="waveform"] {
+    max-height: 50px !important;
+    height: 50px !important;
 }
 
 /* ============================================================================
