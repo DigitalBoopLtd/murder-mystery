@@ -25,7 +25,6 @@ except ImportError:
 
 # Import modular components
 from ui_styles import RETRO_CSS
-from live_captions import create_live_captions_html, CAPTION_SYNC_JS
 from tts_service import (
     init_tts_service,
     transcribe_audio,
@@ -233,15 +232,6 @@ def create_app():
         
         # Inject CSS and favicon via HTML component (works across Gradio versions)
         gr.HTML(f"<style>{RETRO_CSS}</style>{favicon_html}")
-        
-        # Inject JavaScript via inline event handler
-        # Use an img tag with onload to execute when the page loads (bypasses script tag sanitization)
-        js_code = CAPTION_SYNC_JS.strip()
-        gr.HTML(
-            f'<img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" '
-            f'style="display:none;" onload="({js_code})()" onerror="({js_code})()" />',
-            visible=False
-        )
 
         # Session state
         session_id = gr.State(lambda: str(uuid.uuid4()))
@@ -313,13 +303,7 @@ def create_app():
                         '<div class="speaker-name" style="display: none;"></div>'
                     )
 
-                    # Live captions (sentence-by-sentence streaming)
-                    live_captions_html = gr.HTML(
-                        '<div class="live-captions" id="live-captions-container"></div>',
-                        visible=True,  # Make visible by default
-                    )
-
-                    # Audio player with built-in subtitles support
+                    # Audio player with built-in subtitles support (Gradio handles word highlighting)
                     audio_output = gr.Audio(
                         label=None,
                         show_label=False,
@@ -412,11 +396,9 @@ def create_app():
             subtitles = convert_alignment_to_subtitles(alignment_data)
 
             return [
-                # Live captions (keep for visual display, Gradio handles subtitles in audio player)
-                create_live_captions_html(response, alignment_data, audio_path),
                 # Speaker - show when game starts
                 f'<div class="speaker-name">{speaker}</div>',
-                # Audio with subtitles - Gradio will handle word highlighting
+                # Audio with subtitles - Gradio handles word highlighting
                 gr.update(value=audio_path, subtitles=subtitles) if audio_path else None,
                 # Portrait - return path directly, or placeholder if not available
                 display_portrait,
@@ -459,7 +441,7 @@ def create_app():
                 else set()
             )
 
-            response, audio_path, speaker, state, alignment_data = (
+            _response, audio_path, speaker, state, alignment_data = (
                 process_player_action("custom", "", message, sess_id)
             )
 
@@ -511,7 +493,6 @@ def create_app():
             subtitles = convert_alignment_to_subtitles(alignment_data)
 
             return [
-                create_live_captions_html(response, alignment_data, audio_path),
                 f'<div class="speaker-name">{speaker}</div>',
                 gr.update(value=audio_path, subtitles=subtitles) if audio_path else None,
                 gr.update(value=display_portrait, visible=True),
@@ -546,7 +527,7 @@ def create_app():
             if not text.strip():
                 return [gr.update()] * 8
 
-            response, audio_resp, speaker, state, alignment_data = (
+            _response, audio_resp, speaker, state, alignment_data = (
                 process_player_action("custom", "", text, sess_id)
             )
 
@@ -598,7 +579,6 @@ def create_app():
             subtitles = convert_alignment_to_subtitles(alignment_data)
 
             return [
-                create_live_captions_html(response, alignment_data, audio_resp),
                 f'<div class="speaker-name">{speaker}</div>',
                 gr.update(value=audio_resp, subtitles=subtitles) if audio_resp else None,
                 gr.update(value=display_portrait, visible=True),
@@ -613,7 +593,6 @@ def create_app():
 
         # Common outputs for game actions
         game_outputs = [
-            live_captions_html,
             speaker_html,
             audio_output,
             portrait_image,
@@ -629,7 +608,6 @@ def create_app():
             on_start_game,
             inputs=[session_id],
             outputs=[
-                live_captions_html,
                 speaker_html,
                 audio_output,
                 portrait_image,
