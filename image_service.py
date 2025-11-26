@@ -5,6 +5,7 @@ Styled to look like 90s point-and-click adventure games (Monkey Island, Gabriel 
 """
 
 import os
+import re
 import logging
 import hashlib
 import tempfile
@@ -158,7 +159,7 @@ No text, no words, no letters, no writing, no labels, no captions, no name tags.
             return None
 
     def generate_scene(
-        self, location_name: str, setting_description: str, mood: str = "mysterious"
+        self, location_name: str, setting_description: str, mood: str = "mysterious", context: Optional[str] = None
     ) -> Optional[str]:
         """Generate a scene/background image for a location.
 
@@ -166,6 +167,7 @@ No text, no words, no letters, no writing, no labels, no captions, no name tags.
             location_name: Name of the location
             setting_description: Description of the overall setting
             mood: Mood of the scene (mysterious, tense, etc.)
+            context: Optional context from the game response describing what was found/seen
 
         Returns:
             Path to generated image, or None on error
@@ -174,22 +176,38 @@ No text, no words, no letters, no writing, no labels, no captions, no name tags.
             logger.warning("Image client not available")
             return None
 
-        prompt = f"""{location_name}.
-Part of: {setting_description}.
-Mood: {mood}, atmospheric.
-{SCENE_ART_STYLE}
-No text, no words, no letters, no writing, no labels, no captions, no signage, no signs.
-"""
+        # Build prompt with context if provided
+        prompt_parts = [
+            f"{location_name}.",
+            f"Part of: {setting_description}.",
+            f"Mood: {mood}, atmospheric."
+        ]
+        
+        if context:
+            # Add context from the game response (what was found, what it looks like, etc.)
+            # Clean context - remove markdown and emotional tags
+            clean_context = context.replace("**", "").replace("*", "")
+            clean_context = re.sub(r"\[.*?\]", "", clean_context)  # Remove [excited], etc.
+            # Take first 200 chars to keep prompt manageable
+            clean_context = clean_context[:200].strip()
+            if clean_context:
+                prompt_parts.append(f"Context: {clean_context}")
+        
+        prompt_parts.append(SCENE_ART_STYLE)
+        prompt_parts.append("No text, no words, no letters, no writing, no labels, no captions, no signage, no signs.")
+        
+        prompt = "\n".join(prompt_parts)
 
         cache_key = self._get_cache_key(prompt)
 
         # Check cache first
         cached = self._get_cached_image(cache_key)
         if cached:
+            logger.info(f"Using cached scene for {location_name}")
             return cached
 
         try:
-            logger.info(f"Generating scene for {location_name}...")
+            logger.info(f"Generating scene for {location_name} with context...")
             image = self.client.text_to_image(
                 prompt,
                 model="black-forest-labs/FLUX.1-schnell",
@@ -302,17 +320,8 @@ def generate_all_mystery_images(mystery) -> Dict[str, str]:
         )
     ))
     
-    # Add location scene tasks
-    locations = list(set(clue.location for clue in mystery.clues))
-    for location in locations:
-        tasks.append((
-            location,
-            "scene",
-            lambda loc=location: service.generate_scene(
-                location_name=loc, 
-                setting_description=mystery.setting
-            )
-        ))
+    # NOTE: Scene images are now generated on-demand when locations are searched
+    # This allows us to use the game response as context for better scene generation
 
     # Generate all images in parallel
     logger.info(f"Generating {len(tasks)} images in parallel...")

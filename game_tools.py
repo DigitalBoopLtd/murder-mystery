@@ -94,24 +94,20 @@ Suspect Profile:
 
 
 def enhance_text_for_speech(text: str) -> str:
-    """Enhance text with emotional tags and emphasis for more engaging speech."""
+    """Enhance text with capitalization for emphasis for more engaging speech.
+    
+    Uses capitalization and punctuation cues instead of emotional tags
+    (which would be spoken). Voice settings handle emotional delivery.
+    """
     enhanced = text
     
-    # Add emotional context based on content
-    text_lower = text.lower()
-    
-    # Detect excitement/exclamation
-    if any(word in text_lower for word in ['amazing', 'incredible', 'wow', 'fantastic', 'unbelievable']):
-        enhanced = f"[excited] {enhanced}"
-    elif '?' in text:
-        enhanced = f"[curiously] {enhanced}"
-    elif any(word in text_lower for word in ['suspicious', 'strange', 'odd', 'mysterious']):
-        enhanced = f"[mysteriously] {enhanced}"
-    elif any(word in text_lower for word in ['important', 'crucial', 'key', 'vital']):
-        enhanced = f"[emphatically] {enhanced}"
+    # Don't add emotional tags - they get spoken! Instead, use:
+    # - Capitalization for emphasis
+    # - Voice settings for emotional delivery
+    # - Natural text cues (exclamation marks, question marks)
     
     # Capitalize key dramatic words for emphasis
-    dramatic_words = ['suddenly', 'immediately', 'finally', 'quickly', 'carefully', 'silently']
+    dramatic_words = ['suddenly', 'immediately', 'finally', 'quickly', 'carefully', 'silently', 'slowly', 'quietly']
     for word in dramatic_words:
         pattern = r'\b' + re.escape(word) + r'\b'
         enhanced = re.sub(pattern, word.upper(), enhanced, flags=re.IGNORECASE)
