@@ -250,9 +250,14 @@ def process_player_action(
 
     alignment_data = None
     if audio_path_from_tool:
-        # If audio came from tool, we don't have alignment data
+        # Try to get alignment data from tool-generated audio
         audio_path = audio_path_from_tool
-        logger.info(f"[GAME] Using audio from tool: {audio_path}")
+        from game_tools import get_audio_alignment_data
+        alignment_data = get_audio_alignment_data(audio_path)
+        if alignment_data:
+            logger.info(f"[GAME] Using audio from tool with {len(alignment_data)} word timestamps: {audio_path}")
+        else:
+            logger.info(f"[GAME] Using audio from tool (no alignment data): {audio_path}")
     else:
         logger.info(f"[GAME] Calling TTS for response ({len(tts_text)} chars)")
         audio_path, alignment_data = text_to_speech(

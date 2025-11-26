@@ -419,7 +419,7 @@ def create_app():
 
             return [
                 # Speaker - show when game starts
-                f'<div class="speaker-name">{speaker}</div>',
+                f'<div class="speaker-name" style="padding: 16px 0 !important;">🗣️ {speaker}</div>',
                 # Audio with subtitles - will autoplay after user interaction (Start button click)
                 audio_update,
                 # Portrait - return path directly, or placeholder if not available
@@ -465,7 +465,9 @@ def create_app():
                 process_player_action("custom", "", message, sess_id)
             )
 
+            # Refresh images dict after processing (in case new images were generated)
             images = mystery_images.get(sess_id, {})
+            logger.info(f"Available images for session {sess_id}: {list(images.keys())}")
             placeholder_img = create_placeholder_image()
 
             # Determine image to display based on action type
@@ -485,10 +487,21 @@ def create_app():
             # Priority 1: Check if a suspect was just talked to (highest priority)
             if newly_talked_suspect:
                 suspect_name = list(newly_talked_suspect)[0]
+                logger.info(f"Looking for portrait for suspect: {suspect_name}")
                 portrait = images.get(suspect_name, None)
                 if portrait:
-                    logger.info(f"Displaying portrait for suspect: {suspect_name}")
+                    logger.info(f"✓ Found portrait for suspect {suspect_name}: {portrait}")
                     display_portrait = portrait
+                else:
+                    logger.warning(f"✗ No portrait found for suspect {suspect_name} in images dict")
+                    # Try to get it directly from mystery_images in case of timing issue
+                    session_images = mystery_images.get(sess_id, {})
+                    portrait = session_images.get(suspect_name, None)
+                    if portrait:
+                        logger.info(f"✓ Found portrait in direct lookup: {portrait}")
+                        display_portrait = portrait
+                        # Update images dict for next time
+                        images[suspect_name] = portrait
 
             # Priority 2: Check if a location was just searched
             if not display_portrait and newly_searched_location:
@@ -514,7 +527,7 @@ def create_app():
             subtitles = convert_alignment_to_subtitles(alignment_data)
 
             return [
-                f'<div class="speaker-name">{speaker}</div>',
+                f'<div class="speaker-name" style="padding: 16px 0 !important;">🗣️ {speaker}</div>',
                 gr.update(value=audio_path, subtitles=subtitles) if audio_path else None,
                 gr.update(value=display_portrait, visible=True),
                 format_victim_scene_html(state.mystery),
@@ -552,7 +565,9 @@ def create_app():
                 process_player_action("custom", "", text, sess_id)
             )
 
+            # Refresh images dict after processing (in case new images were generated)
             images = mystery_images.get(sess_id, {})
+            logger.info(f"Available images for session {sess_id}: {list(images.keys())}")
             placeholder_img = create_placeholder_image()
 
             # Determine image to display based on action type
@@ -572,10 +587,21 @@ def create_app():
             # Priority 1: Check if a suspect was just talked to (highest priority)
             if newly_talked_suspect:
                 suspect_name = list(newly_talked_suspect)[0]
+                logger.info(f"Looking for portrait for suspect: {suspect_name}")
                 portrait = images.get(suspect_name, None)
                 if portrait:
-                    logger.info(f"Displaying portrait for suspect: {suspect_name}")
+                    logger.info(f"✓ Found portrait for suspect {suspect_name}: {portrait}")
                     display_portrait = portrait
+                else:
+                    logger.warning(f"✗ No portrait found for suspect {suspect_name} in images dict")
+                    # Try to get it directly from mystery_images in case of timing issue
+                    session_images = mystery_images.get(sess_id, {})
+                    portrait = session_images.get(suspect_name, None)
+                    if portrait:
+                        logger.info(f"✓ Found portrait in direct lookup: {portrait}")
+                        display_portrait = portrait
+                        # Update images dict for next time
+                        images[suspect_name] = portrait
 
             # Priority 2: Check if a location was just searched
             if not display_portrait and newly_searched_location:
@@ -601,7 +627,7 @@ def create_app():
             subtitles = convert_alignment_to_subtitles(alignment_data)
 
             return [
-                f'<div class="speaker-name">{speaker}</div>',
+                f'<div class="speaker-name" style="padding: 16px 0 !important;">🗣️ {speaker}</div>',
                 gr.update(value=audio_resp, subtitles=subtitles) if audio_resp else None,
                 gr.update(value=display_portrait, visible=True),
                 format_victim_scene_html(state.mystery),

@@ -145,12 +145,42 @@ No text, no words, no letters, no writing, no labels, no captions, no name tags.
 
         try:
             logger.info(f"Generating portrait for {name}...")
-            negative_prompt = "text, words, letters, writing, labels, captions, name tags, titles, signage, signs, typography, subtitles, text overlay, watermark, logo"
-            image = self.client.text_to_image(
-                prompt,
-                model="black-forest-labs/FLUX.1-schnell",
-                negative_prompt=negative_prompt,
+            # Comprehensive negative prompt to prevent any text in images
+            negative_prompt = (
+                "text, words, letters, writing, labels, captions, name tags, titles, signage, signs, "
+                "typography, subtitles, text overlay, watermark, logo, alphabet, characters, symbols, "
+                "numbers, digits, text on image, written text, printed text, handwritten text, "
+                "calligraphy, font, typeface, lettering, inscription, engraving, text banner, "
+                "speech bubble text, comic text, subtitle text, caption text, title text, "
+                "nameplate, placard, signboard, billboard, poster text, label text, "
+                "badge text, tag text, watermark text, copyright text, signature text"
             )
+            
+            # Try Qwen-Image first (better negative prompt support), fallback to FLUX
+            models_to_try = [
+                "Qwen/Qwen-Image",
+                "black-forest-labs/FLUX.1-schnell"
+            ]
+            
+            image = None
+            last_error = None
+            for model in models_to_try:
+                try:
+                    logger.info(f"Trying model: {model}")
+                    image = self.client.text_to_image(
+                        prompt,
+                        model=model,
+                        negative_prompt=negative_prompt,
+                    )
+                    logger.info(f"Successfully generated with {model}")
+                    break
+                except Exception as e:
+                    logger.warning(f"Model {model} failed: {e}")
+                    last_error = e
+                    continue
+            
+            if image is None:
+                raise Exception(f"All models failed. Last error: {last_error}")
 
             path = self._save_to_cache(image, cache_key)
             logger.info(f"Generated portrait for {name}: {path}")
@@ -210,12 +240,44 @@ No text, no words, no letters, no writing, no labels, no captions, no name tags.
 
         try:
             logger.info(f"Generating scene for {location_name} with context...")
-            negative_prompt = "text, words, letters, writing, labels, captions, signage, signs, typography, subtitles, text overlay, watermark, logo, street signs, shop signs, billboards"
-            image = self.client.text_to_image(
-                prompt,
-                model="black-forest-labs/FLUX.1-schnell",
-                negative_prompt=negative_prompt,
+            # Comprehensive negative prompt to prevent any text in images
+            negative_prompt = (
+                "text, words, letters, writing, labels, captions, signage, signs, typography, "
+                "subtitles, text overlay, watermark, logo, street signs, shop signs, billboards, "
+                "alphabet, characters, symbols, numbers, digits, text on image, written text, "
+                "printed text, handwritten text, calligraphy, font, typeface, lettering, "
+                "inscription, engraving, text banner, speech bubble text, comic text, "
+                "subtitle text, caption text, title text, nameplate, placard, signboard, "
+                "billboard text, poster text, label text, badge text, tag text, "
+                "watermark text, copyright text, signature text, store signs, "
+                "building signs, door signs, window signs, neon signs with text"
             )
+            
+            # Try Qwen-Image first (better negative prompt support), fallback to FLUX
+            models_to_try = [
+                "Qwen/Qwen-Image",
+                "black-forest-labs/FLUX.1-schnell"
+            ]
+            
+            image = None
+            last_error = None
+            for model in models_to_try:
+                try:
+                    logger.info(f"Trying model: {model}")
+                    image = self.client.text_to_image(
+                        prompt,
+                        model=model,
+                        negative_prompt=negative_prompt,
+                    )
+                    logger.info(f"Successfully generated with {model}")
+                    break
+                except Exception as e:
+                    logger.warning(f"Model {model} failed: {e}")
+                    last_error = e
+                    continue
+            
+            if image is None:
+                raise Exception(f"All models failed. Last error: {last_error}")
 
             path = self._save_to_cache(image, cache_key)
             logger.info(f"Generated scene for {location_name}: {path}")
@@ -255,12 +317,44 @@ Atmospheric scene only, no text overlay.
 
         try:
             logger.info(f"Generating title card...")
-            negative_prompt = "text, words, letters, writing, labels, captions, title text, signage, signs, typography, subtitles, text overlay, watermark, logo, title card text, movie title, game title"
-            image = self.client.text_to_image(
-                prompt,
-                model="black-forest-labs/FLUX.1-schnell",
-                negative_prompt=negative_prompt,
+            # Comprehensive negative prompt to prevent any text in images
+            negative_prompt = (
+                "text, words, letters, writing, labels, captions, title text, signage, signs, "
+                "typography, subtitles, text overlay, watermark, logo, title card text, "
+                "movie title, game title, alphabet, characters, symbols, numbers, digits, "
+                "text on image, written text, printed text, handwritten text, calligraphy, "
+                "font, typeface, lettering, inscription, engraving, text banner, "
+                "speech bubble text, comic text, subtitle text, caption text, "
+                "nameplate, placard, signboard, billboard text, poster text, label text, "
+                "badge text, tag text, watermark text, copyright text, signature text, "
+                "title overlay, title card overlay, game title overlay, movie title overlay"
             )
+            
+            # Try Qwen-Image first (better negative prompt support), fallback to FLUX
+            models_to_try = [
+                "Qwen/Qwen-Image",
+                "black-forest-labs/FLUX.1-schnell"
+            ]
+            
+            image = None
+            last_error = None
+            for model in models_to_try:
+                try:
+                    logger.info(f"Trying model: {model}")
+                    image = self.client.text_to_image(
+                        prompt,
+                        model=model,
+                        negative_prompt=negative_prompt,
+                    )
+                    logger.info(f"Successfully generated with {model}")
+                    break
+                except Exception as e:
+                    logger.warning(f"Model {model} failed: {e}")
+                    last_error = e
+                    continue
+            
+            if image is None:
+                raise Exception(f"All models failed. Last error: {last_error}")
 
             path = self._save_to_cache(image, cache_key)
             logger.info(f"Generated title card: {path}")

@@ -64,11 +64,16 @@ RETRO_CSS = """
     position: relative !important;
 }
 
-/* Ensure portrait image itself is relative */
+/* Ensure portrait image itself is relative and visible */
 .stage-container .portrait-image,
 .stage-container img[class*="portrait"],
 .stage-container .portrait-image img {
     position: relative !important;
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    background: transparent !important;
+    z-index: 1 !important;
 }
 
 /* Speaker indicator */
@@ -76,9 +81,13 @@ RETRO_CSS = """
     font-family: 'Source Sans Pro', sans-serif;
     font-size: 24px;
     font-weight: 600;
-    color: var(--accent-blue);
+    color: #FFFFFF !important;
     text-align: center;
     margin-bottom: 16px;
+    background: #00004d !important;
+    padding: 12px 20px !important;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5) !important;
+    opacity: 1 !important;
 }
 
 /* Caption display area */
@@ -142,6 +151,8 @@ RETRO_CSS = """
     display: block !important;
     visibility: visible !important;
     opacity: 1 !important;
+    background: transparent !important;
+    color: inherit !important;
 }
 
 /* Make the portrait image container a positioning context for overlay */
@@ -208,7 +219,6 @@ RETRO_CSS = """
 .suspect-button img {
     width: 80px;
     height: 80px;
-    border-radius: 8px;
     border: 1px solid var(--border-color);
     margin-bottom: 8px;
 }
@@ -411,8 +421,7 @@ RETRO_CSS = """
     max-width: 100% !important;
     margin: 0 !important;
     padding: 0 !important;
-    background: #010101 !important;
-    opacity: 0.5 !important;
+    opacity: 1 !important;
     border: none !important;
     border-radius: 0 !important;
     /* Reduced height for subtitles only */
@@ -422,6 +431,8 @@ RETRO_CSS = """
     overflow: visible !important;
     box-sizing: border-box !important;
     z-index: 10 !important;
+    /* Only show background when there's actual content */
+    background: transparent !important;
 }
 
 /* Overlay subtitles on portrait image */
@@ -443,6 +454,18 @@ RETRO_CSS = """
     margin-bottom: 0 !important;
     padding-bottom: 0 !important;
     z-index: 1 !important;
+    background: transparent !important;
+}
+
+/* Ensure portrait images are always visible */
+.stage-container:has(.portrait-image img[src]:not([src=""])) .block.portrait-image img,
+.stage-container:has(.portrait-image img[src]:not([src=""])) .portrait-image img {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    background: transparent !important;
+    z-index: 2 !important;
+    position: relative !important;
 }
 
 /* Position audio player block absolutely to overlay the portrait image block */
@@ -456,18 +479,20 @@ RETRO_CSS = """
     width: calc(100% - 48px) !important;
     z-index: 10 !important;
     margin: 0 !important;
+    background: transparent !important;
     /* Use transform to pull it up onto the image - more reliable than margin */
     /* Pull up by a fixed amount to overlay the bottom portion of the image */
     /* This value should be adjusted based on typical image heights */
-    transform: translateY(-300px) !important; /* Pull up to overlay bottom of image */
+    transform: translateY(-400px) !important; /* Pull up to overlay bottom of image */
 }
 
-/* Style the audio player content */
+/* Style the audio player content - fully opaque */
 .stage-container:has(.portrait-image img[src]:not([src=""])) .block.audio-player > div,
 .stage-container:has(.portrait-image img[src]:not([src=""])) .block.audio-player .minimal-audio-player {
     padding: 16px 20px !important;
-    background: linear-gradient(to top, rgba(0, 0, 0, 0.95) 0%, rgba(0, 0, 0, 0.85) 100%) !important;
+    background: #00004d !important;
     border-radius: 0 0 12px 12px !important;
+    opacity: 1 !important;
 }
 
 /* Position speaker name above subtitles in the overlay */
@@ -479,18 +504,17 @@ RETRO_CSS = """
     left: 24px !important;
     right: 24px !important;
     width: calc(100% - 48px) !important;
-    padding: 8px 20px !important;
-    /* Dark background matching subtitle overlay */
-    background: linear-gradient(to top, rgba(0, 0, 0, 0.95) 0%, rgba(0, 0, 0, 0.85) 100%) !important;
-    border-radius: 12px 12px 0 0 !important;
+    /* Dark blue background matching subtitle overlay - fully opaque */
+    background: #00004d !important;
     z-index: 11 !important;
     color: #FFFFFF !important;
     font-size: 18px !important;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8) !important;
     font-weight: 600 !important;
     text-align: center !important;
-    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8) !important;
     display: block !important;
     visibility: visible !important;
+    opacity: 1 !important;
     margin: 0 !important;
     margin-top: -200px !important; /* Match the audio player's negative margin */
 }
@@ -500,7 +524,6 @@ RETRO_CSS = """
     position: relative !important;
     background: var(--bg-panel) !important;
     border: 1px solid var(--border-color) !important;
-    border-radius: 8px !important;
     padding: 8px !important;
 }
 
@@ -589,11 +612,14 @@ RETRO_CSS = """
     margin: 0 !important;
     font-size: 18px !important;
     font-weight: 500 !important;
-    /* White text for contrast on dark overlay */
+    /* White text for contrast on dark blue background */
     color: #FFFFFF !important;
     text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8) !important;
     width: 100% !important;
     text-align: center !important;
+    font-weight: 500 !important;
+    /* Ensure background is dark blue */
+    background: #00004d !important;
 }
 
 /* More aggressive: target any div that contains text after the audio element */
@@ -617,12 +643,33 @@ RETRO_CSS = """
     overflow: visible !important;
 }
 
-/* Ensure the audio component wrapper shows only subtitles */
+/* Ensure the audio component wrapper shows only subtitles with dark blue background */
+/* Only apply background when there are actually subtitles */
+.audio-player > div:has([class*="subtitle"]),
+.audio-player > div:has([class*="caption"]),
+.audio-player > div:has([role="region"]),
+.audio-player > div:has([data-testid*="subtitle"]),
+.audio-player > div:has([data-testid*="caption"]) {
+    height: auto !important;
+    min-height: 60px !important;
+    max-height: 150px !important;
+    display: flex !important;
+    background: #00004d !important;
+    flex-direction: column !important;
+    box-sizing: border-box !important;
+    overflow: visible !important;
+    gap: 0 !important;
+    align-items: center !important;
+    justify-content: center !important;
+}
+
+/* Default state - no background if no subtitles */
 .audio-player > div {
     height: auto !important;
     min-height: 60px !important;
     max-height: 150px !important;
     display: flex !important;
+    background: transparent !important;
     flex-direction: column !important;
     box-sizing: border-box !important;
     overflow: visible !important;
@@ -647,7 +694,7 @@ RETRO_CSS = """
     overflow: hidden !important;
 }
 
-/* Ensure subtitle containers are always visible */
+/* Ensure subtitle containers are always visible with dark blue background - fully opaque */
 .audio-player [class*="subtitle"],
 .audio-player [class*="caption"],
 .audio-player [role="region"],
@@ -657,9 +704,38 @@ RETRO_CSS = """
     visibility: visible !important;
     opacity: 1 !important;
     text-align: center !important;
+    background: #00004d !important;
+    color: #FFFFFF !important;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7) !important;
 }
 
-/* Center all text elements within subtitle containers */
+/* CRITICAL: Preserve and style subtitle-display element - must not be removed */
+/* This ensures the specific subtitle-display element is always visible and styled */
+.audio-player .subtitle-display,
+.audio-player [data-testid="subtitle-display"],
+.audio-player .subtitle-display.svelte-1ffmt2w,
+.audio-player [data-testid="subtitle-display"].svelte-1ffmt2w {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    color: #FFFFFF !important;
+    text-align: center !important;
+    font-size: 20px !important;
+    font-weight: 600 !important;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8) !important;
+    padding: 16px 20px !important;
+    background: #00004d !important;
+    border-radius: 0 0 12px 12px !important;
+    margin: 0 !important;
+    height: auto !important;
+    min-height: 75px !important;
+    width: 100% !important;
+    z-index: 100 !important;
+    position: absolute !important;
+    bottom: 80px !important;
+}
+
+/* Center all text elements within subtitle containers and ensure good contrast */
 .audio-player [class*="subtitle"] *,
 .audio-player [class*="caption"] *,
 .audio-player [role="region"] *,
@@ -670,6 +746,9 @@ RETRO_CSS = """
 .audio-player div:has([class*="highlight"]) *,
 .audio-player > div > div:last-child *,
 .audio-player > div:last-child * {
+    /* White text for contrast on dark blue background */
+    color: #FFFFFF !important;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7) !important;
     text-align: center !important;
     display: inline-block !important;
 }
@@ -863,5 +942,64 @@ RETRO_CSS = """
 
 footer {
     display: none !important;
+}
+
+/* Hide Gradio loading/processing status tracker only above the image */
+.stage-container [data-testid="status-tracker"],
+.stage-container div[data-testid="status-tracker"],
+.portrait-image [data-testid="status-tracker"],
+.portrait-image ~ [data-testid="status-tracker"],
+.stage-container .wrap.default.full.svelte-1uj8rng,
+.stage-container .eta-bar.svelte-1uj8rng,
+.stage-container .progress-text.svelte-1uj8rng,
+.portrait-image ~ .wrap.default.full.svelte-1uj8rng,
+/* Hide the translucent center status tracker that overlays the image */
+[data-testid="status-tracker"].wrap.center.translucent,
+[data-testid="status-tracker"].wrap.center.full.translucent,
+.stage-container [data-testid="status-tracker"].translucent,
+.portrait-image ~ [data-testid="status-tracker"].translucent {
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+    height: 0 !important;
+    width: 0 !important;
+    overflow: hidden !important;
+    pointer-events: none !important;
+}
+
+/* Style the remaining status tracker with darker background for better text visibility */
+[data-testid="status-tracker"]:not(.translucent):not(.wrap.center) {
+    background: rgba(0, 0, 0, 0.85) !important;
+    backdrop-filter: blur(4px) !important;
+    border-radius: 8px !important;
+    padding: 8px 16px !important;
+    opacity: 1 !important;
+}
+
+/* Target text elements in status tracker - be specific to avoid affecting images */
+[data-testid="status-tracker"]:not(.translucent):not(.wrap.center) .progress-text,
+[data-testid="status-tracker"]:not(.translucent):not(.wrap.center) .meta-text,
+[data-testid="status-tracker"]:not(.translucent):not(.wrap.center) .meta-text-center {
+    color: #FFFFFF !important;
+    font-weight: 600 !important;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8) !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+    background: transparent !important;
+}
+
+/* Ensure images and SVGs are not affected */
+[data-testid="status-tracker"]:not(.translucent):not(.wrap.center) img,
+[data-testid="status-tracker"]:not(.translucent):not(.wrap.center) svg,
+[data-testid="status-tracker"]:not(.translucent):not(.wrap.center) path {
+    color: inherit !important;
+}
+
+/* Remove dark blue background from SVG spinner in status tracker */
+[data-testid="status-tracker"]:not(.translucent):not(.wrap.center) .svelte-1vhirvf,
+[data-testid="status-tracker"]:not(.translucent):not(.wrap.center) .svelte-1vhirvf.margin,
+[data-testid="status-tracker"]:not(.translucent):not(.wrap.center) .svelte-1vhirvf svg,
+[data-testid="status-tracker"]:not(.translucent):not(.wrap.center) .svelte-1vhirvf.margin svg {
+    background: transparent !important;
 }
 """
