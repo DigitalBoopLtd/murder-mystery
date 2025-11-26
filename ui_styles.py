@@ -268,7 +268,7 @@ RETRO_CSS = """
     display: flex;
     gap: 12px;
     padding: 16px;
-    background: var(--bg-primary);
+    background: transparent;
     border-top: 1px solid var(--border-color);
     align-items: center;
     justify-content: center;
@@ -725,11 +725,10 @@ RETRO_CSS = """
     text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8) !important;
     padding: 16px 20px !important;
     background: #00004d !important;
-    border-radius: 0 0 12px 12px !important;
     margin: 0 !important;
     height: auto !important;
     min-height: 75px !important;
-    width: 100% !important;
+    width: 50% !important;
     z-index: 100 !important;
     position: absolute !important;
     bottom: 80px !important;
@@ -974,6 +973,12 @@ footer {
     border-radius: 8px !important;
     padding: 8px 16px !important;
     opacity: 1 !important;
+}
+
+/* Remove dark background from status tracker inside input-bar */
+.input-bar [data-testid="status-tracker"]:not(.translucent):not(.wrap.center) {
+    background: transparent !important;
+    backdrop-filter: none !important;
 }
 
 /* Target text elements in status tracker - be specific to avoid affecting images */
