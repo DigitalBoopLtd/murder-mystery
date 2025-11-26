@@ -709,12 +709,27 @@ RETRO_CSS = """
     text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7) !important;
 }
 
+/* Hide subtitle-display container when empty or has no text content */
+.audio-player .subtitle-display:empty,
+.audio-player [data-testid="subtitle-display"]:empty,
+.audio-player .subtitle-display.svelte-1ffmt2w:empty,
+.audio-player [data-testid="subtitle-display"].svelte-1ffmt2w:empty {
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+    height: 0 !important;
+    min-height: 0 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+}
+
 /* CRITICAL: Preserve and style subtitle-display element - must not be removed */
 /* This ensures the specific subtitle-display element is always visible and styled */
-.audio-player .subtitle-display,
-.audio-player [data-testid="subtitle-display"],
-.audio-player .subtitle-display.svelte-1ffmt2w,
-.audio-player [data-testid="subtitle-display"].svelte-1ffmt2w {
+/* Only show when it has content */
+.audio-player .subtitle-display:not(:empty),
+.audio-player [data-testid="subtitle-display"]:not(:empty),
+.audio-player .subtitle-display.svelte-1ffmt2w:not(:empty),
+.audio-player [data-testid="subtitle-display"].svelte-1ffmt2w:not(:empty) {
     display: block !important;
     visibility: visible !important;
     opacity: 1 !important;
