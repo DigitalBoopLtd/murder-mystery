@@ -9,6 +9,9 @@ import re
 import logging
 import tempfile
 import uuid
+import json
+import base64
+import asyncio
 from typing import Optional, Tuple, List, Dict
 from concurrent.futures import ThreadPoolExecutor
 import gradio as gr
@@ -379,6 +382,43 @@ RETRO_CSS = """
     border-radius: 6px !important;
 }
 
+/* Live captions styling */
+.live-captions {
+    font-family: 'Source Sans Pro', sans-serif;
+    font-size: 18px;
+    line-height: 1.6;
+    color: var(--text-primary);
+    padding: 16px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    margin-top: 12px;
+    min-height: 80px;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.live-captions-word {
+    display: inline;
+    margin-right: 4px;
+    transition: all 0.2s ease;
+    opacity: 0.4;
+    color: var(--text-secondary);
+}
+
+.live-captions-word.active {
+    opacity: 1 !important;
+    color: var(--accent-blue) !important;
+    font-weight: 700 !important;
+    text-shadow: 0 0 12px rgba(0, 162, 255, 0.5);
+    transform: scale(1.05);
+}
+
+.live-captions-word.spoken {
+    opacity: 0.7;
+    color: var(--text-primary);
+}
+
 /* Transcript panel */
 .transcript-panel {
     max-height: 300px;
@@ -515,6 +555,264 @@ def get_or_create_state(session_id: str) -> GameState:
     return game_states[session_id]
 
 
+def create_live_captions_html(text: str) -> str:
+    """Create HTML for live captions with word-by-word highlighting.
+    
+    Args:
+        text: The text to display as live captions
+        
+    Returns:
+        HTML string with embedded JavaScript for syncing with audio
+    """
+    if not text or not text.strip():
+        return '<div class="live-captions" id="live-captions-container"></div>'
+    
+    # Clean text - remove markdown formatting
+    clean_text = re.sub(r'\*\*', '', text)
+    clean_text = re.sub(r'\*', '', clean_text)
+    clean_text = re.sub(r'<[^>]+>', '', clean_text)
+    
+    # Split into words (preserving punctuation)
+    words = re.findall(r"[\w']+|[.,!?;:—–-]|\s+", clean_text)
+    words = [w for w in words if w.strip()]  # Remove empty strings
+    
+    if not words:
+        return '<div class="live-captions" id="live-captions-container"></div>'
+    
+    # Create word elements with unique IDs
+    word_elements = []
+    for i, word in enumerate(words):
+        word_elements.append(
+            f'<span class="live-captions-word" data-word-index="{i}">{word}</span>'
+        )
+    
+    words_html = ' '.join(word_elements)
+    
+    # Create HTML with embedded JavaScript
+    # Use a unique ID to avoid conflicts
+    unique_id = f"live-captions-{uuid.uuid4().hex[:8]}"
+    html = f'''
+    <div class="live-captions" id="{unique_id}">
+        {words_html}
+    </div>
+    <script>
+    (function() {{
+        const containerId = '{unique_id}';
+        const container = document.getElementById(containerId);
+        if (!container) {{
+            console.warn('Live captions container not found:', containerId);
+            return;
+        }}
+        
+        const wordElements = container.querySelectorAll('.live-captions-word');
+        if (wordElements.length === 0) {{
+            console.warn('No word elements found in container');
+            return;
+        }}
+        
+        console.log('Live captions initialized with', wordElements.length, 'words');
+        
+        let audioElement = null;
+        let isListening = false;
+        
+        // Find audio element with multiple strategies
+        function findAudioElement() {{
+            // Strategy 1: Look in the same parent container as our captions
+            const parent = container.closest('.stage-container, .gradio-container, body');
+            if (parent) {{
+                const nearbyAudios = parent.querySelectorAll('audio');
+                if (nearbyAudios.length > 0) {{
+                    // Get the one that's actually playing or most recently added
+                    const playing = Array.from(nearbyAudios).find(a => !a.paused);
+                    if (playing) return playing;
+                    return nearbyAudios[nearbyAudios.length - 1];
+                }}
+            }}
+            
+            // Strategy 2: Look for all audio elements
+            const allAudios = document.querySelectorAll('audio');
+            if (allAudios.length > 0) {{
+                // Prefer playing audio
+                const playing = Array.from(allAudios).find(a => !a.paused && a.currentTime > 0);
+                if (playing) return playing;
+                
+                // Otherwise get the most recently added one
+                const sorted = Array.from(allAudios).sort((a, b) => {{
+                    const aTime = a.dataset?.addedTime || 0;
+                    const bTime = b.dataset?.addedTime || 0;
+                    return bTime - aTime;
+                }});
+                return sorted[0];
+            }}
+            return null;
+        }}
+        
+        function updateCaptions() {{
+            // Try to find audio element if we don't have one
+            if (!audioElement || !audioElement.parentNode) {{
+                audioElement = findAudioElement();
+                if (!audioElement) {{
+                    // Fallback: use words-per-minute approach if audio not found
+                    if (!window.captionFallbackStarted) {{
+                        window.captionFallbackStarted = true;
+                        startFallbackAnimation();
+                    }}
+                    return;
+                }}
+                
+                // Mark when we found it
+                audioElement.dataset.addedTime = Date.now();
+                audioElement.dataset.captionSync = 'true';
+                console.log('Found audio element:', audioElement.src?.substring(0, 50) + '...');
+            }}
+            
+            // Check if audio is ready
+            if (!audioElement.duration || audioElement.duration === 0 || isNaN(audioElement.duration)) {{
+                return;
+            }}
+            
+            const currentTime = audioElement.currentTime || 0;
+            const duration = audioElement.duration || 1;
+            
+            if (duration <= 0 || isNaN(duration)) return;
+            
+            const progress = Math.min(Math.max(currentTime / duration, 0), 1);
+            const currentWordIndex = Math.min(
+                Math.max(Math.floor(progress * wordElements.length), 0),
+                wordElements.length - 1
+            );
+            
+            // Update word highlighting
+            wordElements.forEach((wordEl, i) => {{
+                wordEl.classList.remove('active', 'spoken');
+                if (i < currentWordIndex) {{
+                    wordEl.classList.add('spoken');
+                }} else if (i === currentWordIndex && currentTime > 0) {{
+                    wordEl.classList.add('active');
+                }}
+            }});
+            
+            // Scroll active word into view (throttled)
+            if (currentWordIndex >= 0 && currentWordIndex < wordElements.length) {{
+                const activeWord = wordElements[currentWordIndex];
+                if (activeWord) {{
+                    // Only scroll every 0.5 seconds to avoid jank
+                    if (!activeWord.dataset.lastScroll || 
+                        Date.now() - parseInt(activeWord.dataset.lastScroll) > 500) {{
+                        activeWord.scrollIntoView({{ behavior: 'smooth', block: 'center' }});
+                        activeWord.dataset.lastScroll = Date.now().toString();
+                    }}
+                }}
+            }}
+        }}
+        
+        // Fallback animation using words-per-minute if audio sync fails
+        function startFallbackAnimation() {{
+            console.log('Starting fallback caption animation (150 WPM)');
+            let currentIndex = 0;
+            const msPerWord = 400; // 150 words per minute
+            
+            function highlight(index) {{
+                wordElements.forEach((w, i) => {{
+                    w.classList.remove('active', 'spoken');
+                    if (i < index) w.classList.add('spoken');
+                    else if (i === index) {{
+                        w.classList.add('active');
+                        w.scrollIntoView({{ behavior: 'smooth', block: 'center' }});
+                    }}
+                }});
+            }}
+            
+            highlight(0);
+            const interval = setInterval(() => {{
+                currentIndex++;
+                if (currentIndex >= wordElements.length) {{
+                    clearInterval(interval);
+                    return;
+                }}
+                highlight(currentIndex);
+            }}, msPerWord);
+        }}
+        
+        // Set up audio listeners
+        function setupListeners() {{
+            audioElement = findAudioElement();
+            if (!audioElement) {{
+                // Retry after a short delay
+                setTimeout(setupListeners, 200);
+                return;
+            }}
+            
+            if (isListening) return; // Already set up
+            isListening = true;
+            
+            console.log('Setting up audio listeners');
+            
+            // Remove old listeners if any
+            const newAudio = audioElement.cloneNode(true);
+            audioElement.parentNode?.replaceChild(newAudio, audioElement);
+            audioElement = newAudio;
+            
+            // Add event listeners
+            audioElement.addEventListener('timeupdate', updateCaptions);
+            audioElement.addEventListener('play', () => {{
+                console.log('Audio playing');
+                updateCaptions();
+            }});
+            audioElement.addEventListener('loadedmetadata', () => {{
+                console.log('Audio metadata loaded, duration:', audioElement.duration);
+                updateCaptions();
+            }});
+            audioElement.addEventListener('canplay', updateCaptions);
+            
+            // Start updating immediately
+            updateCaptions();
+            
+            // Also update on interval as fallback
+            setInterval(updateCaptions, 100);
+        }}
+        
+        // Watch for audio elements being added to the DOM
+        const observer = new MutationObserver((mutations) => {{
+            let audioAdded = false;
+            mutations.forEach((mutation) => {{
+                mutation.addedNodes.forEach((node) => {{
+                    if (node.nodeType === 1) {{ // Element node
+                        if (node.tagName === 'AUDIO' || node.querySelector?.('audio')) {{
+                            audioAdded = true;
+                        }}
+                    }}
+                }});
+            }});
+            
+            if (audioAdded && !isListening) {{
+                console.log('New audio element detected');
+                setTimeout(setupListeners, 100);
+            }}
+        }});
+        
+        // Start observing
+        observer.observe(document.body, {{
+            childList: true,
+            subtree: true
+        }});
+        
+        // Try to set up immediately
+        if (document.readyState === 'loading') {{
+            document.addEventListener('DOMContentLoaded', setupListeners);
+        }} else {{
+            setTimeout(setupListeners, 100);
+            setTimeout(setupListeners, 500);
+            setTimeout(setupListeners, 1000);
+            setTimeout(setupListeners, 2000);
+        }}
+    }})();
+    </script>
+    '''
+    
+    return html
+
+
 def transcribe_audio(audio_path: str) -> str:
     """Transcribe audio using OpenAI Whisper."""
     try:
@@ -582,8 +880,114 @@ def enhance_text_for_speech(text: str, speaker_type: str = "game_master") -> str
     return enhanced
 
 
+def text_to_speech_streaming_websocket(text: str, voice_id: str = None, speaker_name: str = None) -> Tuple[Optional[str], Optional[Dict]]:
+    """Generate speech using ElevenLabs WebSocket streaming API.
+    
+    Returns both the audio file path and alignment data for caption sync.
+    
+    Args:
+        text: Text to convert to speech
+        voice_id: ElevenLabs voice ID (defaults to Game Master voice)
+        speaker_name: Name of speaker (for determining enhancement style)
+        
+    Returns:
+        Tuple of (audio_file_path, alignment_data_dict)
+    """
+    if not elevenlabs_client or not text.strip():
+        return None, None
+    
+    try:
+        import websockets
+    except ImportError:
+        logger.warning("websockets library not installed, falling back to regular TTS")
+        return None, None  # Return None to trigger fallback in calling function
+    
+    voice_id = voice_id or GAME_MASTER_VOICE_ID
+    speaker_type = "suspect" if speaker_name and speaker_name != "Game Master" else "game_master"
+    enhanced_text = enhance_text_for_speech(text, speaker_type=speaker_type)
+    
+    api_key = os.getenv("ELEVENLABS_API_KEY")
+    if not api_key:
+        logger.error("ELEVENLABS_API_KEY not set")
+        return None, None
+    
+    # Use Flash model for lower latency
+    model_id = "eleven_flash_v2_5"
+    uri = f"wss://api.elevenlabs.io/v1/text-to-speech/{voice_id}/stream-input?model_id={model_id}&output_format=mp3_44100_128"
+    
+    async def stream_audio():
+        audio_chunks = []
+        alignment_data = {}
+        
+        try:
+            async with websockets.connect(uri) as websocket:
+                # Send API key
+                init_msg = json.dumps({"xi_api_key": api_key})
+                await websocket.send(init_msg)
+                
+                # Send voice settings
+                voice_settings = {
+                    "stability": 0.48,
+                    "similarity_boost": 0.75,
+                    "style": 0.4,
+                    "use_speaker_boost": True,
+                }
+                settings_msg = json.dumps({"voice_settings": voice_settings})
+                await websocket.send(settings_msg)
+                
+                # Send text with auto_mode for automatic generation
+                text_msg = json.dumps({
+                    "text": enhanced_text,
+                    "try_trigger_generation": True
+                })
+                await websocket.send(text_msg)
+                
+                # Send flush to trigger generation
+                flush_msg = json.dumps({"text": ""})
+                await websocket.send(flush_msg)
+                
+                # Receive audio chunks and alignment data
+                while True:
+                    response = await websocket.recv()
+                    data = json.loads(response)
+                    
+                    if 'audio' in data and data['audio']:
+                        # Decode base64 audio chunk
+                        audio_chunk = base64.b64decode(data['audio'])
+                        audio_chunks.append(audio_chunk)
+                    
+                    if 'alignment' in data:
+                        # Store alignment data for caption sync
+                        alignment_data.update(data['alignment'])
+                    
+                    if data.get('isFinal', False):
+                        break
+                
+                # Combine all audio chunks
+                if audio_chunks:
+                    audio_bytes = b"".join(audio_chunks)
+                    with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as f:
+                        f.write(audio_bytes)
+                        return f.name, alignment_data
+                
+        except Exception as e:
+            logger.error(f"WebSocket streaming error: {e}")
+            return None, None
+    
+    # Run async function
+    try:
+        loop = asyncio.get_event_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+    
+    return loop.run_until_complete(stream_audio())
+
+
 def text_to_speech(text: str, voice_id: str = None, speaker_name: str = None) -> Optional[str]:
     """Generate speech from text with enhanced settings for more engaging delivery.
+    
+    Uses Flash model for lower latency. Falls back to regular endpoint if WebSocket fails.
     
     Args:
         text: Text to convert to speech
@@ -593,6 +997,15 @@ def text_to_speech(text: str, voice_id: str = None, speaker_name: str = None) ->
     if not elevenlabs_client or not text.strip():
         return None
 
+    # Try WebSocket streaming first for better latency
+    try:
+        audio_path, _ = text_to_speech_streaming_websocket(text, voice_id, speaker_name)
+        if audio_path:
+            return audio_path
+    except Exception as e:
+        logger.debug(f"WebSocket streaming not available, using regular endpoint: {e}")
+    
+    # Fallback to regular endpoint with Flash model
     try:
         voice_id = voice_id or GAME_MASTER_VOICE_ID
         
@@ -600,32 +1013,26 @@ def text_to_speech(text: str, voice_id: str = None, speaker_name: str = None) ->
         speaker_type = "suspect" if speaker_name and speaker_name != "Game Master" else "game_master"
         enhanced_text = enhance_text_for_speech(text, speaker_type=speaker_type)
         
-        # Use voice_settings for more engaging speech
-        # Stability: 0.45-0.50 for more emotional range (lower = more variation)
-        # Style: 0.3-0.5 for more expressive delivery (higher = more exaggerated)
-        # Note: Speed is not directly available in the SDK, but style and stability help with energy
-        
-        # Try with voice_settings first (if SDK supports it)
+        # Use Flash model for lower latency (~75ms)
         try:
             audio_stream = elevenlabs_client.text_to_speech.convert(
                 voice_id=voice_id,
                 text=enhanced_text,
-                model_id="eleven_multilingual_v2",
+                model_id="eleven_flash_v2_5",  # Use Flash for lower latency
                 output_format="mp3_44100_128",
                 voice_settings={
-                    "stability": 0.48,  # Lower for more emotional range
+                    "stability": 0.48,
                     "similarity_boost": 0.75,
-                    "style": 0.4,  # Style exaggeration for more expressive delivery
+                    "style": 0.4,
                     "use_speaker_boost": True,
                 },
             )
         except TypeError:
-            # SDK might not support voice_settings parameter, try without it
-            # The enhanced text with emotional tags should still help
+            # SDK might not support voice_settings parameter
             audio_stream = elevenlabs_client.text_to_speech.convert(
                 voice_id=voice_id,
                 text=enhanced_text,
-                model_id="eleven_multilingual_v2",
+                model_id="eleven_flash_v2_5",
                 output_format="mp3_44100_128",
             )
 
@@ -636,12 +1043,12 @@ def text_to_speech(text: str, voice_id: str = None, speaker_name: str = None) ->
             return f.name
     except Exception as e:
         logger.error(f"TTS error: {e}")
-        # Fallback: try without voice_settings if the API doesn't support it
+        # Final fallback
         try:
             audio_stream = elevenlabs_client.text_to_speech.convert(
                 voice_id=voice_id,
                 text=enhanced_text,
-                model_id="eleven_multilingual_v2",
+                model_id="eleven_flash_v2_5",
                 output_format="mp3_44100_128",
             )
             audio_bytes = b"".join(chunk for chunk in audio_stream if chunk)
@@ -937,9 +1344,15 @@ def create_app():
                         '<div class="speaker-name">Game Master</div>'
                     )
 
-                    # Caption display
+                    # Caption display (static)
                     caption_html = gr.HTML(
                         '<div class="caption-display"><div class="splash-screen"><div class="splash-title">MURDER MYSTERY</div><div class="splash-subtitle">A Voice-First Adventure</div></div></div>'
+                    )
+
+                    # Live captions (word-by-word highlighting)
+                    live_captions_html = gr.HTML(
+                        '<div class="live-captions" id="live-captions-container"></div>',
+                        visible=True,  # Make visible by default
                     )
 
                     # Audio player (hidden controls, auto-play)
@@ -1010,8 +1423,10 @@ def create_app():
                 logger.warning("No _title image found in images dict")
 
             return [
-                # Caption
+                # Caption (static)
                 f'<div class="caption-display">{response}</div>',
+                # Live captions
+                create_live_captions_html(response),
                 # Speaker
                 f'<div class="speaker-name">{speaker}</div>',
                 # Audio
@@ -1056,6 +1471,7 @@ def create_app():
 
             return [
                 f'<div class="caption-display">{response}</div>',
+                create_live_captions_html(response),
                 f'<div class="speaker-name">{speaker}</div>',
                 audio_path,
                 gr.update(value=portrait, visible=bool(portrait)),
@@ -1080,6 +1496,7 @@ def create_app():
 
             return [
                 f'<div class="caption-display">{response}</div>',
+                create_live_captions_html(response),
                 f'<div class="speaker-name">{speaker}</div>',
                 audio_path,
                 gr.update(value=portrait, visible=bool(portrait)),
@@ -1104,6 +1521,7 @@ def create_app():
 
             return [
                 f'<div class="caption-display">{response}</div>',
+                create_live_captions_html(response),
                 f'<div class="speaker-name">{speaker}</div>',
                 audio_path,
                 gr.update(value=portrait, visible=bool(portrait)),
@@ -1183,6 +1601,7 @@ def create_app():
         # Common outputs for game actions
         game_outputs = [
             caption_html,
+            live_captions_html,
             speaker_html,
             audio_output,
             portrait_image,
@@ -1199,6 +1618,7 @@ def create_app():
             inputs=[session_id],
             outputs=[
                 caption_html,
+                live_captions_html,
                 speaker_html,
                 audio_output,
                 portrait_image,
