@@ -728,7 +728,7 @@ RETRO_CSS = """
     margin: 0 !important;
     height: auto !important;
     min-height: 75px !important;
-    width: 50% !important;
+    width: 40% !important;
     z-index: 100 !important;
     position: absolute !important;
     bottom: 80px !important;
