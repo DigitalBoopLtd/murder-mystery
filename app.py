@@ -315,9 +315,16 @@ def create_app():
                     )
 
                 # Start game button (shown initially)
-                start_btn = gr.Button(
-                    "▶ START NEW MYSTERY", elem_classes="start-button", size="lg"
-                )
+                with gr.Column(elem_classes="start-button-container"):
+                    start_btn = gr.Button(
+                        "▶ START NEW MYSTERY", elem_classes="start-button", size="lg"
+                    )
+                    # Status tracker for start button
+                    start_status = gr.HTML(
+                        "", 
+                        elem_classes="start-status-tracker",
+                        visible=True
+                    )
 
                 # Input bar
                 with gr.Row(elem_classes="input-bar", visible=False) as input_row:
@@ -339,7 +346,31 @@ def create_app():
         # ====== EVENT HANDLERS ======
 
         def on_start_game(sess_id):
-            """Handle game start."""
+            """Handle game start with status updates."""
+            # Show status tracker - generating mystery
+            status_html = '<div class="start-status-tracker">🎲 Generating mystery...</div>'
+            yield [
+                gr.update(),  # speaker_html
+                gr.update(),  # audio_output
+                gr.update(),  # portrait_image
+                gr.update(),  # input_row
+                gr.update(),  # start_btn
+                gr.update(),  # victim_scene_html
+                gr.update(),  # suspects_list_html
+                gr.update(),  # locations_html
+                gr.update(),  # clues_html
+                gr.update(),  # accusations_html
+                gr.update(value=status_html, visible=True),  # start_status
+            ]
+            
+            # Generate mystery (this is the longest step)
+            status_html = '<div class="start-status-tracker">🎭 Creating scenario...</div>'
+            yield [
+                gr.update(), gr.update(), gr.update(), gr.update(), gr.update(),
+                gr.update(), gr.update(), gr.update(), gr.update(), gr.update(),
+                gr.update(value=status_html, visible=True),
+            ]
+            
             state, response, audio_path, speaker, alignment_data = start_new_game(
                 sess_id
             )
@@ -417,7 +448,8 @@ def create_app():
                     autoplay=True  # Autoplay after user interaction
                 )
 
-            return [
+            # Hide status tracker and return final results
+            yield [
                 # Speaker - show when game starts
                 f'<div class="speaker-name" style="padding: 16px 0 !important;">🗣️ {speaker}</div>',
                 # Audio with subtitles - will autoplay after user interaction (Start button click)
@@ -434,6 +466,8 @@ def create_app():
                 format_clues_html(state.clues_found),
                 # Accusations
                 _format_accusations_html(state.wrong_accusations),
+                # Hide status tracker
+                gr.update(value="", visible=False),  # start_status
             ]
 
         def _format_accusations_html(wrong: int):
@@ -666,6 +700,7 @@ def create_app():
                 locations_html,
                 clues_html,
                 accusations_html,
+                start_status,
             ],
         )
 

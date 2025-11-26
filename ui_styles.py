@@ -435,6 +435,112 @@ RETRO_CSS = """
     background: transparent !important;
 }
 
+/* Hide audio player when it's empty (no audio file loaded) */
+.audio-player:has(.empty),
+.audio-player .empty {
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+    height: 0 !important;
+    min-height: 0 !important;
+    overflow: hidden !important;
+}
+
+/* Hide audio player controls - play/pause, rewind, skip buttons */
+.audio-player .play-pause-wrapper,
+.audio-player .play-pause-button,
+.audio-player .rewind,
+.audio-player .skip,
+.audio-player button[aria-label*="Skip"],
+.audio-player button[aria-label*="Pause"],
+.audio-player button[aria-label*="Play"],
+.audio-player .svelte-72dh9g {
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+    height: 0 !important;
+    width: 0 !important;
+    overflow: hidden !important;
+}
+
+/* Hide the entire audio-player block when it only contains empty state */
+.block.audio-player:has(.empty:only-child),
+.block.audio-player:has(.empty) {
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+    height: 0 !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    overflow: hidden !important;
+}
+
+/* Hide audio-player block when it has no audio source and no subtitle content */
+.block.audio-player:not(:has(audio[src])):not(:has(.subtitle-display)):not(:has([data-testid="subtitle-display"])):not(:has([class*="subtitle"])) {
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+    height: 0 !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    overflow: hidden !important;
+}
+
+/* Hide the block container wrapper but keep subtitle-display visible */
+/* This removes the extra block that appears below subtitles */
+.block.audio-player {
+    background: transparent !important;
+    border: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    box-shadow: none !important;
+}
+
+/* Remove black backgrounds from audio player wrappers - keep only dark blue subtitle block */
+.block.audio-player,
+.block.audio-player > div:not(:has(.subtitle-display)):not(:has([data-testid="subtitle-display"])),
+.audio-player:not(:has(.subtitle-display)):not(:has([data-testid="subtitle-display"])),
+.audio-player audio,
+.audio-player > div:not(:has(.subtitle-display)):not(:has([data-testid="subtitle-display"])) {
+    background: transparent !important;
+    background-color: transparent !important;
+}
+
+/* Specifically target any black or #010101 backgrounds */
+.block.audio-player[style*="background"],
+.block.audio-player[style*="background-color"],
+.audio-player[style*="background"],
+.audio-player[style*="background-color"] {
+    background: transparent !important;
+    background-color: transparent !important;
+}
+
+/* Remove black backgrounds - target elements with black, #000, #010101, or rgba(0,0,0) */
+.block.audio-player,
+.block.audio-player *:not(.subtitle-display):not([data-testid="subtitle-display"]):not([class*="subtitle"]):not([data-testid*="subtitle"]) {
+    background: transparent !important;
+    background-color: transparent !important;
+}
+
+/* Keep dark blue subtitle block visible */
+.block.audio-player .subtitle-display,
+.block.audio-player [data-testid="subtitle-display"],
+.block.audio-player [class*="subtitle"] {
+    background: #00004d !important;
+    background-color: #00004d !important;
+}
+
+/* Ensure subtitle-display is positioned absolutely to escape the block container */
+.audio-player .subtitle-display,
+.audio-player [data-testid="subtitle-display"] {
+    position: absolute !important;
+    z-index: 100 !important;
+}
+
 /* Overlay subtitles on portrait image */
 /* Make the portrait image container relative for positioning context */
 .stage-container > div:has(.portrait-image),
@@ -472,18 +578,16 @@ RETRO_CSS = """
 /* Since they're siblings, we position relative to stage-container */
 .stage-container:has(.portrait-image img[src]:not([src=""])) .block.audio-player {
     position: absolute !important;
-    /* Position at bottom of stage-container, then pull up to overlay image */
-    bottom: 24px !important; /* Match stage-container padding */
-    left: 24px !important;
-    right: 24px !important;
-    width: calc(100% - 48px) !important;
+    /* Position at the same location as subtitle-display (bottom: 80px from stage-container) */
+    bottom: 80px !important; /* Match subtitle-display position */
+    left: 50% !important;
+    transform: translateX(-50%) !important; /* Center horizontally */
+    width: 40% !important; /* Match subtitle-display width */
     z-index: 10 !important;
     margin: 0 !important;
     background: transparent !important;
-    /* Use transform to pull it up onto the image - more reliable than margin */
-    /* Pull up by a fixed amount to overlay the bottom portion of the image */
-    /* This value should be adjusted based on typical image heights */
-    transform: translateY(-400px) !important; /* Pull up to overlay bottom of image */
+    border: none !important;
+    padding: 0 !important;
 }
 
 /* Style the audio player content - fully opaque */
@@ -537,17 +641,148 @@ RETRO_CSS = """
     display: none !important;
 }
 
-/* Hide time element */
+/* Hide the entire controls wrapper with volume, playback speed, and subtitle toggle */
+/* Use very specific selectors with high priority */
+.audio-player .controls,
+.audio-player .controls.svelte-72dh9g,
+.audio-player [data-testid="waveform-controls"],
+.audio-player [data-testid="waveform-controls"].svelte-72dh9g,
+.audio-player div.controls,
+.audio-player div.controls.svelte-72dh9g,
+.audio-player div[data-testid="waveform-controls"],
+.audio-player div[data-testid="waveform-controls"].svelte-72dh9g,
+.audio-player .control-wrapper,
+.audio-player .control-wrapper.svelte-72dh9g,
+.audio-player .settings-wrapper,
+.audio-player .settings-wrapper.svelte-72dh9g,
+.audio-player .play-pause-wrapper,
+.audio-player .play-pause-wrapper.svelte-72dh9g,
+.audio-player .volume,
+.audio-player .playback,
+.audio-player [aria-label*="volume"],
+.audio-player [aria-label*="playback speed"],
+.audio-player [data-testid="subtitles-toggle"],
+.audio-player .cc-button,
+/* Target by svelte class as well */
+.audio-player .svelte-72dh9g.controls,
+.audio-player div.svelte-72dh9g[data-testid="waveform-controls"],
+/* Universal selector for any element with waveform-controls */
+[data-testid="waveform-controls"],
+div[data-testid="waveform-controls"],
+.controls[data-testid="waveform-controls"] {
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+    height: 0 !important;
+    width: 0 !important;
+    min-height: 0 !important;
+    min-width: 0 !important;
+    max-height: 0 !important;
+    max-width: 0 !important;
+    overflow: hidden !important;
+    pointer-events: none !important;
+    position: absolute !important;
+    left: -9999px !important;
+    margin: 0 !important;
+    padding: 0 !important;
+}
+
+/* Hide time element and timestamps */
 .audio-player time,
 .audio-player #time,
 .audio-player [id="time"],
+.audio-player [id="duration"],
 .audio-player [class*="time"],
-.audio-player .svelte-1ffmt2w {
+.audio-player .timestamps,
+.audio-player .timestamps.svelte-1ffmt2w {
     display: none !important;
     visibility: hidden !important;
     height: 0 !important;
     width: 0 !important;
     overflow: hidden !important;
+}
+
+/* Hide waveform container and component wrapper - but NOT if it contains subtitle-display */
+/* Be very specific about what to hide */
+.audio-player .component-wrapper:not(:has(.subtitle-display)):not(:has([data-testid="subtitle-display"])),
+.audio-player .component-wrapper.svelte-1ffmt2w:not(:has(.subtitle-display)):not(:has([data-testid="subtitle-display"])),
+.audio-player [data-testid="waveform-Audio"]:not(:has(.subtitle-display)):not(:has([data-testid="subtitle-display"])),
+.audio-player .waveform-container,
+.audio-player .waveform-container.svelte-1ffmt2w,
+.audio-player #waveform,
+.audio-player #waveform.svelte-1ffmt2w,
+.audio-player div[data-testid="waveform-Audio"]:not(:has(.subtitle-display)):not(:has([data-testid="subtitle-display"])),
+/* Hide timestamps specifically */
+.audio-player .timestamps,
+.audio-player .timestamps.svelte-1ffmt2w {
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+    height: 0 !important;
+    width: 0 !important;
+    min-height: 0 !important;
+    min-width: 0 !important;
+    max-height: 0 !important;
+    max-width: 0 !important;
+    overflow: hidden !important;
+    pointer-events: none !important;
+    position: absolute !important;
+    left: -9999px !important;
+    margin: 0 !important;
+    padding: 0 !important;
+}
+
+/* Position component-wrapper at same location as subtitle-display when it contains subtitles */
+.audio-player .component-wrapper:has(.subtitle-display),
+.audio-player .component-wrapper:has([data-testid="subtitle-display"]),
+.audio-player .component-wrapper.svelte-1ffmt2w:has(.subtitle-display),
+.audio-player .component-wrapper.svelte-1ffmt2w:has([data-testid="subtitle-display"]) {
+    background: transparent !important;
+    border: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    position: absolute !important;
+    bottom: 80px !important;
+    left: 50% !important;
+    transform: translateX(-50%) !important;
+    width: 40% !important;
+    z-index: 100 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+}
+
+/* Ensure subtitle-display inside component-wrapper is centered and styled */
+.audio-player .component-wrapper .subtitle-display,
+.audio-player .component-wrapper [data-testid="subtitle-display"] {
+    position: relative !important;
+    left: auto !important;
+    transform: none !important;
+    width: 100% !important;
+}
+
+/* CRITICAL: Ensure subtitle-display is ALWAYS visible - highest priority */
+/* Must come after any hiding rules and have maximum specificity */
+.audio-player .subtitle-display.svelte-1ffmt2w,
+.audio-player [data-testid="subtitle-display"].svelte-1ffmt2w,
+.audio-player .subtitle-display,
+.audio-player [data-testid="subtitle-display"],
+.audio-player .component-wrapper .subtitle-display,
+.audio-player .component-wrapper [data-testid="subtitle-display"],
+.audio-player .component-wrapper.svelte-1ffmt2w .subtitle-display,
+.audio-player .component-wrapper.svelte-1ffmt2w [data-testid="subtitle-display"] {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    height: auto !important;
+    width: auto !important;
+    min-height: 75px !important;
+    position: absolute !important;
+    left: auto !important;
+    right: auto !important;
+    pointer-events: auto !important;
+    z-index: 1000 !important;
 }
 
 /* Hide download/share buttons if present */
@@ -571,7 +806,7 @@ RETRO_CSS = """
 .audio-player canvas,
 .audio-player [class*="waveform"],
 .audio-player [class*="wave"],
-.audio-player svg {
+.audio-player svg:not([class*="subtitle"]):not([data-testid*="subtitle"]) {
     display: none !important;
     height: 0 !important;
     width: 0 !important;
@@ -709,27 +944,12 @@ RETRO_CSS = """
     text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7) !important;
 }
 
-/* Hide subtitle-display container when empty or has no text content */
-.audio-player .subtitle-display:empty,
-.audio-player [data-testid="subtitle-display"]:empty,
-.audio-player .subtitle-display.svelte-1ffmt2w:empty,
-.audio-player [data-testid="subtitle-display"].svelte-1ffmt2w:empty {
-    display: none !important;
-    visibility: hidden !important;
-    opacity: 0 !important;
-    height: 0 !important;
-    min-height: 0 !important;
-    padding: 0 !important;
-    margin: 0 !important;
-}
-
 /* CRITICAL: Preserve and style subtitle-display element - must not be removed */
 /* This ensures the specific subtitle-display element is always visible and styled */
-/* Only show when it has content */
-.audio-player .subtitle-display:not(:empty),
-.audio-player [data-testid="subtitle-display"]:not(:empty),
-.audio-player .subtitle-display.svelte-1ffmt2w:not(:empty),
-.audio-player [data-testid="subtitle-display"].svelte-1ffmt2w:not(:empty) {
+.audio-player .subtitle-display,
+.audio-player [data-testid="subtitle-display"],
+.audio-player .subtitle-display.svelte-1ffmt2w,
+.audio-player [data-testid="subtitle-display"].svelte-1ffmt2w {
     display: block !important;
     visibility: visible !important;
     opacity: 1 !important;
@@ -743,7 +963,6 @@ RETRO_CSS = """
     margin: 0 !important;
     height: auto !important;
     min-height: 75px !important;
-    width: 40% !important;
     z-index: 100 !important;
     position: absolute !important;
     bottom: 80px !important;
@@ -773,39 +992,6 @@ RETRO_CSS = """
 .audio-player [class*="highlight"] {
     text-align: center !important;
     display: inline-block !important;
-}
-
-/* ============================================================================
-   LIVE CAPTIONS - Word-by-word highlighting
-   ============================================================================ */
-
-.live-captions-container {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-}
-
-.live-captions-container audio {
-    width: 100%;
-    max-width: 400px;
-    margin: 10px auto;
-    display: block;
-}
-
-.live-captions {
-    font-family: 'Source Sans Pro', sans-serif;
-    font-size: 20px;
-    line-height: 1.8;
-    color: var(--text-primary);
-    padding: 20px 24px;
-    background: var(--bg-card);
-    border: 1px solid var(--border-color);
-    border-radius: 8px;
-    margin-top: 12px;
-    min-height: 80px;
-    max-height: 250px;
-    overflow-y: auto;
-    text-align: center;
 }
 
 /* Individual word - inline display for natural text flow */
@@ -901,6 +1087,40 @@ RETRO_CSS = """
 .start-button:hover {
     background: var(--accent-blue-dark) !important;
     transform: translateY(-2px) !important;
+}
+
+/* Start button container */
+.start-button-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+}
+
+/* Status tracker for start button */
+.start-status-tracker {
+    font-family: 'Source Sans Pro', sans-serif;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-primary);
+    text-align: center;
+    padding: 8px 16px;
+    background: transparent;
+    border-radius: 6px;
+    min-height: 20px;
+    display: block !important;
+}
+
+/* Hide when empty */
+.start-status-tracker:empty {
+    display: none !important;
+}
+
+/* Ensure the HTML component wrapper shows the content */
+.start-button-container .start-status-tracker,
+.start-button-container [class*="start-status"] {
+    display: block !important;
+    visibility: visible !important;
 }
 
 /* Theme toggle */
