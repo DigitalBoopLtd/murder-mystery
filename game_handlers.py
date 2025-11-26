@@ -4,10 +4,12 @@ import os
 import re
 import logging
 from typing import Optional, Tuple, List, Dict
-from concurrent.futures import ThreadPoolExecutor
 
 from game_state import GameState
-from image_service import generate_all_mystery_images, get_image_service
+from image_service import (
+    generate_portrait_on_demand,
+    get_image_service,
+)
 from mystery_generator import generate_mystery, prepare_game_prompt
 from agent import create_game_master_agent, process_message
 from game_parser import parse_game_actions
@@ -57,57 +59,49 @@ def start_new_game(session_id: str):
     state.mystery = mystery
     state.system_prompt = prepare_game_prompt(mystery)
 
-    # Start image generation and agent/narration in parallel
-    logger.info("Starting parallel initialization...")
+    # Initialize with agent and narration (images generated on-demand)
+    logger.info("Starting game initialization (images will be generated on-demand)...")
 
-    with ThreadPoolExecutor(max_workers=3) as executor:
-        # Submit image generation (takes longest)
-        images_future = executor.submit(generate_all_mystery_images, mystery)
+    # Create agent and get narration immediately (no waiting for images)
+    agent = create_game_master_agent()
+    response, speaker = process_message(
+        agent,
+        "The player has just arrived. Welcome them to the mystery with atmosphere.",
+        state.system_prompt,
+        session_id,
+        thread_id=session_id,
+    )
 
-        # While images generate, create agent and get narration
-        agent = create_game_master_agent()
-        response, speaker = process_message(
-            agent,
-            "The player has just arrived. Welcome them to the mystery with atmosphere.",
-            state.system_prompt,
-            session_id,
-            thread_id=session_id,
-        )
+    # Initialize empty images dict - images will be generated on-demand
+    mystery_images[session_id] = {}
+    
+    # Optionally generate title card in background (non-blocking)
+    # For now, we'll generate it on-demand when first needed
 
-        # Wait for images to complete
-        images = images_future.result()
-        mystery_images[session_id] = images
+    # Generate audio (needs the response text)
+    logger.info(f"[GAME] Calling TTS for welcome message ({len(response)} chars)")
+    audio_path, alignment_data = text_to_speech(
+        response, GAME_MASTER_VOICE_ID, speaker_name="Game Master"
+    )
 
-        # Store portrait paths on suspects
-        for suspect in mystery.suspects:
-            if suspect.name in images:
-                suspect.portrait_path = images[suspect.name]
-
-        # Generate audio (needs the response text)
-        logger.info(f"[GAME] Calling TTS for welcome message ({len(response)} chars)")
-        audio_path, alignment_data = text_to_speech(
-            response, GAME_MASTER_VOICE_ID, speaker_name="Game Master"
-        )
-
-        # Verify audio was generated
-        if audio_path:
-
-            if os.path.exists(audio_path):
-                file_size = os.path.getsize(audio_path)
-                logger.info(
-                    f"[GAME] ✅ Audio generated: {audio_path} ({file_size} bytes)"
-                )
-            else:
-                logger.error(
-                    f"[GAME] ❌ Audio path returned but file doesn't exist: {audio_path}"
-                )
+    # Verify audio was generated
+    if audio_path:
+        if os.path.exists(audio_path):
+            file_size = os.path.getsize(audio_path)
+            logger.info(
+                f"[GAME] ✅ Audio generated: {audio_path} ({file_size} bytes)"
+            )
         else:
-            logger.error("[GAME] ❌ No audio path returned from TTS!")
+            logger.error(
+                f"[GAME] ❌ Audio path returned but file doesn't exist: {audio_path}"
+            )
+    else:
+        logger.error("[GAME] ❌ No audio path returned from TTS!")
 
-        if alignment_data:
-            logger.info(f"[GAME] ✅ Got {len(alignment_data)} word timestamps")
-        else:
-            logger.warning("[GAME] ⚠️ No alignment data (captions will use estimation)")
+    if alignment_data:
+        logger.info(f"[GAME] ✅ Got {len(alignment_data)} word timestamps")
+    else:
+        logger.warning("[GAME] ⚠️ No alignment data (captions will use estimation)")
 
     # Store in messages
     state.messages.append(
@@ -182,11 +176,41 @@ def process_player_action(
         clean_response = re.sub(audio_marker_pattern, "", response).strip()
         logger.info(f"Extracted audio path from tool: {audio_path_from_tool}")
 
+    # Generate portrait on-demand if a suspect was talked to for the first time
+    if speaker and speaker != "Game Master":
+        session_images = mystery_images.get(session_id, {})
+        
+        # Check if we need to generate this suspect's portrait
+        if speaker not in session_images:
+            # Find the suspect in the mystery
+            suspect = None
+            for s in state.mystery.suspects:
+                if s.name == speaker:
+                    suspect = s
+                    break
+            
+            if suspect:
+                logger.info(f"Generating portrait on-demand for suspect: {speaker}")
+                portrait_path = generate_portrait_on_demand(
+                    suspect, 
+                    state.mystery.setting if state.mystery else ""
+                )
+                if portrait_path:
+                    # Store in mystery_images dict for this session
+                    if session_id not in mystery_images:
+                        mystery_images[session_id] = {}
+                    mystery_images[session_id][speaker] = portrait_path
+                    logger.info(f"Generated and stored portrait for {speaker}: {portrait_path}")
+                else:
+                    logger.warning(f"Failed to generate portrait for {speaker}")
+            else:
+                logger.warning(f"Suspect {speaker} not found in mystery for portrait generation")
+
     # Generate scene image on-demand if a location was searched
     if actions.get("location_searched"):
         location = actions["location_searched"]
         session_images = mystery_images.get(session_id, {})
-
+        
         # Only generate if we don't already have this scene
         if location not in session_images:
             logger.info(f"Generating scene image for location: {location}")

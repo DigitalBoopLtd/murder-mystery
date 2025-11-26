@@ -37,7 +37,6 @@ RETRO_CSS = """
     display: flex;
     justify-content: space-between;
     align-items: center;
-    box-shadow: 0 2px 4px var(--shadow-color);
 }
 
 .game-title {
@@ -56,8 +55,20 @@ RETRO_CSS = """
     margin: 16px;
     padding: 24px;
     min-height: 350px;
-    position: relative;
-    box-shadow: 0 2px 8px var(--shadow-color);
+    position: relative !important;
+}
+
+/* Make portrait image container relative for absolute positioning of subtitles overlay */
+.stage-container > div:has(.portrait-image),
+.stage-container > div:has(img.portrait-image) {
+    position: relative !important;
+}
+
+/* Ensure portrait image itself is relative */
+.stage-container .portrait-image,
+.stage-container img[class*="portrait"],
+.stage-container .portrait-image img {
+    position: relative !important;
 }
 
 /* Speaker indicator */
@@ -99,9 +110,45 @@ RETRO_CSS = """
     height: auto !important;
     border: 2px solid var(--border-color);
     border-radius: 12px;
-    box-shadow: 0 4px 12px var(--shadow-color);
     display: block;
     margin: 0 auto;
+    position: relative;
+    margin-bottom: 0 !important; /* Remove margin so overlay can align properly */
+}
+
+/* Hide image component buttons fullscreen, share, download) - be very specific */
+.portrait-image button[aria-label*="Fullscreen"],
+.portrait-image button[aria-label*="Share"],
+.portrait-image button[aria-label*="Download"],
+.portrait-image button[title*="Fullscreen"] {
+    display: none !important;
+    visibility: hidden !important;
+}
+
+/* Hide Gradio's image action button containers - but not the image */
+.portrait-image [class*="image-controls"]:not(img),
+.portrait-image [class*="image-actions"]:not(img),
+.portrait-image [class*="toolbar"]:not(img) {
+    display: none !important;
+    visibility: hidden !important;
+}
+
+/* Ensure the image itself and its container are always visible */
+.portrait-image,
+.portrait-image img,
+.portrait-image > img,
+.portrait-image [class*="image"]:not([class*="button"]):not([class*="control"]):not([class*="action"]),
+.portrait-image [class*="svelte"] img {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+}
+
+/* Make the portrait image container a positioning context for overlay */
+.portrait-image,
+.portrait-image > div,
+.stage-container > div:has(.portrait-image) {
+    position: relative !important;
 }
 
 /* Speaking indicator */
@@ -150,13 +197,11 @@ RETRO_CSS = """
     text-align: center;
     min-width: 140px;
     color: var(--text-primary);
-    box-shadow: 0 2px 4px var(--shadow-color);
 }
 
 .suspect-button:hover {
     border-color: var(--accent-blue);
     transform: translateY(-2px);
-    box-shadow: 0 4px 12px var(--shadow-hover);
     background: #F8FBFF;
 }
 
@@ -201,13 +246,11 @@ RETRO_CSS = """
     border-radius: 6px !important;
     cursor: pointer !important;
     transition: all 0.2s ease !important;
-    box-shadow: 0 2px 4px var(--shadow-color) !important;
 }
 
 .action-button:hover {
     background: var(--accent-blue-dark) !important;
     transform: translateY(-1px) !important;
-    box-shadow: 0 4px 8px var(--shadow-hover) !important;
 }
 
 /* Input area */
@@ -236,7 +279,6 @@ RETRO_CSS = """
 .text-input:focus {
     border-color: var(--accent-blue) !important;
     outline: none !important;
-    box-shadow: 0 0 0 3px rgba(0, 162, 255, 0.1) !important;
 }
 
 /* Side panel */
@@ -244,9 +286,45 @@ RETRO_CSS = """
     background: var(--bg-card);
     border: 1px solid var(--border-color);
     border-radius: 8px;
-    padding: 16px;
+    padding: 20px 24px !important;
     height: fit-content;
-    box-shadow: 0 2px 4px var(--shadow-color);
+    margin-bottom: 12px;
+}
+
+/* Target Gradio's internal structure for side panels */
+/* Remove default padding from Gradio's internal containers */
+.side-panel .block,
+.side-panel .html-container,
+.side-panel .prose,
+.side-panel [class*="svelte"] {
+    padding: 0 !important;
+}
+
+/* Ensure the actual content container has padding */
+.side-panel .html-container,
+.side-panel .prose.gradio-style,
+.side-panel .prose {
+    padding: 20px 24px !important;
+}
+
+/* Also target the block container directly */
+.side-panel > .block {
+    padding: 20px 24px !important;
+}
+
+/* Ensure panel title and content have proper spacing */
+.side-panel .panel-title {
+    margin-top: 0;
+    margin-bottom: 16px;
+    padding-top: 0;
+}
+
+/* Ensure content inside side panels has proper spacing */
+.side-panel > * {
+    margin: 0;
+}
+
+.side-panel > *:not(:last-child) {
     margin-bottom: 12px;
 }
 
@@ -256,8 +334,9 @@ RETRO_CSS = """
     font-weight: 600;
     color: var(--accent-blue);
     border-bottom: 2px solid var(--border-color);
-    padding-bottom: 8px;
-    margin-bottom: 12px;
+    padding-bottom: 12px;
+    margin-bottom: 16px;
+    margin-top: 0;
 }
 
 .clue-item {
@@ -294,7 +373,6 @@ RETRO_CSS = """
     display: flex;
     justify-content: space-between;
     align-items: center;
-    box-shadow: 0 -2px 4px var(--shadow-color);
 }
 
 .accusations-display {
@@ -317,50 +395,138 @@ RETRO_CSS = """
     background: var(--accent-red);
 }
 
-/* Audio player styling - Fixed height to prevent resizing as captions appear */
+/* Audio player styling - Hide audio controls, show only subtitles */
+/* Overlay at bottom of portrait image */
 .audio-player {
-    display: block !important;
+    position: relative !important;
     width: 100% !important;
-    max-width: 500px !important;
-    margin: 15px auto !important;
-    padding: 10px !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: var(--accent-green) !important;
+    border: none !important;
+    border-radius: 0 !important;
+    /* Reduced height for subtitles only */
+    min-height: 60px !important;
+    max-height: 60px !important;
+    height: auto !important;
+    overflow: visible !important;
+    box-sizing: border-box !important;
+    z-index: 10 !important;
+}
+
+/* Overlay subtitles on portrait image */
+/* Make the portrait image container relative for positioning context */
+.stage-container > div:has(.portrait-image),
+.stage-container > div:has(img.portrait-image) {
+    position: relative !important;
+}
+
+/* Position audio player to overlay the bottom of the portrait image */
+/* Since portrait and audio are siblings, we position audio absolutely */
+.stage-container:has(.portrait-image img[src]:not([src=""])) .audio-player {
+    position: absolute !important;
+    /* Position to overlay the bottom of the portrait image */
+    /* Since image and audio are siblings, we need to position relative to image */
+    /* Use a large negative margin-top to pull it up onto the image */
+    bottom: 24px !important;
+    left: 24px !important;
+    right: 24px !important;
+    width: calc(100% - 48px) !important;
+    padding: 16px 20px !important;
+    /* Much darker background for better readability */
+    background: linear-gradient(to top, rgba(0, 0, 0, 0.95) 0%, rgba(0, 0, 0, 0.85) 100%) !important;
+    border-radius: 0 0 12px 12px !important;
+    z-index: 10 !important;
+    /* Pull up to overlay the image - use large negative margin */
+    margin-top: -400px !important; /* Large enough to pull up onto any image height */
+}
+
+/* Position speaker name above subtitles in the overlay */
+.stage-container:has(.portrait-image img[src]:not([src=""])) .speaker-name {
+    position: absolute !important;
+    bottom: 120px !important; /* Position above the subtitle overlay */
+    left: 24px !important;
+    right: 24px !important;
+    width: calc(100% - 48px) !important;
+    padding: 8px 20px !important;
+    /* Dark background matching subtitle overlay */
+    background: linear-gradient(to top, rgba(0, 0, 0, 0.95) 0%, rgba(0, 0, 0, 0.85) 100%) !important;
+    border-radius: 12px 12px 0 0 !important;
+    z-index: 11 !important;
+    color: #FFFFFF !important;
+    font-size: 18px !important;
+    font-weight: 600 !important;
+    text-align: center !important;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8) !important;
+    display: block !important;
+    visibility: visible !important;
+    margin: 0 !important;
+    /* Pull up to align with image overlay */
+    margin-top: -400px !important; /* Match the audio player's negative margin */
+}
+
+/* When there's no portrait image (e.g., start screen), don't overlay */
+.stage-container:not(:has(.portrait-image img[src]:not([src=""]))) .audio-player {
+    position: relative !important;
     background: var(--bg-panel) !important;
     border: 1px solid var(--border-color) !important;
     border-radius: 8px !important;
-    /* Fixed height to prevent resizing as captions appear */
-    height: 200px !important;
-    min-height: 200px !important;
-    max-height: 200px !important;
-    overflow: hidden !important;
-    box-sizing: border-box !important;
+    padding: 8px !important;
 }
 
-/* Hide extra controls above the waveform */
+/* Hide ALL audio controls and buttons */
 .audio-player button,
 .audio-player [role="button"],
 .audio-player .controls,
-.audio-player .audio-controls {
+.audio-player .audio-controls,
+.audio-player [class*="button"],
+.audio-player [class*="control"] {
     display: none !important;
+}
+
+/* Hide time element */
+.audio-player time,
+.audio-player #time,
+.audio-player [id="time"],
+.audio-player [class*="time"],
+.audio-player .svelte-1ffmt2w {
+    display: none !important;
+    visibility: hidden !important;
+    height: 0 !important;
+    width: 0 !important;
+    overflow: hidden !important;
 }
 
 /* Hide download/share buttons if present */
 .audio-player [class*="download"],
-.audio-player [class*="share"],
-.audio-player [class*="button"]:not([class*="play"]):not([class*="pause"]) {
+.audio-player [class*="share"] {
     display: none !important;
 }
 
-/* Style the audio element itself */
+/* Hide the audio element itself (but keep it functional for autoplay) */
 .audio-player audio {
-    width: 100% !important;
-    height: 50px !important;
-    display: block !important;
-    flex-shrink: 0 !important;
-    margin: 0 !important;
-    padding: 0 !important;
+    position: absolute !important;
+    width: 1px !important;
+    height: 1px !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+    overflow: hidden !important;
+    clip: rect(0, 0, 0, 0) !important;
 }
 
-/* Fix Gradio's subtitle/caption container - make it fully visible */
+/* Hide waveform/canvas */
+.audio-player canvas,
+.audio-player [class*="waveform"],
+.audio-player [class*="wave"],
+.audio-player svg {
+    display: none !important;
+    height: 0 !important;
+    width: 0 !important;
+    visibility: hidden !important;
+}
+
+/* Show ONLY subtitles - make them fully visible and prominent */
 /* Target all possible subtitle containers with very broad selectors */
 .audio-player [class*="subtitle"],
 .audio-player [class*="caption"],
@@ -374,20 +540,31 @@ RETRO_CSS = """
 .audio-player div:has(span[data-timestamp]),
 .audio-player div:has([class*="word"]),
 .audio-player div:has([class*="highlight"]) {
-    /* Make subtitles fully visible without scrolling */
+    /* Make subtitles fully visible and take up the full space */
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
     height: auto !important;
-    max-height: 140px !important;
-    min-height: 60px !important;
+    max-height: none !important;
+    min-height: 50px !important;
     overflow-y: visible !important;
     overflow-x: hidden !important;
     flex-shrink: 0 !important;
     box-sizing: border-box !important;
+    /* Center the text */
+    text-align: center !important;
     /* Ensure text wraps properly and is readable */
     word-wrap: break-word !important;
-    line-height: 1.6 !important;
-    padding: 8px 0 !important;
+    line-height: 1.8 !important;
+    padding: 4px 0 !important;
     margin: 0 !important;
-    font-size: 14px !important;
+    font-size: 18px !important;
+    font-weight: 500 !important;
+    /* White text for contrast on dark overlay */
+    color: #FFFFFF !important;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8) !important;
+    width: 100% !important;
+    text-align: center !important;
 }
 
 /* More aggressive: target any div that contains text after the audio element */
@@ -411,30 +588,69 @@ RETRO_CSS = """
     overflow: visible !important;
 }
 
-/* Ensure the audio component wrapper maintains fixed height */
+/* Ensure the audio component wrapper shows only subtitles */
 .audio-player > div {
-    height: 100% !important;
-    max-height: 200px !important;
+    height: auto !important;
+    min-height: 60px !important;
+    max-height: 150px !important;
     display: flex !important;
     flex-direction: column !important;
     box-sizing: border-box !important;
-    overflow: hidden !important;
-    gap: 8px !important;
+    overflow: visible !important;
+    gap: 0 !important;
+    align-items: center !important;
+    justify-content: center !important;
 }
 
-/* Target Gradio's internal structure more specifically */
+/* Target Gradio's internal structure - hide audio player UI, show subtitles */
 .audio-player .minimal-audio-player,
 .audio-player .minimal-audio-player > div {
     height: auto !important;
-    max-height: 200px !important;
+    max-height: none !important;
+    overflow: visible !important;
+}
+
+/* Hide any audio player UI elements that aren't subtitles - but be careful not to hide subtitle containers */
+.audio-player > div > div:first-child:not([class*="subtitle"]):not([class*="caption"]):not([role="region"]):not([data-testid*="subtitle"]):not([data-testid*="caption"]) {
+    /* Only hide if it doesn't contain subtitle-related elements */
+    display: none !important;
+    height: 0 !important;
     overflow: hidden !important;
 }
 
-/* Ensure waveform doesn't take up too much space */
-.audio-player canvas,
-.audio-player [class*="waveform"] {
-    max-height: 50px !important;
-    height: 50px !important;
+/* Ensure subtitle containers are always visible */
+.audio-player [class*="subtitle"],
+.audio-player [class*="caption"],
+.audio-player [role="region"],
+.audio-player [data-testid*="subtitle"],
+.audio-player [data-testid*="caption"] {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    text-align: center !important;
+}
+
+/* Center all text elements within subtitle containers */
+.audio-player [class*="subtitle"] *,
+.audio-player [class*="caption"] *,
+.audio-player [role="region"] *,
+.audio-player [data-testid*="subtitle"] *,
+.audio-player [data-testid*="caption"] *,
+.audio-player div:has(span[data-timestamp]) *,
+.audio-player div:has([class*="word"]) *,
+.audio-player div:has([class*="highlight"]) *,
+.audio-player > div > div:last-child *,
+.audio-player > div:last-child * {
+    text-align: center !important;
+    display: inline-block !important;
+}
+
+/* Ensure subtitle spans and words are centered */
+.audio-player span[data-timestamp],
+.audio-player [class*="word"],
+.audio-player [class*="highlight"] {
+    text-align: center !important;
+    display: inline-block !important;
 }
 
 /* ============================================================================
@@ -557,14 +773,12 @@ RETRO_CSS = """
     padding: 14px 32px !important;
     border-radius: 8px !important;
     cursor: pointer !important;
-    box-shadow: 0 4px 12px var(--shadow-hover) !important;
     transition: all 0.2s ease !important;
 }
 
 .start-button:hover {
     background: var(--accent-blue-dark) !important;
     transform: translateY(-2px) !important;
-    box-shadow: 0 6px 16px var(--shadow-hover) !important;
 }
 
 /* Theme toggle */

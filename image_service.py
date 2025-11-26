@@ -277,11 +277,70 @@ def get_image_service() -> ImageService:
     return _image_service
 
 
-def generate_all_mystery_images(mystery) -> Dict[str, str]:
-    """Generate all images for a mystery (portraits + scenes) in parallel.
+def generate_portrait_on_demand(suspect, mystery_setting: str) -> Optional[str]:
+    """Generate a portrait for a suspect on-demand.
+    
+    Args:
+        suspect: Suspect object with name, role, personality, etc.
+        mystery_setting: The mystery setting for context
+        
+    Returns:
+        Path to generated image, or None on error
+    """
+    service = get_image_service()
+    if not service.is_available:
+        logger.warning("Image service not available for on-demand portrait generation")
+        return None
+    
+    logger.info(f"Generating portrait on-demand for {suspect.name}...")
+    path = service.generate_character_portrait(
+        name=suspect.name,
+        role=suspect.role,
+        personality=suspect.personality,
+        gender=getattr(suspect, "gender", None),
+        setting_context=mystery_setting,
+    )
+    
+    if path:
+        suspect.portrait_path = path
+        logger.info(f"✓ Generated portrait on-demand: {suspect.name}")
+    
+    return path
+
+
+def generate_title_card_on_demand(mystery) -> Optional[str]:
+    """Generate a title card for the mystery on-demand.
+    
+    Args:
+        mystery: Mystery object with victim and setting
+        
+    Returns:
+        Path to generated image, or None on error
+    """
+    service = get_image_service()
+    if not service.is_available:
+        logger.warning("Image service not available for title card generation")
+        return None
+    
+    logger.info("Generating title card on-demand...")
+    path = service.generate_title_card(
+        title=f"The Murder of {mystery.victim.name}",
+        setting=mystery.setting
+    )
+    
+    if path:
+        logger.info("✓ Generated title card on-demand")
+    
+    return path
+
+
+def generate_all_mystery_images(mystery, generate_portraits: bool = False, generate_title: bool = False) -> Dict[str, str]:
+    """Generate images for a mystery (now optional - mainly for backward compatibility).
 
     Args:
         mystery: Mystery object with suspects and setting
+        generate_portraits: If True, generate all suspect portraits (default: False for on-demand)
+        generate_title: If True, generate title card (default: False for on-demand)
 
     Returns:
         Dict mapping names/locations to image paths
@@ -293,37 +352,47 @@ def generate_all_mystery_images(mystery) -> Dict[str, str]:
         logger.info("Image generation not available, skipping")
         return images
 
-    # Prepare all image generation tasks
+    # Only generate if explicitly requested (for backward compatibility or special cases)
+    if not generate_portraits and not generate_title:
+        logger.info("Skipping startup image generation (using on-demand generation)")
+        return images
+
+    # Prepare image generation tasks based on flags
     tasks = []
     
-    # Add suspect portrait tasks
-    for suspect in mystery.suspects:
+    if generate_portraits:
+        # Add suspect portrait tasks
+        for suspect in mystery.suspects:
+            tasks.append((
+                suspect.name,
+                "portrait",
+                lambda s=suspect: service.generate_character_portrait(
+                    name=s.name,
+                    role=s.role,
+                    personality=s.personality,
+                    gender=getattr(s, "gender", None),
+                    setting_context=mystery.setting,
+                )
+            ))
+    
+    if generate_title:
+        # Add title card task
         tasks.append((
-            suspect.name,
-            "portrait",
-            lambda s=suspect: service.generate_character_portrait(
-                name=s.name,
-                role=s.role,
-                personality=s.personality,
-                gender=getattr(s, "gender", None),
-                setting_context=mystery.setting,
+            "_title",
+            "title",
+            lambda: service.generate_title_card(
+                title=f"The Murder of {mystery.victim.name}", 
+                setting=mystery.setting
             )
         ))
     
-    # Add title card task
-    tasks.append((
-        "_title",
-        "title",
-        lambda: service.generate_title_card(
-            title=f"The Murder of {mystery.victim.name}", 
-            setting=mystery.setting
-        )
-    ))
-    
-    # NOTE: Scene images are now generated on-demand when locations are searched
+    # NOTE: Scene images are always generated on-demand when locations are searched
     # This allows us to use the game response as context for better scene generation
 
-    # Generate all images in parallel
+    if not tasks:
+        return images
+
+    # Generate requested images in parallel
     logger.info(f"Generating {len(tasks)} images in parallel...")
     with ThreadPoolExecutor(max_workers=min(len(tasks), 10)) as executor:
         # Submit all tasks

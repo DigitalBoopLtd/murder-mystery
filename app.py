@@ -238,7 +238,7 @@ def create_app():
 
         # ====== TITLE BAR ======
         with gr.Row(elem_classes="title-bar"):
-            gr.HTML('<div class="game-title">🔍 MURDER MYSTERY</div>')
+            gr.HTML('<div class="game-title">🕵️‍♀️ MURDER MYSTERY</div>')
 
         # ====== STATUS BAR ======
         with gr.Row(elem_classes="status-bar"):
@@ -253,7 +253,7 @@ def create_app():
             with gr.Column(scale=1, min_width=200):
                 # Victim and Scene - first card
                 with gr.Group(elem_classes="side-panel"):
-                    gr.HTML('<div class="panel-title">🔍 Case Details</div>')
+                    gr.HTML('<div class="panel-title">🧳 Case Details</div>')
                     victim_scene_html = gr.HTML(
                         "<em>Start a game to see case details...</em>",
                         elem_classes="transcript-panel",
@@ -287,6 +287,11 @@ def create_app():
 
                 # Stage container
                 with gr.Group(elem_classes="stage-container"):
+                    
+                                        # Speaker name - hidden initially, will show when game starts
+                    speaker_html = gr.HTML(
+                        '<div class="speaker-name" style="display: none;"></div>'
+                    )
 
                     # Portrait display - larger size for better visibility
                     # Start with placeholder image
@@ -298,10 +303,6 @@ def create_app():
                         visible=True,  # Visible by default, will show image when set
                     )
 
-                    # Speaker name - hidden initially, will show when game starts
-                    speaker_html = gr.HTML(
-                        '<div class="speaker-name" style="display: none;"></div>'
-                    )
 
                     # Audio player with built-in subtitles support (Gradio handles word highlighting)
                     audio_output = gr.Audio(
@@ -321,7 +322,8 @@ def create_app():
                     voice_input = gr.Audio(
                         sources=["microphone"],
                         type="filepath",
-                        label="🎤 Voice",
+                        label=None,
+                        show_label=False,
                         scale=1,
                     )
                     text_input = gr.Textbox(
@@ -369,16 +371,25 @@ def create_app():
             # Debug logging
             logger.info(f"Retrieving images for session {sess_id}")
             logger.info(f"Available image keys: {list(images.keys())}")
-            logger.info(f"All mystery_images keys: {list(mystery_images.keys())}")
 
-            # Build portrait for game master (use title image if available)
+            # Try to get title image, generate on-demand if needed
             portrait = images.get("_title", None)
-            logger.info(f"Portrait path: {portrait}")
+            
+            # Generate title card on-demand if not available
+            if not portrait:
+                from image_service import generate_title_card_on_demand
+                state = get_or_create_state(sess_id)
+                if state.mystery:
+                    logger.info("Generating title card on-demand...")
+                    portrait = generate_title_card_on_demand(state.mystery)
+                    if portrait:
+                        images["_title"] = portrait
+                        mystery_images[sess_id] = images
+                        logger.info(f"Generated title card: {portrait}")
 
             if portrait:
                 # Ensure path is absolute and file exists
                 if not os.path.isabs(portrait):
-                    # If relative, make it absolute
                     portrait = os.path.abspath(portrait)
 
                 if not os.path.exists(portrait):
@@ -386,8 +397,6 @@ def create_app():
                     portrait = None
                 else:
                     logger.info(f"Portrait image file exists: {portrait}")
-            else:
-                logger.warning("No _title image found in images dict")
 
             # Use placeholder if no portrait available
             display_portrait = portrait if portrait else placeholder_img
