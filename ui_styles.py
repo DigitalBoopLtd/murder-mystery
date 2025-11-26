@@ -578,8 +578,8 @@ RETRO_CSS = """
 /* Since they're siblings, we position relative to stage-container */
 .stage-container:has(.portrait-image img[src]:not([src=""])) .block.audio-player {
     position: absolute !important;
-    /* Position at the same location as subtitle-display (bottom: 80px from stage-container) */
-    bottom: 80px !important; /* Match subtitle-display position */
+    /* Position at the same location as subtitle-display (bottom: 10px from stage-container) */
+    bottom: 10px !important; /* Match subtitle-display position */
     left: 50% !important;
     transform: translateX(-50%) !important; /* Center horizontally */
     width: 40% !important; /* Match subtitle-display width */
@@ -742,7 +742,7 @@ div[data-testid="waveform-controls"],
     padding: 0 !important;
     margin: 0 !important;
     position: absolute !important;
-    bottom: 80px !important;
+    bottom: 10px !important;
     left: 50% !important;
     transform: translateX(-50%) !important;
     width: 40% !important;
@@ -965,7 +965,7 @@ div[data-testid="waveform-controls"],
     min-height: 75px !important;
     z-index: 100 !important;
     position: absolute !important;
-    bottom: 80px !important;
+    bottom: 10px !important;
 }
 
 /* Center all text elements within subtitle containers and ensure good contrast */
