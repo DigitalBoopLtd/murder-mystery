@@ -212,7 +212,7 @@ def convert_alignment_to_subtitles(alignment_data: Optional[List[Dict]]) -> Opti
             if word.strip():  # Only add if word has content after stripping whitespace
                 subtitles.append({
                     "timestamp": [float(start), float(end)],
-                    "text": word  # Use word exactly as it appears in alignment data
+                        "text": word  # Use word exactly as it appears in alignment data
                 })
     
     logger.info(f"[Subtitles] Converted {len(alignment_data)} alignment words to {len(subtitles)} subtitles")

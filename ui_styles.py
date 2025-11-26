@@ -4,22 +4,25 @@ RETRO_CSS = """
 /* Import Roblox-style fonts */
 @import url('https://fonts.googleapis.com/css2?family=Source+Sans+Pro:wght@400;600;700&family=Inter:wght@400;500;600;700&display=swap');
 
-/* Root variables for theming - Roblox inspired palette */
+/* Root variables for theming - Amiga 90s dark mode palette */
 :root {
-    --bg-primary: #F7F7F7;
-    --bg-secondary: #FFFFFF;
-    --bg-panel: #F2F2F2;
-    --bg-card: #FFFFFF;
-    --text-primary: #1E1E1E;
-    --text-secondary: #6B6B6B;
-    --accent-blue: #00A2FF;
-    --accent-blue-dark: #0088CC;
-    --accent-green: #00C853;
-    --accent-red: #E53935;
-    --accent-orange: #FF6F00;
-    --border-color: #E0E0E0;
-    --shadow-color: rgba(0, 0, 0, 0.1);
-    --shadow-hover: rgba(0, 162, 255, 0.2);
+    --bg-primary: #000033;
+    --bg-secondary: #0a0a1a;
+    --bg-panel: #1a0033;
+    --bg-card: #0d0d26;
+    --text-primary: #FFFFFF;
+    --text-secondary: #CCCCFF;
+    --accent-blue: #00FFFF;
+    --accent-blue-dark: #00CCCC;
+    --accent-green: #00FF00;
+    --accent-red: #FF0088;
+    --accent-orange: #FF8800;
+    --accent-magenta: #FF00FF;
+    --accent-yellow: #FFFF00;
+    --border-color: #00FFFF;
+    --border-dark: #006666;
+    --shadow-color: rgba(0, 0, 0, 0.5);
+    --shadow-hover: rgba(0, 0, 0, 0.7);
 }
 
 /* Main container */
@@ -32,11 +35,13 @@ RETRO_CSS = """
 /* Title bar */
 .title-bar {
     background: var(--bg-secondary);
-    border-bottom: 2px solid var(--border-color);
+    border-bottom: 3px solid var(--accent-blue);
+    border-top: 2px solid var(--accent-blue);
     padding: 16px 24px;
     display: flex;
     justify-content: space-between;
     align-items: center;
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.5);
 }
 
 .game-title {
@@ -44,18 +49,20 @@ RETRO_CSS = """
     font-size: 20px;
     font-weight: 700;
     color: var(--accent-blue);
-    letter-spacing: -0.5px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
 }
 
 /* The Stage - main viewing area */
 .stage-container {
     background: var(--bg-card);
-    border: 1px solid var(--border-color);
-    border-radius: 12px;
+    border: 2px solid var(--border-color);
+    border-radius: 4px;
     margin: 16px;
     padding: 24px;
     min-height: 350px;
     position: relative !important;
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.6);
 }
 
 /* Make portrait image container relative for absolute positioning of subtitles overlay */
@@ -80,14 +87,17 @@ RETRO_CSS = """
 .speaker-name {
     font-family: 'Source Sans Pro', sans-serif;
     font-size: 24px;
-    font-weight: 600;
+    font-weight: 700;
     color: #FFFFFF !important;
     text-align: center;
     margin-bottom: 16px;
-    background: #00004d !important;
+    background: #000033 !important;
+    border: 2px solid var(--accent-blue) !important;
     padding: 12px 20px !important;
-    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5) !important;
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.5) !important;
     opacity: 1 !important;
+    text-transform: uppercase;
+    letter-spacing: 1px;
 }
 
 /* Caption display area */
@@ -101,10 +111,13 @@ RETRO_CSS = """
     min-height: 120px;
     max-height: 200px;
     overflow-y: auto;
+    background: var(--bg-card);
+    border: 1px solid var(--border-dark);
+    border-radius: 4px;
 }
 
 .caption-display em {
-    color: var(--text-secondary);
+    color: var(--accent-yellow);
 }
 
 /* Portrait display */
@@ -117,12 +130,13 @@ RETRO_CSS = """
     width: 100% !important;
     max-width: 100% !important;
     height: auto !important;
-    border: 2px solid var(--border-color);
-    border-radius: 12px;
+    border: 3px solid var(--accent-blue);
+    border-radius: 4px;
     display: block;
     margin: 0 auto;
     position: relative;
     margin-bottom: 0 !important; /* Remove margin so overlay can align properly */
+    box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.5);
 }
 
 /* Hide image component buttons fullscreen, share, download) - be very specific */
@@ -200,20 +214,22 @@ RETRO_CSS = """
 
 .suspect-button {
     background: var(--bg-card);
-    border: 1px solid var(--border-color);
-    border-radius: 8px;
+    border: 2px solid var(--border-dark);
+    border-radius: 4px;
     padding: 12px 16px;
     cursor: pointer;
     transition: all 0.2s ease;
     text-align: center;
     min-width: 140px;
     color: var(--text-primary);
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.5);
 }
 
 .suspect-button:hover {
     border-color: var(--accent-blue);
     transform: translateY(-2px);
-    background: #F8FBFF;
+    background: var(--bg-panel);
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.5);
 }
 
 .suspect-button img {
@@ -248,19 +264,25 @@ RETRO_CSS = """
 .action-button {
     font-family: 'Source Sans Pro', sans-serif !important;
     font-size: 14px !important;
-    font-weight: 600 !important;
-    background: var(--accent-blue) !important;
-    border: none !important;
-    color: #FFFFFF !important;
+    font-weight: 700 !important;
+    background: var(--bg-card) !important;
+    border: 2px solid var(--accent-blue) !important;
+    color: var(--accent-blue) !important;
     padding: 10px 20px !important;
-    border-radius: 6px !important;
+    border-radius: 4px !important;
     cursor: pointer !important;
     transition: all 0.2s ease !important;
+    text-transform: uppercase !important;
+    letter-spacing: 1px !important;
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.5) !important;
 }
 
 .action-button:hover {
-    background: var(--accent-blue-dark) !important;
+    background: var(--accent-blue) !important;
+    color: #000033 !important;
     transform: translateY(-1px) !important;
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.3) !important;
+    text-shadow: none !important;
 }
 
 /* Input area */
@@ -268,50 +290,80 @@ RETRO_CSS = """
     display: flex;
     gap: 12px;
     padding: 16px;
-    background: transparent;
-    border-top: 1px solid var(--border-color);
+    background: var(--bg-secondary);
+    border-top: 2px solid var(--accent-blue);
     align-items: center;
     justify-content: center;
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.5);
 }
 
 .text-input {
     font-family: 'Source Sans Pro', sans-serif !important;
     font-size: 14px !important;
     background: var(--bg-card) !important;
-    border: 1px solid var(--border-color) !important;
+    border: 2px solid var(--border-dark) !important;
     color: var(--text-primary) !important;
     padding: 10px 16px !important;
-    border-radius: 6px !important;
+    border-radius: 4px !important;
     flex-grow: 1 !important;
     max-width: 500px !important;
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.6) !important;
 }
 
 .text-input:focus {
     border-color: var(--accent-blue) !important;
     outline: none !important;
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.6) !important;
 }
 
 /* Side panel */
 .side-panel {
-    background: var(--bg-card);
-    border: 1px solid var(--border-color);
-    border-radius: 8px;
+    background: var(--bg-card) !important;
+    border: 2px solid var(--border-dark) !important;
+    border-radius: 4px;
     padding: 20px 24px !important;
     height: fit-content;
     margin-bottom: 12px;
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.6);
+}
+
+/* Force dark background on all Gradio elements within side panels */
+.side-panel,
+.side-panel .block,
+.side-panel .group,
+.side-panel .gr-group,
+.side-panel .gr-box,
+.side-panel .gr-block,
+.side-panel [class*="block"],
+.side-panel [class*="group"],
+.side-panel [class*="svelte"],
+.side-panel > div,
+.side-panel > div > div,
+.side-panel [style*="background"] {
+    background: var(--bg-card) !important;
+    background-color: var(--bg-card) !important;
+}
+
+/* Override any inline styles on side panel elements */
+.side-panel[style*="background"],
+.side-panel [style*="background"] {
+    background: var(--bg-card) !important;
+    background-color: var(--bg-card) !important;
 }
 
 /* Target Gradio's internal structure for side panels */
 /* Remove default padding from Gradio's internal containers */
 .side-panel .block,
-.side-panel .html-container,
 .side-panel .prose,
 .side-panel [class*="svelte"] {
     padding: 0 !important;
 }
 
+.side-panel .html-container {
+    padding: 8px !important;
+}
 /* Ensure the actual content container has padding */
-.side-panel .html-container,
+
 .side-panel .prose.gradio-style,
 .side-panel .prose {
     padding: 20px 24px !important;
@@ -326,7 +378,7 @@ RETRO_CSS = """
 .side-panel .panel-title {
     margin-top: 0;
     margin-bottom: 16px;
-    padding-top: 0;
+    padding: 8px !important;
 }
 
 /* Ensure content inside side panels has proper spacing */
@@ -341,12 +393,14 @@ RETRO_CSS = """
 .panel-title {
     font-family: 'Source Sans Pro', sans-serif;
     font-size: 16px;
-    font-weight: 600;
+    font-weight: 700;
     color: var(--accent-blue);
-    border-bottom: 2px solid var(--border-color);
-    padding-bottom: 12px;
+    border-bottom: 2px solid var(--accent-blue);
+    padding: 8px;
     margin-bottom: 16px;
     margin-top: 0;
+    text-transform: uppercase;
+    letter-spacing: 1px;
 }
 
 .clue-item {
@@ -356,8 +410,9 @@ RETRO_CSS = """
     padding: 8px 12px;
     border-left: 3px solid var(--accent-blue);
     margin-bottom: 6px;
-    background: #F8FBFF;
+    background: var(--bg-panel);
     border-radius: 4px;
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.5);
 }
 
 .location-item {
@@ -377,12 +432,13 @@ RETRO_CSS = """
 
 /* Status bar */
 .status-bar {
-    background: var(--bg-card);
-    border-top: 1px solid var(--border-color);
+    background: var(--bg-secondary);
+    border-top: 2px solid var(--accent-blue);
     padding: 12px 24px;
     display: flex;
     justify-content: space-between;
     align-items: center;
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.5);
 }
 
 .accusations-display {
@@ -530,8 +586,9 @@ RETRO_CSS = """
 .block.audio-player .subtitle-display,
 .block.audio-player [data-testid="subtitle-display"],
 .block.audio-player [class*="subtitle"] {
-    background: #00004d !important;
-    background-color: #00004d !important;
+    background: #000033 !important;
+    background-color: #000033 !important;
+    border: 2px solid var(--accent-blue) !important;
 }
 
 /* Ensure subtitle-display is positioned absolutely to escape the block container */
@@ -1024,6 +1081,13 @@ div[data-testid="waveform-controls"],
     opacity: 0.9;
 }
 
+.html-container > div {
+    padding: 8px !important;
+}
+
+.block.transcript-panel {
+    padding: 8px !important;
+}
 /* Transcript panel */
 .transcript-panel {
     max-height: 300px;
@@ -1062,31 +1126,41 @@ div[data-testid="waveform-controls"],
     font-weight: 700;
     color: var(--accent-blue);
     margin-bottom: 16px;
+    text-transform: uppercase;
+    letter-spacing: 2px;
 }
 
 .splash-subtitle {
     font-family: 'Source Sans Pro', sans-serif;
     font-size: 16px;
-    color: var(--text-secondary);
+    color: var(--accent-yellow);
     margin-bottom: 32px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
 }
 
 .start-button {
     font-family: 'Source Sans Pro', sans-serif !important;
     font-size: 16px !important;
-    font-weight: 600 !important;
-    background: var(--accent-blue) !important;
-    border: none !important;
-    color: #FFFFFF !important;
+    font-weight: 700 !important;
+    background: var(--bg-card) !important;
+    border: 3px solid var(--accent-blue) !important;
+    color: var(--accent-blue) !important;
     padding: 14px 32px !important;
-    border-radius: 8px !important;
+    border-radius: 4px !important;
     cursor: pointer !important;
     transition: all 0.2s ease !important;
+    text-transform: uppercase !important;
+    letter-spacing: 2px !important;
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.5) !important;
 }
 
 .start-button:hover {
-    background: var(--accent-blue-dark) !important;
+    background: var(--accent-blue) !important;
+    color: #000033 !important;
     transform: translateY(-2px) !important;
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.3) !important;
+    text-shadow: none !important;
 }
 
 /* Start button container */
@@ -1102,13 +1176,15 @@ div[data-testid="waveform-controls"],
     font-family: 'Source Sans Pro', sans-serif;
     font-size: 14px;
     font-weight: 500;
-    color: var(--text-primary);
+    color: var(--accent-yellow);
     text-align: center;
     padding: 8px 16px;
     background: transparent;
     border-radius: 6px;
     min-height: 20px;
     display: block !important;
+    text-transform: uppercase;
+    letter-spacing: 1px;
 }
 
 /* Hide when empty */
@@ -1129,18 +1205,20 @@ div[data-testid="waveform-controls"],
     font-size: 13px !important;
     font-weight: 500 !important;
     background: var(--bg-card) !important;
-    border: 1px solid var(--border-color) !important;
+    border: 2px solid var(--border-dark) !important;
     color: var(--text-primary) !important;
     padding: 6px 12px !important;
-    border-radius: 6px !important;
+    border-radius: 4px !important;
     cursor: pointer !important;
     transition: all 0.2s ease !important;
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.5) !important;
 }
 
 .theme-toggle:hover {
     border-color: var(--accent-blue) !important;
     color: var(--accent-blue) !important;
-    background: #F8FBFF !important;
+    background: var(--bg-panel) !important;
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.5) !important;
 }
 
 /* Loading state */
@@ -1151,6 +1229,8 @@ div[data-testid="waveform-controls"],
     color: var(--accent-blue);
     text-align: center;
     animation: blink 1s infinite;
+    text-transform: uppercase;
+    letter-spacing: 1px;
 }
 
 @keyframes blink {
@@ -1162,6 +1242,36 @@ div[data-testid="waveform-controls"],
 .gradio-container {
     background: var(--bg-primary) !important;
     max-width: 100% !important;
+    color: var(--text-primary) !important;
+}
+
+/* Make all Gradio text light colored */
+.gradio-container,
+.gradio-container * {
+    color: var(--text-primary) !important;
+}
+
+/* Override Gradio's default light backgrounds */
+.gr-box,
+.gr-form,
+.gr-block,
+.gr-group,
+.block,
+.group,
+[class*="block"],
+[class*="group"] {
+    background: var(--bg-card) !important;
+    background-color: var(--bg-card) !important;
+    border-color: var(--border-dark) !important;
+    color: var(--text-primary) !important;
+}
+
+/* Specifically target Gradio group elements (used for cards) */
+.gr-group,
+.group,
+[class*="group"] {
+    background: var(--bg-card) !important;
+    background-color: var(--bg-card) !important;
 }
 
 .gr-button {
@@ -1170,8 +1280,9 @@ div[data-testid="waveform-controls"],
 
 .gr-box {
     background: var(--bg-card) !important;
-    border-color: var(--border-color) !important;
-    border-radius: 8px !important;
+    border-color: var(--border-dark) !important;
+    border-radius: 4px !important;
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.6) !important;
 }
 
 footer {
@@ -1203,11 +1314,13 @@ footer {
 
 /* Style the remaining status tracker with darker background for better text visibility */
 [data-testid="status-tracker"]:not(.translucent):not(.wrap.center) {
-    background: rgba(0, 0, 0, 0.85) !important;
+    background: rgba(0, 0, 51, 0.95) !important;
+    border: 2px solid var(--accent-blue) !important;
     backdrop-filter: blur(4px) !important;
-    border-radius: 8px !important;
+    border-radius: 4px !important;
     padding: 8px 16px !important;
     opacity: 1 !important;
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.6) !important;
 }
 
 /* Remove dark background from status tracker inside input-bar */
@@ -1220,12 +1333,14 @@ footer {
 [data-testid="status-tracker"]:not(.translucent):not(.wrap.center) .progress-text,
 [data-testid="status-tracker"]:not(.translucent):not(.wrap.center) .meta-text,
 [data-testid="status-tracker"]:not(.translucent):not(.wrap.center) .meta-text-center {
-    color: #FFFFFF !important;
-    font-weight: 600 !important;
+    color: var(--accent-yellow) !important;
+    font-weight: 700 !important;
     text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8) !important;
     opacity: 1 !important;
     visibility: visible !important;
     background: transparent !important;
+    text-transform: uppercase !important;
+    letter-spacing: 1px !important;
 }
 
 /* Ensure images and SVGs are not affected */

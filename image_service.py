@@ -169,7 +169,7 @@ No text, no words, no letters, no writing, no labels, no captions, no name tags.
                     logger.info(f"Trying model: {model}")
                     image = self.client.text_to_image(
                         prompt,
-                        model=model,
+                                model=model,
                         negative_prompt=negative_prompt,
                     )
                     logger.info(f"Successfully generated with {model}")
@@ -266,7 +266,7 @@ No text, no words, no letters, no writing, no labels, no captions, no name tags.
                     logger.info(f"Trying model: {model}")
                     image = self.client.text_to_image(
                         prompt,
-                        model=model,
+                                model=model,
                         negative_prompt=negative_prompt,
                     )
                     logger.info(f"Successfully generated with {model}")
@@ -343,7 +343,7 @@ Atmospheric scene only, no text overlay.
                     logger.info(f"Trying model: {model}")
                     image = self.client.text_to_image(
                         prompt,
-                        model=model,
+                                model=model,
                         negative_prompt=negative_prompt,
                     )
                     logger.info(f"Successfully generated with {model}")
