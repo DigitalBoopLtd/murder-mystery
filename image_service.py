@@ -30,7 +30,7 @@ No text, no words, no letters, no writing, no labels, no captions.
 """
 
 SCENE_ART_STYLE = """
-Style: 1990s point-and-click adventure game background art, like Monkey Island or Day of the Tentacle.
+Style: 1990s point-and-click adventure game background art.
 Painterly style, rich atmospheric colors, dramatic lighting, hand-painted look,
 vintage video game scene, detailed environment, moody and mysterious.
 Wide landscape composition suitable for a game background.
@@ -147,10 +147,11 @@ No text, no words, no letters, no writing, no labels, no captions, no name tags.
             logger.info(f"Generating portrait for {name}...")
             # Comprehensive negative prompt to prevent any text in images
             negative_prompt = (
-                "text, words, letters, writing, labels, captions, name tags, titles, signage, signs, "
-                "typography, subtitles, text overlay, watermark, logo, alphabet, characters, symbols, "
-                "numbers, digits, text on image, written text, printed text, handwritten text, "
-                "calligraphy, font, typeface, lettering, inscription, engraving, text banner, "
+                "text, words, letters, writing, labels, captions, "
+                "name tags, titles, signage, signs, typography, subtitles, "
+                "text overlay, watermark, logo, alphabet, symbols, "
+                "numbers, digits, text on image, written text, printed text, "
+                "handwritten text, calligraphy, font, typeface, lettering, "
                 "speech bubble text, comic text, subtitle text, caption text, title text, "
                 "nameplate, placard, signboard, billboard, poster text, label text, "
                 "badge text, tag text, watermark text, copyright text, signature text"
@@ -193,7 +194,11 @@ No text, no words, no letters, no writing, no labels, no captions, no name tags.
             return None
 
     def generate_scene(
-        self, location_name: str, setting_description: str, mood: str = "mysterious", context: Optional[str] = None
+        self,
+        location_name: str,
+        setting_description: str,
+        mood: str = "mysterious",
+        context: Optional[str] = None,
     ) -> Optional[str]:
         """Generate a scene/background image for a location.
 
@@ -228,7 +233,10 @@ No text, no words, no letters, no writing, no labels, no captions, no name tags.
                 prompt_parts.append(f"Context: {clean_context}")
         
         prompt_parts.append(SCENE_ART_STYLE)
-        prompt_parts.append("No text, no words, no letters, no writing, no labels, no captions, no signage, no signs.")
+        prompt_parts.append(
+            "No text, no words, no letters, no writing, no labels, "
+            "no captions, no signage, no signs."
+        )
         
         prompt = "\n".join(prompt_parts)
 
@@ -441,7 +449,9 @@ def generate_title_card_on_demand(mystery) -> Optional[str]:
     return path
 
 
-def generate_all_mystery_images(mystery, generate_portraits: bool = False, generate_title: bool = False) -> Dict[str, str]:
+def generate_all_mystery_images(
+    mystery, generate_portraits: bool = False, generate_title: bool = False
+) -> Dict[str, str]:
     """Generate images for a mystery (now optional - mainly for backward compatibility).
 
     Args:

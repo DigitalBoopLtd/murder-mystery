@@ -257,7 +257,8 @@ def text_to_speech_with_timestamps(
                     list(chars), list(starts), list(ends)
                 )
                 logger.info(
-                    f"[TTS] Extracted {len(word_timestamps)} word timestamps from {len(chars)} characters"
+                    "[TTS] Extracted %d word timestamps from %d chars",
+                    len(word_timestamps), len(chars)
                 )
             else:
                 logger.warning(

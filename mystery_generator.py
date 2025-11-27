@@ -3,6 +3,7 @@
 import os
 import re
 import json
+import random
 import logging
 from typing import Optional
 from langchain_openai import ChatOpenAI
@@ -13,6 +14,51 @@ from models import Mystery, MysteryPremise
 from voice_service import get_voice_service
 
 logger = logging.getLogger(__name__)
+
+
+# Diverse, tech/geek-friendly mystery settings
+SETTING_TYPES = [
+    "a luxury cruise ship in the middle of the ocean",
+    "a 1920s speakeasy during Prohibition",
+    "a remote ski lodge during a blizzard",
+    "a Hollywood movie studio in the 1950s",
+    "a space station orbiting Mars",
+    "a Las Vegas casino on New Year's Eve",
+    "a traveling circus in the 1930s",
+    "a prestigious university during finals week",
+    "a fashion week event in Paris",
+    "a tech billionaire's private island",
+    "an overnight train through Europe",
+    "a haunted theater on opening night",
+    "a submarine research vessel",
+    "a royal palace during a state dinner",
+    "an archaeological dig in Egypt",
+    "a jazz club in 1960s New Orleans",
+    "a mountain monastery",
+    "a luxury safari lodge in Africa",
+    "a vintage airplane during a transatlantic flight",
+    # Tech/geek-friendly additions
+    "a high-tech research lab during a power outage",
+    "a gaming convention during a major tournament",
+    "a Silicon Valley startup's launch party",
+    "a hacker conference in Las Vegas",
+    "a retro computing museum during a special exhibit",
+    "a space mission control center during a critical launch",
+    "a VR gaming arcade in Tokyo",
+    "a quantum computing facility during an experiment",
+    "a cyberpunk-themed nightclub in Neo-Tokyo",
+    "a robotics competition at MIT",
+    "a blockchain conference in Singapore",
+    "an AI research facility during a breakthrough announcement",
+    "a retro arcade bar during a high-score tournament",
+    "a sci-fi convention during a costume contest",
+    "a secret underground data center",
+    "a futuristic smart home during a system malfunction",
+    "a cyber security summit in Geneva",
+    "a game development studio during crunch time",
+    "a tech incubator during demo day",
+    "a virtual reality theme park",
+]
 
 
 def strip_markdown_json(message) -> str:
@@ -49,6 +95,9 @@ def strip_markdown_json(message) -> str:
 def generate_mystery_premise() -> MysteryPremise:
     """Generate a lightweight premise for fast startup."""
 
+    # Pick a random setting type to force variety
+    setting_type = random.choice(SETTING_TYPES)
+
     llm = ChatOpenAI(
         model="gpt-4o",
         temperature=0.8,
@@ -61,17 +110,20 @@ def generate_mystery_premise() -> MysteryPremise:
         [
             (
                 "system",
-                """You are a creative murder mystery writer.
+                """You are a creative murder mystery writer with a geeky sense of humor, writing for tech professionals who love AI, computer games, and clever puzzles.
 
 Generate a short premise for a murder mystery game as STRICT JSON only
 matching this schema:
 {format_instructions}
 
+IMPORTANT: The setting MUST be: {setting_type}
+Build the victim and scenario around this specific setting. Make it vivid, atmospheric, and engaging.
+
 Constraints:
-- setting: 1-2 sentences, vivid but concise
-- victim_name: single full name
+- setting: 1-2 sentences describing {setting_type}, vivid but concise. Include specific details that make it feel real.
+- victim_name: single full name appropriate for this setting
 - victim_background: 1-2 sentences about who they are and why someone
-  might want them dead
+  might want them dead. Make it interesting and fitting for the tech/geek audience.
 
 CRITICAL: Return ONLY valid JSON. Do NOT wrap it in markdown code blocks.
 Do NOT include any text before or after the JSON. Start with {{ and end with }}.""",
@@ -98,14 +150,19 @@ Do NOT include any text before or after the JSON. Start with {{ and end with }}.
                 except json.JSONDecodeError:
                     pass
             raise ValueError(
-                f"Invalid JSON for premise from LLM: {str(e)}\n\nReceived text:\n{text[:500]}"
-            )
+                f"Invalid JSON for premise from LLM: {e!s}\n\nReceived text:\n{text[:500]}"
+            ) from e
 
     validate_json = RunnableLambda(validate_and_parse_premise)
     chain = prompt | llm | strip_markdown | validate_json | parser
 
     logger.info("Generating mystery premise...")
-    premise = chain.invoke({"format_instructions": parser.get_format_instructions()})
+    premise = chain.invoke(
+        {
+            "format_instructions": parser.get_format_instructions(),
+            "setting_type": setting_type,
+        }
+    )
     logger.info(
         "Generated mystery premise: setting=%s, victim=%s",
         premise.setting,
@@ -147,12 +204,20 @@ Victim background: {premise.victim_background}
         [
             (
                 "system",
-                """You are a creative murder mystery writer. Generate a unique murder mystery scenario.
+                """You are a creative murder mystery writer with a geeky sense of humor, writing for tech professionals who love AI, computer games, and clever puzzles. Generate a UNIQUE murder mystery scenario.
 
 {premise_block}
 {format_instructions}
 
-Be creative with the setting - could be a mansion, cruise ship, theater, space station, casino, hotel etc.
+DIVERSITY REQUIREMENT: If no premise is provided, AVOID common tropes like Victorian mansions, country estates, or generic dinner parties. Instead, choose something unexpected and creative from these categories:
+- Transportation (trains, ships, planes, submarines, space stations)
+- Entertainment (theaters, circuses, film sets, casinos, gaming conventions)
+- Historical periods (1920s speakeasy, Wild West, Ancient Rome)
+- Exotic locations (safari lodge, archaeological dig, monastery)
+- Modern tech settings (research labs, hacker conferences, VR arcades, startup offices)
+- Sci-fi/futuristic (space stations, cyberpunk clubs, smart homes, quantum labs)
+
+TONE: Your audience appreciates clever references, subtle tech humor, and well-crafted puzzles. Make the mystery engaging and intellectually satisfying.
 
 Create an interesting victim with enemies, 4 distinct suspects with secrets and motives, and 5 clues that lead to solving the case. One suspect is the murderer. Include one red herring clue.
 
@@ -193,8 +258,8 @@ CRITICAL: Return ONLY valid JSON. Do NOT wrap it in markdown code blocks. Do NOT
                 except json.JSONDecodeError:
                     pass
             raise ValueError(
-                f"Invalid JSON from LLM: {str(e)}\n\nReceived text:\n{text[:500]}"
-            )
+                f"Invalid JSON from LLM: {e!s}\n\nReceived text:\n{text[:500]}"
+            ) from e
 
     validate_json = RunnableLambda(validate_and_parse_json)
     chain = prompt | llm | strip_markdown | validate_json | parser
@@ -255,32 +320,41 @@ def assign_voice_to_suspect(suspect, used_voice_ids: list = None) -> Optional[st
         }
 
         # Get available voices (will be cached after first call)
-        voices = voice_service.get_available_voices(english_only=True, default_only=True)
+        voices = voice_service.get_available_voices(
+            english_only=True, default_only=True
+        )
         if not voices:
             logger.warning("No voices available for assignment")
             return None
 
         # Match voice to suspect
-        voice = voice_service.match_voice_to_suspect(suspect_dict, voices, used_voice_ids)
+        voice = voice_service.match_voice_to_suspect(
+            suspect_dict, voices, used_voice_ids
+        )
         if voice:
             suspect.voice_id = voice.voice_id
-            logger.info(f"Assigned voice '{voice.name}' ({voice.voice_id}) to {suspect.name}")
+            logger.info(
+                "Assigned voice '%s' (%s) to %s",
+                voice.name,
+                voice.voice_id,
+                suspect.name,
+            )
             return voice.voice_id
         else:
-            logger.warning(f"Could not assign voice to {suspect.name}")
+            logger.warning("Could not assign voice to %s", suspect.name)
             return None
 
-    except Exception as e:
-        logger.error(f"Error assigning voice to {suspect.name}: {e}")
+    except Exception:
+        logger.exception("Error assigning voice to %s", suspect.name)
         return None
 
 
 def assign_voices_to_mystery(mystery: Mystery) -> Mystery:
     """Assign ElevenLabs voices to suspects based on their characteristics.
-    
+
     DEPRECATED: This function is kept for backward compatibility but is no longer
     called during game startup. Voices are now assigned on-demand.
-    
+
     Args:
         mystery: The generated mystery
 
@@ -315,12 +389,12 @@ def assign_voices_to_mystery(mystery: Mystery) -> Mystery:
         for suspect in mystery.suspects:
             if suspect.name in assignments:
                 suspect.voice_id = assignments[suspect.name]
-                logger.info(f"Assigned voice {suspect.voice_id} to {suspect.name}")
+                logger.info("Assigned voice %s to %s", suspect.voice_id, suspect.name)
 
         return mystery
 
-    except Exception as e:
-        logger.error(f"Error assigning voices: {e}")
+    except Exception:
+        logger.exception("Error assigning voices")
         return mystery
 
 

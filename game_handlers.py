@@ -100,47 +100,51 @@ system or background tasks. Stay purely in-world."""
         start_new_game.agent = create_game_master_agent()
 
     t2 = time.perf_counter()
-    response, speaker = process_message(
+    response, _speaker = process_message(
         start_new_game.agent,
-        "The player has just arrived. Welcome them briefly (2-3 sentences, max 50 words) with atmosphere, then ask what they'd like to do.",
+        (
+            "The player has just arrived. Welcome them briefly "
+            "(2-3 sentences, max 50 words) with atmosphere, "
+            "then ask what they'd like to do."
+        ),
         state.system_prompt,
         session_id,
         thread_id=session_id,
     )
     t3 = time.perf_counter()
-    logger.info(f"[PERF] First Game Master response took {t3 - t2:.2f}s")
+    logger.info("[PERF] First Game Master response took %.2fs", t3 - t2)
 
     # Initialize empty images dict - images will be generated on-demand
     mystery_images[session_id] = {}
-    
+
     # Optionally generate title card in background (non-blocking)
     # For now, we'll generate it on-demand when first needed
 
     # Generate audio (needs the response text)
-    logger.info(f"[GAME] Calling TTS for welcome message ({len(response)} chars)")
+    logger.info("[GAME] Calling TTS for welcome message (%d chars)", len(response))
     t4 = time.perf_counter()
     audio_path, alignment_data = text_to_speech(
         response, GAME_MASTER_VOICE_ID, speaker_name="Game Master"
     )
     t5 = time.perf_counter()
-    logger.info(f"[PERF] Welcome TTS (with timestamps) took {t5 - t4:.2f}s")
+    logger.info("[PERF] Welcome TTS (with timestamps) took %.2fs", t5 - t4)
 
     # Verify audio was generated
     if audio_path:
         if os.path.exists(audio_path):
             file_size = os.path.getsize(audio_path)
             logger.info(
-                f"[GAME] ✅ Audio generated: {audio_path} ({file_size} bytes)"
+                "[GAME] ✅ Audio generated: %s (%d bytes)", audio_path, file_size
             )
         else:
             logger.error(
-                f"[GAME] ❌ Audio path returned but file doesn't exist: {audio_path}"
+                "[GAME] ❌ Audio path returned but file doesn't exist: %s", audio_path
             )
     else:
         logger.error("[GAME] ❌ No audio path returned from TTS!")
 
     if alignment_data:
-        logger.info(f"[GAME] ✅ Got {len(alignment_data)} word timestamps")
+        logger.info("[GAME] ✅ Got %d word timestamps", len(alignment_data))
     else:
         logger.warning("[GAME] ⚠️ No alignment data (captions will use estimation)")
 
@@ -230,12 +234,13 @@ def process_player_action(
             if s.name == target:
                 suspect = s
                 break
-        
+
         if suspect and not suspect.voice_id:
-            logger.info(f"Assigning voice on-demand for suspect: {target}")
+            logger.info("Assigning voice on-demand for suspect: %s", target)
             # Get list of already-used voice IDs to avoid duplicates
             used_voice_ids = [
-                s.voice_id for s in state.mystery.suspects 
+                s.voice_id
+                for s in state.mystery.suspects
                 if s.voice_id and s.name != target
             ]
             assign_voice_to_suspect(suspect, used_voice_ids)
@@ -259,11 +264,16 @@ def process_player_action(
     # Handle empty or placeholder responses from the LLM
     empty_responses = ["", "Empty", "I'm processing your request", "No content"]
     if not response or response.strip() in empty_responses:
-        logger.warning(f"[GAME] LLM returned empty/placeholder response, generating fallback")
+        logger.warning(
+            "[GAME] LLM returned empty/placeholder response, generating fallback"
+        )
         # Generate a contextual fallback based on what the player asked
         message_lower = message.lower()
         if "search" in message_lower:
-            response = "You carefully examine the area, taking in every detail. The atmosphere is thick with tension as you search for clues."
+            response = (
+                "You carefully examine the area, taking in every detail. "
+                "The atmosphere is thick with tension as you search for clues."
+            )
         elif "talk" in message_lower or "speak" in message_lower:
             response = "You approach to have a conversation."
         else:
@@ -282,59 +292,65 @@ def process_player_action(
         audio_path_from_tool = match.group(1)
         # Remove the audio marker from the text
         clean_response = re.sub(audio_marker_pattern, "", response).strip()
-        logger.info(f"Extracted audio path from tool: {audio_path_from_tool}")
+        logger.info("Extracted audio path from tool: %s", audio_path_from_tool)
 
     # Generate portrait and assign voice on-demand if a suspect was talked to
     # (This handles cases where speaker is detected from custom messages)
     if speaker and speaker != "Game Master":
         session_images = mystery_images.get(session_id, {})
-        
+
         # Find the suspect in the mystery
         suspect = None
         for s in state.mystery.suspects:
             if s.name == speaker:
                 suspect = s
                 break
-        
+
         if suspect:
             # Assign voice on-demand if not already assigned
-            # (May have been assigned earlier for "talk" action, but check here too for custom messages)
+            # (May have been assigned earlier for "talk" action)
             if not suspect.voice_id:
-                logger.info(f"Assigning voice on-demand for suspect: {speaker}")
+                logger.info("Assigning voice on-demand for suspect: %s", speaker)
                 # Get list of already-used voice IDs to avoid duplicates
                 used_voice_ids = [
-                    s.voice_id for s in state.mystery.suspects 
+                    s.voice_id
+                    for s in state.mystery.suspects
                     if s.voice_id and s.name != speaker
                 ]
                 assign_voice_to_suspect(suspect, used_voice_ids)
-                # Note: System prompt was already generated, but voice_id will be available for next interaction
-            
+                # voice_id will be available for next interaction
+
             # Check if we need to generate this suspect's portrait
             if speaker not in session_images:
-                logger.info(f"Generating portrait on-demand for suspect: {speaker}")
+                logger.info("Generating portrait on-demand for suspect: %s", speaker)
                 portrait_path = generate_portrait_on_demand(
-                    suspect, 
-                    state.mystery.setting if state.mystery else ""
+                    suspect, state.mystery.setting if state.mystery else ""
                 )
                 if portrait_path:
                     # Store in mystery_images dict for this session
                     if session_id not in mystery_images:
                         mystery_images[session_id] = {}
                     mystery_images[session_id][speaker] = portrait_path
-                    logger.info(f"Generated and stored portrait for {speaker}: {portrait_path}")
+                    logger.info(
+                        "Generated and stored portrait for %s: %s",
+                        speaker,
+                        portrait_path,
+                    )
                 else:
-                    logger.warning(f"Failed to generate portrait for {speaker}")
+                    logger.warning("Failed to generate portrait for %s", speaker)
         else:
-            logger.warning(f"Suspect {speaker} not found in mystery for portrait/voice generation")
+            logger.warning(
+                "Suspect %s not found in mystery for portrait/voice generation", speaker
+            )
 
     # Generate scene image on-demand if a location was searched
     if actions.get("location_searched"):
         location = actions["location_searched"]
         session_images = mystery_images.get(session_id, {})
-        
+
         # Only generate if we don't already have this scene
         if location not in session_images:
-            logger.info(f"Generating scene image for location: {location}")
+            logger.info("Generating scene image for location: %s", location)
             service = get_image_service()
             if service and service.is_available:
                 # Use the response text as context for scene generation
@@ -352,10 +368,10 @@ def process_player_action(
                         mystery_images[session_id] = {}
                     mystery_images[session_id][location] = scene_path
                     logger.info(
-                        f"Generated and stored scene for {location}: {scene_path}"
+                        "Generated and stored scene for %s: %s", location, scene_path
                     )
                 else:
-                    logger.warning(f"Failed to generate scene for {location}")
+                    logger.warning("Failed to generate scene for %s", location)
             else:
                 logger.warning("Image service not available for scene generation")
 
@@ -374,13 +390,20 @@ def process_player_action(
         # Try to get alignment data from tool-generated audio
         audio_path = audio_path_from_tool
         from game_tools import get_audio_alignment_data
+
         alignment_data = get_audio_alignment_data(audio_path)
         if alignment_data:
-            logger.info(f"[GAME] Using audio from tool with {len(alignment_data)} word timestamps: {audio_path}")
+            logger.info(
+                "[GAME] Using audio from tool with %d word timestamps: %s",
+                len(alignment_data),
+                audio_path,
+            )
         else:
-            logger.info(f"[GAME] Using audio from tool (no alignment data): {audio_path}")
+            logger.info(
+                "[GAME] Using audio from tool (no alignment data): %s", audio_path
+            )
     else:
-        logger.info(f"[GAME] Calling TTS for response ({len(tts_text)} chars)")
+        logger.info("[GAME] Calling TTS for response (%d chars)", len(tts_text))
         audio_path, alignment_data = text_to_speech(
             tts_text, voice_id, speaker_name=speaker
         )
@@ -391,17 +414,18 @@ def process_player_action(
             if os.path.exists(audio_path):
                 file_size = os.path.getsize(audio_path)
                 logger.info(
-                    f"[GAME] ✅ Audio generated: {audio_path} ({file_size} bytes)"
+                    "[GAME] ✅ Audio generated: %s (%d bytes)", audio_path, file_size
                 )
             else:
                 logger.error(
-                    f"[GAME] ❌ Audio path returned but file doesn't exist: {audio_path}"
+                    "[GAME] ❌ Audio path returned but file doesn't exist: %s",
+                    audio_path,
                 )
         else:
             logger.error("[GAME] ❌ No audio path returned from TTS!")
 
         if alignment_data:
-            logger.info(f"[GAME] ✅ Got {len(alignment_data)} word timestamps")
+            logger.info("[GAME] ✅ Got %d word timestamps", len(alignment_data))
         else:
             logger.warning("[GAME] ⚠️ No alignment data")
 

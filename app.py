@@ -52,7 +52,7 @@ elevenlabs_client = None
 if os.getenv("ELEVENLABS_API_KEY") and ELEVENLABS_AVAILABLE:
     try:
         elevenlabs_client = ElevenLabs(api_key=os.getenv("ELEVENLABS_API_KEY"))
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         print(f"Warning: Failed to initialize ElevenLabs: {e}")
 
 # Game Master voice
@@ -73,7 +73,7 @@ init_game_handlers(game_states, mystery_images, GAME_MASTER_VOICE_ID)
 
 def create_favicon() -> str:
     """Create a female detective favicon for the browser tab.
-    
+
     Returns:
         Path to the favicon file
     """
@@ -81,48 +81,76 @@ def create_favicon() -> str:
     size = 32
     img = Image.new("RGB", (size, size), color="#2C3E50")
     draw = ImageDraw.Draw(img)
-    
+
     # Draw a simple female detective icon
     # Background circle
-    draw.ellipse([2, 2, size-2, size-2], fill="#34495E", outline="#1A252F", width=1)
-    
+    draw.ellipse([2, 2, size - 2, size - 2], fill="#34495E", outline="#1A252F", width=1)
+
     # Head (circle)
     head_size = 14
     head_x = (size - head_size) // 2
     head_y = 6
-    draw.ellipse([head_x, head_y, head_x + head_size, head_y + head_size], 
-                 fill="#FDB9B9", outline="#E8A5A5", width=1)
-    
+    draw.ellipse(
+        [head_x, head_y, head_x + head_size, head_y + head_size],
+        fill="#FDB9B9",
+        outline="#E8A5A5",
+        width=1,
+    )
+
     # Detective hat (fedora)
     hat_width = 18
     hat_x = (size - hat_width) // 2
     hat_y = 4
     # Hat brim
-    draw.ellipse([hat_x - 2, hat_y + 2, hat_x + hat_width + 2, hat_y + 6], 
-                 fill="#1A1A1A", outline="#000000", width=1)
+    draw.ellipse(
+        [hat_x - 2, hat_y + 2, hat_x + hat_width + 2, hat_y + 6],
+        fill="#1A1A1A",
+        outline="#000000",
+        width=1,
+    )
     # Hat crown
-    draw.ellipse([hat_x + 2, hat_y, hat_x + hat_width - 2, hat_y + 8], 
-                 fill="#2C2C2C", outline="#1A1A1A", width=1)
-    
+    draw.ellipse(
+        [hat_x + 2, hat_y, hat_x + hat_width - 2, hat_y + 8],
+        fill="#2C2C2C",
+        outline="#1A1A1A",
+        width=1,
+    )
+
     # Eyes (two small dots)
     eye_size = 2
     left_eye_x = head_x + 3
     right_eye_x = head_x + head_size - 5
     eye_y = head_y + 5
-    draw.ellipse([left_eye_x, eye_y, left_eye_x + eye_size, eye_y + eye_size], fill="#000000")
-    draw.ellipse([right_eye_x, eye_y, right_eye_x + eye_size, eye_y + eye_size], fill="#000000")
-    
+    draw.ellipse(
+        [left_eye_x, eye_y, left_eye_x + eye_size, eye_y + eye_size], fill="#000000"
+    )
+    draw.ellipse(
+        [right_eye_x, eye_y, right_eye_x + eye_size, eye_y + eye_size], fill="#000000"
+    )
+
     # Magnifying glass (detective tool)
     glass_x = size - 10
     glass_y = size - 10
     glass_size = 6
     # Glass circle
-    draw.ellipse([glass_x, glass_y, glass_x + glass_size, glass_y + glass_size], 
-                 fill=None, outline="#E8A5A5", width=2)
+    draw.ellipse(
+        [glass_x, glass_y, glass_x + glass_size, glass_y + glass_size],
+        fill=None,
+        outline="#E8A5A5",
+        width=2,
+    )
     # Handle
-    draw.line([glass_x + glass_size, glass_y + glass_size, glass_x + glass_size + 3, glass_y + glass_size + 3],
-              fill="#E8A5A5", width=2)
-    
+    draw.line(
+        [
+            glass_x + glass_size,
+            glass_y + glass_size,
+            glass_x + glass_size + 3,
+            glass_y + glass_size + 3,
+        ],
+        fill="#E8A5A5",
+        width=2,
+    )
+
     # Save as PNG (Gradio can use PNG as favicon)
     favicon_path = os.path.join(tempfile.gettempdir(), "murder_mystery_favicon.png")
     img.save(favicon_path)
@@ -152,12 +180,16 @@ def create_placeholder_image() -> str:
         font_paths = [
             f"/System/Library/Fonts/Supplemental/Arial{'Bold' if bold else ''}.ttf",
             "/System/Library/Fonts/Supplemental/Arial.ttf",
-            "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf" if bold else "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+            (
+                "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+                if bold
+                else "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+            ),
         ]
         for path in font_paths:
             try:
                 return ImageFont.truetype(path, size)
-            except:
+            except OSError:
                 continue
         return ImageFont.load_default()
 
@@ -187,13 +219,18 @@ def create_placeholder_image() -> str:
         ("*", "A body has been discovered...", red),
         ("?", "Four suspects. One killer.", white),
     ]
-    
+
     intro_y = 100
     for i, (symbol, text, color) in enumerate(intro_lines):
         full_text = f"[ {symbol} ]  {text}"
         bbox = draw.textbbox((0, 0), full_text, font=feature_font)
         width = bbox[2] - bbox[0]
-        draw.text(((500 - width) // 2, intro_y + (i * 32)), full_text, fill=color, font=feature_font)
+        draw.text(
+            ((500 - width) // 2, intro_y + (i * 32)),
+            full_text,
+            fill=color,
+            font=feature_font,
+        )
 
     # Decorative divider with diamond
     draw.line([(60, 175), (220, 175)], fill=dark_cyan, width=1)
@@ -211,19 +248,29 @@ def create_placeholder_image() -> str:
         (">", "Every mystery is unique"),
         (">", "Make your accusation!"),
     ]
-    
+
     features_y = 195
     line_height = 34
-    
+
     for i, (bullet, text) in enumerate(features):
         full_line = f"  {bullet}  {text}"
         bbox = draw.textbbox((0, 0), full_line, font=feature_font)
         width = bbox[2] - bbox[0]
         x = (500 - width) // 2
         # Draw bullet in cyan, text in white
-        draw.text((x, features_y + (i * line_height)), f"  {bullet}", fill=cyan, font=feature_font)
+        draw.text(
+            (x, features_y + (i * line_height)),
+            f"  {bullet}",
+            fill=cyan,
+            font=feature_font,
+        )
         text_x = x + draw.textbbox((0, 0), f"  {bullet}  ", font=feature_font)[2]
-        draw.text((text_x, features_y + (i * line_height)), text, fill=white, font=feature_font)
+        draw.text(
+            (text_x, features_y + (i * line_height)),
+            text,
+            fill=white,
+            font=feature_font,
+        )
 
     # Decorative divider
     draw.line([(60, 375), (220, 375)], fill=dark_cyan, width=1)
@@ -257,16 +304,18 @@ def create_placeholder_image() -> str:
     return placeholder_path
 
 
-def convert_alignment_to_subtitles(alignment_data: Optional[List[Dict]]) -> Optional[List[Dict]]:
+def convert_alignment_to_subtitles(
+    alignment_data: Optional[List[Dict]],
+) -> Optional[List[Dict]]:
     """Convert alignment_data format to Gradio subtitles format.
-    
+
     Args:
         alignment_data: List of dicts with 'word', 'start', 'end' keys from TTS alignment
-        
+
     Returns:
         List of dicts in format Gradio expects: [{"timestamp": [start, end], "text": str}, ...]
         or None if no alignment data
-        
+
     Note:
         Gradio expects 'timestamp' field as a list/tuple [start, end] and 'text' field for each subtitle.
         Uses alignment data words directly - they represent what was actually spoken in the audio.
@@ -275,7 +324,7 @@ def convert_alignment_to_subtitles(alignment_data: Optional[List[Dict]]) -> Opti
     if not alignment_data:
         logger.warning("[Subtitles] No alignment data provided")
         return None
-    
+
     # Gradio subtitles format: list of dicts with 'timestamp' (as [start, end]) and 'text' keys
     # Use alignment data words exactly as they are - they match what's spoken in the audio
     subtitles = []
@@ -283,18 +332,26 @@ def convert_alignment_to_subtitles(alignment_data: Optional[List[Dict]]) -> Opti
         word = word_data.get("word", "")
         start = word_data.get("start", 0.0)
         end = word_data.get("end", 0.0)
-        
+
         # Preserve the word as-is (don't strip - might remove important characters)
         # Only skip if completely empty
-        if word or word == "":  # Include even empty strings if they're in alignment (spaces/punctuation)
+        if (
+            word or word == ""
+        ):  # Include even empty strings if they're in alignment (spaces/punctuation)
             # But actually, skip truly empty strings to avoid issues
             if word.strip():  # Only add if word has content after stripping whitespace
-                subtitles.append({
-                    "timestamp": [float(start), float(end)],
-                        "text": word  # Use word exactly as it appears in alignment data
-                })
-    
-    logger.info(f"[Subtitles] Converted {len(alignment_data)} alignment words to {len(subtitles)} subtitles")
+                subtitles.append(
+                    {
+                        "timestamp": [float(start), float(end)],
+                        "text": word,  # Use word exactly as it appears in alignment data
+                    }
+                )
+
+    logger.info(
+        "[Subtitles] Converted %d alignment words to %d subtitles",
+        len(alignment_data),
+        len(subtitles),
+    )
     return subtitles if subtitles else None
 
 
@@ -305,19 +362,19 @@ def convert_alignment_to_subtitles(alignment_data: Optional[List[Dict]]) -> Opti
 
 def create_app():
     """Create the Gradio application."""
-    
+
     with gr.Blocks(title="Murder Mystery") as app:
 
         # Create and inject favicon
         favicon_path = create_favicon()
         # Convert favicon to base64 data URI for embedding
         with open(favicon_path, "rb") as f:
-            favicon_data = base64.b64encode(f.read()).decode('utf-8')
-        favicon_html = f'''
+            favicon_data = base64.b64encode(f.read()).decode("utf-8")
+        favicon_html = f"""
         <link rel="icon" type="image/png" href="data:image/png;base64,{favicon_data}">
         <link rel="shortcut icon" type="image/png" href="data:image/png;base64,{favicon_data}">
-        '''
-        
+        """
+
         # Inject CSS and favicon
         gr.HTML(f"<style>{RETRO_CSS}</style>{favicon_html}")
 
@@ -326,22 +383,30 @@ def create_app():
 
         # ====== TITLE BAR ======
         with gr.Row(elem_classes="title-bar"):
-            gr.HTML('<div class="game-title"><span class="detective-avatar">🕵️‍♀️</span> MURDER MYSTERY</div>')
+            gr.HTML(
+                '<div class="game-title"><span class="detective-avatar">🕵️‍♀️</span> MURDER MYSTERY</div>'
+            )
 
         # ====== MAIN LAYOUT ======
         with gr.Row(elem_classes="main-layout-row"):
 
             # === LEFT: SIDE PANEL ===
-            with gr.Column(scale=1, min_width=200, elem_classes="side-column side-column-left"):
+            with gr.Column(
+                scale=1, min_width=200, elem_classes="side-column side-column-left"
+            ):
                 # Victim and Scene - first card (open by default)
-                with gr.Accordion("🧳 CASE DETAILS", open=True, elem_classes="side-panel"):
+                with gr.Accordion(
+                    "🧳 CASE DETAILS", open=True, elem_classes="side-panel"
+                ):
                     victim_scene_html = gr.HTML(
                         "<em>Start a game to see case details...</em>",
                         elem_classes="transcript-panel",
                     )
 
                 # Suspects list - show who can be questioned (open by default)
-                with gr.Accordion("🎭 SUSPECTS", open=True, elem_classes="side-panel suspects-panel"):
+                with gr.Accordion(
+                    "🎭 SUSPECTS", open=True, elem_classes="side-panel suspects-panel"
+                ):
                     suspects_list_html = gr.HTML(
                         "<em>Start a game to see suspects...</em>",
                         elem_classes="transcript-panel suspects-list",
@@ -352,8 +417,8 @@ def create_app():
 
                 # Stage container
                 with gr.Group(elem_classes="stage-container"):
-                    
-                                        # Speaker name - hidden initially, will show when game starts
+
+                    # Speaker name - hidden initially, will show when game starts
                     speaker_html = gr.HTML(
                         '<div class="speaker-name" style="display: none;"></div>'
                     )
@@ -367,7 +432,6 @@ def create_app():
                         elem_classes="portrait-image",
                         visible=True,  # Visible by default, will show image when set
                     )
-
 
                     # Audio player with built-in subtitles support (Gradio handles word highlighting)
                     audio_output = gr.Audio(
@@ -394,19 +458,30 @@ def create_app():
                     )
 
             # === RIGHT: SIDE PANEL ===
-            with gr.Column(scale=1, min_width=200, elem_classes="side-column side-column-right"):
+            with gr.Column(
+                scale=1, min_width=200, elem_classes="side-column side-column-right"
+            ):
                 # Locations card (open by default)
                 with gr.Accordion("📍 LOCATIONS", open=True, elem_classes="side-panel"):
                     locations_html = gr.HTML("<em>Start a game...</em>")
 
                 # Clues card (open by default)
-                with gr.Accordion("🔎 CLUES FOUND", open=True, elem_classes="side-panel"):
+                with gr.Accordion(
+                    "🔎 CLUES FOUND", open=True, elem_classes="side-panel"
+                ):
                     clues_html = gr.HTML("<em>No clues yet...</em>")
 
                 # Accusations card (open by default)
-                with gr.Accordion("⚖️ ACCUSATIONS", open=True, elem_classes="side-panel"):
+                with gr.Accordion(
+                    "⚖️ ACCUSATIONS", open=True, elem_classes="side-panel"
+                ):
                     accusations_html = gr.HTML(
-                        '<div class="accusations-display">Accusations: <span class="accusations-label"><span class="accusations-pip"></span><span class="accusations-pip"></span><span class="accusations-pip"></span></span></div>'
+                        '<div class="accusations-display">Accusations: '
+                        '<span class="accusations-label">'
+                        '<span class="accusations-pip"></span>'
+                        '<span class="accusations-pip"></span>'
+                        '<span class="accusations-pip"></span>'
+                        "</span></div>"
                     )
 
         # Hidden timer for checking mystery completion (inactive by default)
@@ -452,32 +527,42 @@ def create_app():
             # Step 2: while generating the mystery (longest step)
             progress(0.5, desc="Creating your case file...")
             yield [
-                gr.update(), gr.update(), gr.update(), gr.update(), gr.update(),
-                gr.update(), gr.update(), gr.update(), gr.update(), gr.update(),
+                gr.update(),
+                gr.update(),
+                gr.update(),
+                gr.update(),
+                gr.update(),
+                gr.update(),
+                gr.update(),
+                gr.update(),
+                gr.update(),
+                gr.update(),
                 gr.update(),  # mystery_check_timer
             ]
-            
+
             state, response, audio_path, speaker, alignment_data = start_new_game(
                 sess_id
             )
 
             # Log what we got back
-            logger.info(f"[APP] on_start_game received:")
-            logger.info(f"[APP]   response: {len(response) if response else 0} chars")
-            logger.info(f"[APP]   audio_path: {audio_path}")
-            logger.info(f"[APP]   speaker: {speaker}")
+            logger.info("[APP] on_start_game received:")
+            logger.info("[APP]   response: %d chars", len(response) if response else 0)
+            logger.info("[APP]   audio_path: %s", audio_path)
+            logger.info("[APP]   speaker: %s", speaker)
             logger.info(
-                f"[APP]   alignment_data: {len(alignment_data) if alignment_data else 'None'} items"
+                "[APP]   alignment_data: %s items",
+                len(alignment_data) if alignment_data else "None",
             )
 
             # Verify audio file exists
             if audio_path:
                 if os.path.exists(audio_path):
                     logger.info(
-                        f"[APP] ✅ Audio file exists: {os.path.getsize(audio_path)} bytes"
+                        "[APP] ✅ Audio file exists: %d bytes",
+                        os.path.getsize(audio_path),
                     )
                 else:
-                    logger.error(f"[APP] ❌ Audio file NOT FOUND: {audio_path}")
+                    logger.error("[APP] ❌ Audio file NOT FOUND: %s", audio_path)
             else:
                 logger.error("[APP] ❌ No audio_path received!")
 
@@ -488,8 +573,8 @@ def create_app():
             images = mystery_images.get(sess_id, {})
 
             # Debug logging
-            logger.info(f"Retrieving images for session {sess_id}")
-            logger.info(f"Available image keys: {list(images.keys())}")
+            logger.info("Retrieving images for session %s", sess_id)
+            logger.info("Available image keys: %s", list(images.keys()))
 
             # Try to get cached opening scene image (if it was generated earlier)
             portrait = images.get("_opening_scene", None)
@@ -499,27 +584,30 @@ def create_app():
             if not portrait:
                 from image_service import generate_title_card_on_demand
                 from types import SimpleNamespace
+
                 state = get_or_create_state(sess_id)
-                
+
                 # Build a mystery-like object from either full mystery or premise
                 mystery_like = None
                 if state.mystery:
                     mystery_like = state.mystery
-                elif getattr(state, "premise_setting", None) and getattr(state, "premise_victim_name", None):
+                elif getattr(state, "premise_setting", None) and getattr(
+                    state, "premise_victim_name", None
+                ):
                     # Use premise data to build a minimal mystery-like object
                     victim_stub = SimpleNamespace(name=state.premise_victim_name)
                     mystery_like = SimpleNamespace(
                         victim=victim_stub,
                         setting=state.premise_setting,
                     )
-                
+
                 if mystery_like:
                     logger.info("Generating opening scene image for new mystery...")
                     portrait = generate_title_card_on_demand(mystery_like)
                     if portrait:
                         images["_opening_scene"] = portrait
                         mystery_images[sess_id] = images
-                        logger.info(f"Generated opening scene image: {portrait}")
+                        logger.info("Generated opening scene image: %s", portrait)
 
             if portrait:
                 # Ensure path is absolute and file exists
@@ -527,10 +615,12 @@ def create_app():
                     portrait = os.path.abspath(portrait)
 
                 if not os.path.exists(portrait):
-                    logger.warning(f"Opening scene image file does not exist: {portrait}")
+                    logger.warning(
+                        "Opening scene image file does not exist: %s", portrait
+                    )
                     portrait = None
                 else:
-                    logger.info(f"Opening scene image file exists: {portrait}")
+                    logger.info("Opening scene image file exists: %s", portrait)
 
             # Use placeholder if no opening scene is available
             display_portrait = portrait if portrait else placeholder_img
@@ -546,15 +636,14 @@ def create_app():
                 audio_update = gr.update(
                     value=audio_path,
                     subtitles=subtitles,
-                    autoplay=True  # Autoplay after user interaction
+                    autoplay=True,  # Autoplay after user interaction
                 )
 
             # Build victim/case HTML based on what we have (full mystery or premise)
             if state.mystery:
                 victim_html = format_victim_scene_html(state.mystery)
-            elif (
-                getattr(state, "premise_victim_name", None)
-                and getattr(state, "premise_setting", None)
+            elif getattr(state, "premise_victim_name", None) and getattr(
+                state, "premise_setting", None
             ):
                 # Use the fast premise if full mystery isn't ready yet
                 victim_html = f"""
@@ -574,7 +663,7 @@ def create_app():
             # Return initial results (mystery still loading in background)
             # The gr.Timer will handle updating the UI when mystery is ready
             progress(1.0, desc="Mystery started!")
-            
+
             yield [
                 # Speaker - show when game starts
                 f'<div class="speaker-name" style="padding: 16px 0 !important;">🗣️ {speaker}</div>',
@@ -607,27 +696,31 @@ def create_app():
             """Timer callback to check if full mystery is ready and update UI."""
             sess_id = _normalize_session_id(sess_id)
             state = get_or_create_state(sess_id)
-            
+
             if state.mystery is not None:
                 # Mystery is ready - update UI and stop timer
                 logger.info("[APP] Timer: Full mystery ready, updating UI panels")
                 return [
                     format_victim_scene_html(state.mystery),
-                    format_suspects_list_html(state.mystery, state.suspects_talked_to, loading=False),
-                    format_locations_html(state.mystery, state.searched_locations, loading=False),
+                    format_suspects_list_html(
+                        state.mystery, state.suspects_talked_to, loading=False
+                    ),
+                    format_locations_html(
+                        state.mystery, state.searched_locations, loading=False
+                    ),
                     gr.Timer(active=False),  # Stop the timer
                 ]
             else:
                 # Mystery still loading - keep timer active, no UI changes
                 return [
                     gr.update(),  # victim_scene_html - no change
-                    gr.update(),  # suspects_list_html - no change  
+                    gr.update(),  # suspects_list_html - no change
                     gr.update(),  # locations_html - no change
                     gr.Timer(active=True),  # Keep timer running
                 ]
 
-        def on_custom_message(message: str, sess_id: str):
-            """Handle free-form text input."""
+        def _on_custom_message(message: str, sess_id: str):
+            """Handle free-form text input (currently unused - voice only)."""
             sess_id = _normalize_session_id(sess_id)
             if not message.strip():
                 return [gr.update()] * 8
@@ -645,13 +738,15 @@ def create_app():
                 else set()
             )
 
-            response, audio_path, speaker, state, alignment_data = (
+            _response, audio_path, speaker, state, alignment_data = (
                 process_player_action("custom", "", message, sess_id)
             )
 
             # Refresh images dict after processing (in case new images were generated)
             images = mystery_images.get(sess_id, {})
-            logger.info(f"Available images for session {sess_id}: {list(images.keys())}")
+            logger.info(
+                "Available images for session %s: %s", sess_id, list(images.keys())
+            )
             placeholder_img = create_placeholder_image()
 
             # Determine image to display based on action type
@@ -673,24 +768,31 @@ def create_app():
             if speaker and speaker != "Game Master":
                 suspect_portrait = images.get(speaker, None)
                 if suspect_portrait:
-                    logger.info(f"✓ Found portrait for speaker {speaker}: {suspect_portrait}")
+                    logger.info(
+                        "✓ Found portrait for speaker %s: %s", speaker, suspect_portrait
+                    )
                     display_portrait = suspect_portrait
 
             # Priority 1: Check if a suspect was just talked to
             if not display_portrait and newly_talked_suspect:
                 suspect_name = list(newly_talked_suspect)[0]
-                logger.info(f"Looking for portrait for suspect: {suspect_name}")
+                logger.info("Looking for portrait for suspect: %s", suspect_name)
                 portrait = images.get(suspect_name, None)
                 if portrait:
-                    logger.info(f"✓ Found portrait for suspect {suspect_name}: {portrait}")
+                    logger.info(
+                        "✓ Found portrait for suspect %s: %s", suspect_name, portrait
+                    )
                     display_portrait = portrait
                 else:
-                    logger.warning(f"✗ No portrait found for suspect {suspect_name} in images dict")
+                    logger.warning(
+                        "✗ No portrait found for suspect %s in images dict",
+                        suspect_name,
+                    )
                     # Try to get it directly from mystery_images in case of timing issue
                     session_images = mystery_images.get(sess_id, {})
                     portrait = session_images.get(suspect_name, None)
                     if portrait:
-                        logger.info(f"✓ Found portrait in direct lookup: {portrait}")
+                        logger.info("✓ Found portrait in direct lookup: %s", portrait)
                         display_portrait = portrait
                         # Update images dict for next time
                         images[suspect_name] = portrait
@@ -700,7 +802,7 @@ def create_app():
                 location = list(newly_searched_location)[0]
                 scene_image = images.get(location, None)
                 if scene_image:
-                    logger.info(f"Displaying scene image for location: {location}")
+                    logger.info("Displaying scene image for location: %s", location)
                     display_portrait = scene_image
 
             # Priority 3: Fall back to opening scene image (Game Master)
@@ -720,7 +822,11 @@ def create_app():
 
             return [
                 f'<div class="speaker-name" style="padding: 16px 0 !important;">🗣️ {speaker}</div>',
-                gr.update(value=audio_path, subtitles=subtitles) if audio_path else None,
+                (
+                    gr.update(value=audio_path, subtitles=subtitles)
+                    if audio_path
+                    else None
+                ),
                 gr.update(value=display_portrait, visible=True),
                 format_victim_scene_html(state.mystery),
                 format_suspects_list_html(state.mystery, state.suspects_talked_to),
@@ -740,7 +846,9 @@ def create_app():
 
             # Check if game has been started
             state_before = get_or_create_state(sess_id)
-            if not state_before.mystery and not getattr(state_before, 'premise_setting', None):
+            if not state_before.mystery and not getattr(
+                state_before, "premise_setting", None
+            ):
                 logger.warning("[APP] Voice input received but no game started yet")
                 return [gr.update()] * 8
 
@@ -756,20 +864,24 @@ def create_app():
                 if state_before.suspects_talked_to
                 else set()
             )
-            logger.info(f"[APP] Before processing - suspects talked to: {previous_suspects}")
+            logger.info(
+                "[APP] Before processing - suspects talked to: %s", previous_suspects
+            )
 
             # Transcribe
             text = transcribe_audio(audio_path)
             if not text.strip():
                 return [gr.update()] * 8
 
-            response, audio_resp, speaker, state, alignment_data = (
+            _response, audio_resp, speaker, state, alignment_data = (
                 process_player_action("custom", "", text, sess_id)
             )
 
             # Refresh images dict after processing (in case new images were generated)
             images = mystery_images.get(sess_id, {})
-            logger.info(f"Available images for session {sess_id}: {list(images.keys())}")
+            logger.info(
+                "Available images for session %s: %s", sess_id, list(images.keys())
+            )
             placeholder_img = create_placeholder_image()
 
             # Determine image to display based on action type
@@ -791,24 +903,31 @@ def create_app():
             if speaker and speaker != "Game Master":
                 suspect_portrait = images.get(speaker, None)
                 if suspect_portrait:
-                    logger.info(f"✓ Found portrait for speaker {speaker}: {suspect_portrait}")
+                    logger.info(
+                        "✓ Found portrait for speaker %s: %s", speaker, suspect_portrait
+                    )
                     display_portrait = suspect_portrait
 
             # Priority 1: Check if a suspect was just talked to
             if not display_portrait and newly_talked_suspect:
                 suspect_name = list(newly_talked_suspect)[0]
-                logger.info(f"Looking for portrait for suspect: {suspect_name}")
+                logger.info("Looking for portrait for suspect: %s", suspect_name)
                 portrait = images.get(suspect_name, None)
                 if portrait:
-                    logger.info(f"✓ Found portrait for suspect {suspect_name}: {portrait}")
+                    logger.info(
+                        "✓ Found portrait for suspect %s: %s", suspect_name, portrait
+                    )
                     display_portrait = portrait
                 else:
-                    logger.warning(f"✗ No portrait found for suspect {suspect_name} in images dict")
+                    logger.warning(
+                        "✗ No portrait found for suspect %s in images dict",
+                        suspect_name,
+                    )
                     # Try to get it directly from mystery_images in case of timing issue
                     session_images = mystery_images.get(sess_id, {})
                     portrait = session_images.get(suspect_name, None)
                     if portrait:
-                        logger.info(f"✓ Found portrait in direct lookup: {portrait}")
+                        logger.info("✓ Found portrait in direct lookup: %s", portrait)
                         display_portrait = portrait
                         # Update images dict for next time
                         images[suspect_name] = portrait
@@ -818,7 +937,7 @@ def create_app():
                 location = list(newly_searched_location)[0]
                 scene_image = images.get(location, None)
                 if scene_image:
-                    logger.info(f"Displaying scene image for location: {location}")
+                    logger.info("Displaying scene image for location: %s", location)
                     display_portrait = scene_image
 
             # Priority 3: Fall back to opening scene image (Game Master)
@@ -838,7 +957,11 @@ def create_app():
 
             return [
                 f'<div class="speaker-name" style="padding: 16px 0 !important;">🗣️ {speaker}</div>',
-                gr.update(value=audio_resp, subtitles=subtitles) if audio_resp else None,
+                (
+                    gr.update(value=audio_resp, subtitles=subtitles)
+                    if audio_resp
+                    else None
+                ),
                 gr.update(value=display_portrait, visible=True),
                 format_victim_scene_html(state.mystery),
                 format_suspects_list_html(state.mystery, state.suspects_talked_to),
@@ -885,7 +1008,7 @@ def create_app():
         )
 
         # Timer to check for mystery completion and update UI
-        mystery_check_timer.tick(
+        getattr(mystery_check_timer, "tick")(
             fn=check_mystery_ready,
             inputs=[session_id],
             outputs=[

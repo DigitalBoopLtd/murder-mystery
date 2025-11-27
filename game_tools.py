@@ -4,13 +4,12 @@ import logging
 import os
 import re
 import tempfile
-import uuid
 from typing import Annotated, Optional
 from langchain_core.tools import tool
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
-from voice_service import get_voice_service
 from tts_service import text_to_speech
+
 logger = logging.getLogger(__name__)
 
 # Directory for storing generated audio files
@@ -27,7 +26,7 @@ def interrogate_suspect(
     suspect_name: Annotated[str, "The name of the suspect to interrogate"],
     suspect_profile: Annotated[
         str,
-        "Full profile including role, personality, alibi, secret, clue_they_know, and isGuilty status",
+        "Full profile: role, personality, alibi, secret, clue_they_know, isGuilty",
     ],
     player_question: Annotated[
         str, "The player's question or statement to the suspect"
@@ -43,13 +42,13 @@ def interrogate_suspect(
     4) Optionally, their voice_id for audio generation.
     The tool needs all this info to roleplay correctly."""
 
-    logger.info(f"\n{'='*60}")
-    logger.info(f"INTERROGATE_SUSPECT TOOL CALLED")
-    logger.info(f"Suspect: {suspect_name}")
-    logger.info(f"Player question: {player_question}")
-    logger.info(f"Profile length: {len(suspect_profile)} chars")
-    logger.info(f"Voice ID: {voice_id}")
-    logger.info(f"{'='*60}\n")
+    logger.info("\n%s", "=" * 60)
+    logger.info("INTERROGATE_SUSPECT TOOL CALLED")
+    logger.info("Suspect: %s", suspect_name)
+    logger.info("Player question: %s", player_question)
+    logger.info("Profile length: %d chars", len(suspect_profile))
+    logger.info("Voice ID: %s", voice_id)
+    logger.info("%s\n", "=" * 60)
 
     llm = ChatOpenAI(
         model="gpt-4o", temperature=0.8, api_key=os.getenv("OPENAI_API_KEY")
@@ -101,23 +100,32 @@ Suspect Profile:
 
 def enhance_text_for_speech(text: str) -> str:
     """Enhance text with capitalization for emphasis for more engaging speech.
-    
+
     Uses capitalization and punctuation cues instead of emotional tags
     (which would be spoken). Voice settings handle emotional delivery.
     """
     enhanced = text
-    
+
     # Don't add emotional tags - they get spoken! Instead, use:
     # - Capitalization for emphasis
     # - Voice settings for emotional delivery
     # - Natural text cues (exclamation marks, question marks)
-    
+
     # Capitalize key dramatic words for emphasis
-    dramatic_words = ['suddenly', 'immediately', 'finally', 'quickly', 'carefully', 'silently', 'slowly', 'quietly']
+    dramatic_words = [
+        "suddenly",
+        "immediately",
+        "finally",
+        "quickly",
+        "carefully",
+        "silently",
+        "slowly",
+        "quietly",
+    ]
     for word in dramatic_words:
-        pattern = r'\b' + re.escape(word) + r'\b'
+        pattern = r"\b" + re.escape(word) + r"\b"
         enhanced = re.sub(pattern, word.upper(), enhanced, flags=re.IGNORECASE)
-    
+
     return enhanced
 
 
@@ -138,40 +146,45 @@ def generate_suspect_audio(
     try:
         # Enhance text with capitalization for emphasis
         enhanced_text = enhance_text_for_speech(text)
-        
+
         # Use tts_service to get audio with alignment data
         audio_path, alignment_data = text_to_speech(
-            enhanced_text, 
-            voice_id=voice_id, 
-            speaker_name=suspect_name
+            enhanced_text, voice_id=voice_id, speaker_name=suspect_name
         )
 
         if audio_path:
             # Store alignment data in cache for retrieval later
-            global _audio_alignment_cache
             _audio_alignment_cache[audio_path] = alignment_data
             if alignment_data:
-                logger.info(f"Generated audio with {len(alignment_data)} word timestamps for {suspect_name}: {audio_path}")
+                logger.info(
+                    "Generated audio with %d word timestamps for %s: %s",
+                    len(alignment_data),
+                    suspect_name,
+                    audio_path,
+                )
             else:
-                logger.info(f"Generated audio (no alignment data) for {suspect_name}: {audio_path}")
+                logger.info(
+                    "Generated audio (no alignment data) for %s: %s",
+                    suspect_name,
+                    audio_path,
+                )
             return audio_path
         else:
-            logger.warning(f"Failed to generate audio for {suspect_name}")
+            logger.warning("Failed to generate audio for %s", suspect_name)
             return None
 
     except Exception as e:
-        logger.error(f"Error generating audio: {e}")
+        logger.error("Error generating audio: %s", e)
         return None
 
 
 def get_audio_alignment_data(audio_path: str) -> Optional[list]:
     """Get alignment data for a tool-generated audio file.
-    
+
     Args:
         audio_path: Path to audio file
-        
+
     Returns:
         Alignment data list or None if not found
     """
-    global _audio_alignment_cache
     return _audio_alignment_cache.get(audio_path)

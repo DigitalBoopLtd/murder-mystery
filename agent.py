@@ -32,7 +32,9 @@ def create_game_master_agent():
     """Create a game master agent with tools."""
     # max_tokens=600 allows for richer narrative responses when searching locations
     # while still keeping responses reasonably short for voice narration
-    llm = ChatOpenAI(model="gpt-5.1", max_tokens=600, api_key=os.getenv("OPENAI_API_KEY"))
+    llm = ChatOpenAI(
+        model="gpt-5.1", max_tokens=600, api_key=os.getenv("OPENAI_API_KEY")
+    )
 
     # Bind tools to the LLM
     tools = [interrogate_suspect]
@@ -47,14 +49,14 @@ def create_game_master_agent():
         if messages:
             last_msg = messages[-1]
             if hasattr(last_msg, "tool_calls") and last_msg.tool_calls:
-                logger.info(f"Executing {len(last_msg.tool_calls)} tool call(s)")
+                logger.info("Executing %d tool call(s)", len(last_msg.tool_calls))
                 for i, tc in enumerate(last_msg.tool_calls):
                     tool_name = (
                         tc.get("name", "unknown")
                         if isinstance(tc, dict)
                         else getattr(tc, "name", "unknown")
                     )
-                    logger.info(f"  Tool {i+1}: {tool_name}")
+                    logger.info("  Tool %d: %s", i + 1, tool_name)
         result = base_tool_node.invoke(state)
         logger.info("=== TOOL NODE COMPLETE ===")
         return result
@@ -64,19 +66,21 @@ def create_game_master_agent():
         messages = state["messages"]
         system_prompt = state.get("system_prompt", "")
 
-        logger.info(f"=== AGENT NODE CALLED ===")
-        logger.info(f"Number of messages in state: {len(messages)}")
+        logger.info("=== AGENT NODE CALLED ===")
+        logger.info("Number of messages in state: %d", len(messages))
 
         # Log message types for debugging
         msg_types = [type(m).__name__ for m in messages]
-        logger.info(f"Message types: {msg_types}")
+        logger.info("Message types: %s", msg_types)
 
         # SPECIAL CASE: If we only have a ToolMessage, LangGraph didn't preserve full history.
         # The ToolMessage contains the suspect's response, so return it directly.
         if len(messages) == 1 and isinstance(messages[0], ToolMessage):
-            tool_content = getattr(messages[0], 'content', str(messages[0]))
-            logger.warning("Only ToolMessage in state - returning tool result directly as response")
-            logger.info(f"Tool result content: {tool_content[:100]}...")
+            tool_content = getattr(messages[0], "content", str(messages[0]))
+            logger.warning(
+                "Only ToolMessage in state - returning tool result directly as response"
+            )
+            logger.info("Tool result content: %s...", tool_content[:100])
             return {"messages": [AIMessage(content=tool_content)]}
 
         # Ensure system message is present
@@ -86,7 +90,8 @@ def create_game_master_agent():
                 logger.info("Added system message from state")
 
         # Build clean message list for LLM
-        # OpenAI requires: SystemMessage, then alternating Human/AI, with ToolMessages after AI tool_calls
+        # OpenAI requires: SystemMessage, then alternating Human/AI,
+        # with ToolMessages after AI tool_calls
         filtered_messages = []
 
         for i, msg in enumerate(messages):
@@ -97,10 +102,14 @@ def create_game_master_agent():
                 has_matching_ai = False
                 matching_ai_msg = None
 
-                # Look backwards through all messages to find the AIMessage with matching tool_call
+                # Look backwards to find the AIMessage with matching tool_call
                 for j in range(i - 1, -1, -1):
                     prev_msg = messages[j]
-                    if isinstance(prev_msg, AIMessage) and hasattr(prev_msg, "tool_calls") and prev_msg.tool_calls:
+                    if (
+                        isinstance(prev_msg, AIMessage)
+                        and hasattr(prev_msg, "tool_calls")
+                        and prev_msg.tool_calls
+                    ):
                         for tc in prev_msg.tool_calls:
                             tc_id = (
                                 tc.get("id")
@@ -117,61 +126,70 @@ def create_game_master_agent():
                 if has_matching_ai:
                     # Make sure the AIMessage is in filtered_messages before adding ToolMessage
                     if matching_ai_msg not in filtered_messages:
-                        # Find where to insert it - should be after the last HumanMessage before this ToolMessage
+                        # Insert after the last HumanMessage before this ToolMessage
                         insert_idx = len(filtered_messages)
                         for k in range(len(filtered_messages) - 1, -1, -1):
                             if isinstance(filtered_messages[k], HumanMessage):
                                 insert_idx = k + 1
                                 break
                         filtered_messages.insert(insert_idx, matching_ai_msg)
-                        logger.info(f"Inserted matching AIMessage with tool_calls before ToolMessage")
+                        logger.info(
+                            "Inserted matching AIMessage with tool_calls before ToolMessage"
+                        )
                     filtered_messages.append(msg)
                 else:
-                    # CRITICAL FIX: If we can't find the matching AIMessage, LangGraph only passed
-                    # the ToolMessage without full history. Since we can't create a valid AIMessage
-                    # with tool_calls (the structure is complex), we'll convert the ToolMessage
-                    # content to a format the LLM can understand - as if the suspect responded directly.
+                    # CRITICAL FIX: If we can't find the matching AIMessage, LangGraph
+                    # only passed the ToolMessage without full history. Convert it to
+                    # a HumanMessage format the LLM can understand.
                     logger.warning(
-                        f"ToolMessage with id {tool_call_id} has no matching AIMessage - converting to HumanMessage format"
+                        "ToolMessage id %s has no matching AIMessage - converting",
+                        tool_call_id,
                     )
                     # Extract the tool result content
-                    tool_content = getattr(msg, 'content', str(msg))
+                    tool_content = getattr(msg, "content", str(msg))
                     # Convert to a HumanMessage that represents the suspect's response
                     # This allows the LLM to process it without needing the full tool call sequence
                     suspect_response = HumanMessage(
                         content=f"[The suspect responds:] {tool_content}"
                     )
                     filtered_messages.append(suspect_response)
-                    logger.info(f"Converted ToolMessage to HumanMessage format: {tool_content[:80]}...")
+                    logger.info(
+                        "Converted ToolMessage to HumanMessage format: %s...",
+                        tool_content[:80],
+                    )
             else:
                 filtered_messages.append(msg)
 
-        logger.info(f"Invoking LLM with {len(filtered_messages)} messages")
+        logger.info("Invoking LLM with %d messages", len(filtered_messages))
 
         # Log what we're sending
         for i, msg in enumerate(filtered_messages):
             if isinstance(msg, SystemMessage):
-                logger.info(f"  [{i}] System: {msg.content[:100]}...")
+                logger.info("  [%d] System: %s...", i, msg.content[:100])
             elif isinstance(msg, HumanMessage):
-                logger.info(f"  [{i}] Human: {msg.content[:100]}...")
+                logger.info("  [%d] Human: %s...", i, msg.content[:100])
             elif isinstance(msg, AIMessage):
                 has_tools = hasattr(msg, "tool_calls") and msg.tool_calls
                 logger.info(
-                    f"  [{i}] AI: {msg.content[:80] if msg.content else '(no content)'} | tools={has_tools}"
+                    "  [%d] AI: %s | tools=%s",
+                    i,
+                    msg.content[:80] if msg.content else "(no content)",
+                    has_tools,
                 )
             elif isinstance(msg, ToolMessage):
-                logger.info(f"  [{i}] Tool: {msg.content[:80]}...")
+                logger.info("  [%d] Tool: %s...", i, msg.content[:80])
 
         response = llm_with_tools.invoke(filtered_messages)
 
         # Log the response
         if isinstance(response, AIMessage):
             logger.info(
-                f"LLM Response: {response.content[:200] if response.content else 'No content'}..."
+                "LLM Response: %s...",
+                response.content[:200] if response.content else "No content",
             )
             if hasattr(response, "tool_calls") and response.tool_calls:
                 logger.info(
-                    f"  -> LLM wants to call {len(response.tool_calls)} tool(s)"
+                    "  -> LLM wants to call %d tool(s)", len(response.tool_calls)
                 )
                 for i, tc in enumerate(response.tool_calls):
                     tool_name = (
@@ -179,7 +197,7 @@ def create_game_master_agent():
                         if isinstance(tc, dict)
                         else getattr(tc, "name", "unknown")
                     )
-                    logger.info(f"    Tool {i+1}: {tool_name}")
+                    logger.info("    Tool %d: %s", i + 1, tool_name)
             else:
                 logger.info("  -> LLM did NOT request any tool calls")
 
@@ -197,7 +215,8 @@ def create_game_master_agent():
         # If the last message has tool calls, route to tools
         if hasattr(last_message, "tool_calls") and last_message.tool_calls:
             logger.info(
-                f"=== ROUTING: Routing to TOOLS (found {len(last_message.tool_calls)} tool call(s)) ==="
+                "=== ROUTING: Routing to TOOLS (found %d tool call(s)) ===",
+                len(last_message.tool_calls),
             )
             return "tools"
         # Otherwise, we're done
@@ -231,20 +250,20 @@ def process_message(
     agent_app,
     user_message: str,
     system_prompt: str,
-    session_id: str,
+    _session_id: str,
     thread_id: str = "default",
 ) -> tuple[str, str | None]:
     """Process a user message through the agent.
-    
+
     Returns:
         Tuple of (response, speaker_name) where speaker_name is:
         - Suspect name if response is from a suspect
         - None if response is from Game Master
     """
-    logger.info(f"\n{'='*60}")
-    logger.info(f"PROCESSING MESSAGE: {user_message}")
-    logger.info(f"Thread ID: {thread_id}")
-    logger.info(f"{'='*60}")
+    logger.info("\n%s", "=" * 60)
+    logger.info("PROCESSING MESSAGE: %s", user_message)
+    logger.info("Thread ID: %s", thread_id)
+    logger.info("%s", "=" * 60)
 
     config = {"configurable": {"thread_id": thread_id}}
 
@@ -255,7 +274,7 @@ def process_message(
         if checkpoint_state.values
         else []
     )
-    logger.info(f"Loaded {len(current_messages)} messages from checkpoint")
+    logger.info("Loaded %d messages from checkpoint", len(current_messages))
 
     # Update or add system message
     system_msg_index = None
@@ -273,7 +292,7 @@ def process_message(
 
     # Add user message
     current_messages.append(HumanMessage(content=user_message))
-    logger.info(f"Added user message. Total messages: {len(current_messages)}")
+    logger.info("Added user message. Total messages: %d", len(current_messages))
 
     # IMPORTANT: Pass the FULL message history, not just new messages
     # This ensures the agent always has complete context
@@ -282,7 +301,7 @@ def process_message(
     # Store a reference to the checkpoint state before streaming
     # This allows us to look up the original AIMessage with tool_calls
     # even after the agent node processes the ToolMessage
-    pre_stream_checkpoint = agent_app.get_state(config)
+    _ = agent_app.get_state(config)  # Reference for potential future use
 
     # Stream through the graph
     logger.info("Starting agent stream with FULL state...")
@@ -296,13 +315,18 @@ def process_message(
             messages = event["messages"]
             if messages:
                 last_msg = messages[-1]
-                
+
                 # Check for AIMessage with tool_calls (before tool node executes)
                 # This is when we can extract the suspect name
                 if isinstance(last_msg, AIMessage):
-                    has_tool_calls = hasattr(last_msg, "tool_calls") and last_msg.tool_calls
+                    has_tool_calls = (
+                        hasattr(last_msg, "tool_calls") and last_msg.tool_calls
+                    )
                     if has_tool_calls:
-                        logger.info(f"Got AIMessage with {len(last_msg.tool_calls)} tool call(s)")
+                        logger.info(
+                            "Got AIMessage with %d tool call(s)",
+                            len(last_msg.tool_calls),
+                        )
                         for tc in last_msg.tool_calls:
                             tool_name = (
                                 tc.get("name", "")
@@ -317,26 +341,38 @@ def process_message(
                                 )
                                 if isinstance(args, dict):
                                     suspect_name = args.get("suspect_name")
-                                    logger.info(f"Extracted suspect name from AIMessage with tool_calls: {suspect_name}")
+                                    logger.info(
+                                        "Extracted suspect name from AIMessage with tool_calls: %s",
+                                        suspect_name,
+                                    )
                                     break
                     elif last_msg.content:
                         # AIMessage with content but no tool_calls - this is a final response
                         final_response = last_msg.content
-                        logger.info(f"Got AI response: {final_response[:100]}...")
+                        logger.info("Got AI response: %s...", final_response[:100])
                 elif isinstance(last_msg, ToolMessage):
                     # Store tool message content and extract suspect name
-                    tool_message_content = getattr(last_msg, 'content', str(last_msg))
+                    tool_message_content = getattr(last_msg, "content", str(last_msg))
                     tool_call_id = getattr(last_msg, "tool_call_id", None)
-                    logger.info(f"Got ToolMessage: {tool_message_content[:100]}...")
-                    logger.info(f"ToolMessage has tool_call_id: {tool_call_id}")
-                    logger.info(f"Event messages array has {len(messages)} messages")
-                    
+                    logger.info("Got ToolMessage: %s...", tool_message_content[:100])
+                    logger.info("ToolMessage has tool_call_id: %s", tool_call_id)
+                    logger.info("Event messages array has %d messages", len(messages))
+
                     # Look backwards in current event messages
                     for i, msg in enumerate(reversed(messages)):
                         msg_type = type(msg).__name__
-                        logger.info(f"  Checking message {len(messages)-i-1}: {msg_type}")
-                        if isinstance(msg, AIMessage) and hasattr(msg, "tool_calls") and msg.tool_calls:
-                            logger.info(f"  Found AIMessage with {len(msg.tool_calls)} tool call(s)")
+                        logger.info(
+                            "  Checking message %d: %s", len(messages) - i - 1, msg_type
+                        )
+                        if (
+                            isinstance(msg, AIMessage)
+                            and hasattr(msg, "tool_calls")
+                            and msg.tool_calls
+                        ):
+                            logger.info(
+                                "  Found AIMessage with %d tool call(s)",
+                                len(msg.tool_calls),
+                            )
                             for tc in msg.tool_calls:
                                 tool_name = (
                                     tc.get("name", "")
@@ -348,7 +384,7 @@ def process_message(
                                     if isinstance(tc, dict)
                                     else getattr(tc, "id", None)
                                 )
-                                logger.info(f"    Tool: {tool_name}, ID: {tc_id}")
+                                logger.info("    Tool: %s, ID: %s", tool_name, tc_id)
                                 if tool_name == "interrogate_suspect":
                                     # Extract suspect_name from tool call arguments
                                     args = (
@@ -358,30 +394,47 @@ def process_message(
                                     )
                                     if isinstance(args, dict):
                                         suspect_name = args.get("suspect_name")
-                                        logger.info(f"Found suspect response from: {suspect_name}")
+                                        logger.info(
+                                            "Found suspect response from: %s",
+                                            suspect_name,
+                                        )
                                     break
                             if suspect_name:
                                 break
-                    
-                    # If we didn't find it in the event messages, check the checkpoint state right now
+
+                    # If not found in event messages, check checkpoint state
                     # This handles the case where LangGraph only passed the ToolMessage
-                    # The checkpoint state right after tool execution should have the full history
                     if not suspect_name:
-                        logger.info(f"Suspect name not found in event messages, checking checkpoint state after tool execution...")
-                        logger.info(f"Looking for tool_call_id: {tool_call_id}")
-                        # Get the checkpoint state right after tool node executed (before agent node processes it)
+                        logger.info(
+                            "Suspect name not found, checking checkpoint state..."
+                        )
+                        logger.info("Looking for tool_call_id: %s", tool_call_id)
+                        # Get checkpoint state after tool node executed
                         post_tool_checkpoint = agent_app.get_state(config)
                         if post_tool_checkpoint.values:
-                            checkpoint_messages = post_tool_checkpoint.values.get("messages", [])
-                            logger.info(f"Checking {len(checkpoint_messages)} messages in post-tool checkpoint")
+                            checkpoint_messages = post_tool_checkpoint.values.get(
+                                "messages", []
+                            )
+                            logger.info(
+                                "Checking %d messages in post-tool checkpoint",
+                                len(checkpoint_messages),
+                            )
                             # Log all message types for debugging
                             msg_types = [type(m).__name__ for m in checkpoint_messages]
-                            logger.info(f"Message types in checkpoint: {msg_types}")
-                            
+                            logger.info("Message types in checkpoint: %s", msg_types)
+
                             # Look for AIMessage with tool_calls that matches this ToolMessage
                             for i, msg in enumerate(reversed(checkpoint_messages)):
-                                if isinstance(msg, AIMessage) and hasattr(msg, "tool_calls") and msg.tool_calls:
-                                    logger.info(f"Found AIMessage at index {len(checkpoint_messages)-i-1} with {len(msg.tool_calls)} tool call(s)")
+                                if (
+                                    isinstance(msg, AIMessage)
+                                    and hasattr(msg, "tool_calls")
+                                    and msg.tool_calls
+                                ):
+                                    logger.info(
+                                        "Found AIMessage at index %d with %d tool call(s)",
+                                        len(checkpoint_messages) - i - 1,
+                                        len(msg.tool_calls),
+                                    )
                                     for j, tc in enumerate(msg.tool_calls):
                                         tc_id = (
                                             tc.get("id")
@@ -393,12 +446,17 @@ def process_message(
                                             if isinstance(tc, dict)
                                             else getattr(tc, "name", "")
                                         )
-                                        logger.info(f"  Tool call {j}: {tool_name}, ID: {tc_id}")
-                                        
-                                        # Match by tool_call_id if available, otherwise check tool name
+                                        logger.info(
+                                            "  Tool call %d: %s, ID: %s",
+                                            j,
+                                            tool_name,
+                                            tc_id,
+                                        )
+
+                                        # Match by tool_call_id if available
                                         if tool_call_id:
                                             if tc_id == tool_call_id:
-                                                logger.info(f"  Matched tool_call_id!")
+                                                logger.info("  Matched tool_call_id!")
                                                 if tool_name == "interrogate_suspect":
                                                     args = (
                                                         tc.get("args", {})
@@ -406,8 +464,13 @@ def process_message(
                                                         else getattr(tc, "args", {})
                                                     )
                                                     if isinstance(args, dict):
-                                                        suspect_name = args.get("suspect_name")
-                                                        logger.info(f"Found suspect name in checkpoint: {suspect_name}")
+                                                        suspect_name = args.get(
+                                                            "suspect_name"
+                                                        )
+                                                        logger.info(
+                                                            "Found suspect name in checkpoint: %s",
+                                                            suspect_name,
+                                                        )
                                                         break
                                         elif tool_name == "interrogate_suspect":
                                             # If no tool_call_id, just check tool name
@@ -418,7 +481,10 @@ def process_message(
                                             )
                                             if isinstance(args, dict):
                                                 suspect_name = args.get("suspect_name")
-                                                logger.info(f"Found suspect name in checkpoint (no tool_call_id match): {suspect_name}")
+                                                logger.info(
+                                                    "Found suspect in checkpoint: %s",
+                                                    suspect_name,
+                                                )
                                                 break
                                     if suspect_name:
                                         break
@@ -433,11 +499,15 @@ def process_message(
             for msg in reversed(messages):
                 if isinstance(msg, ToolMessage):
                     if not tool_message_content:
-                        tool_message_content = getattr(msg, 'content', str(msg))
+                        tool_message_content = getattr(msg, "content", str(msg))
                     # Extract suspect name from preceding AIMessage with tool_calls
                     tool_call_id = getattr(msg, "tool_call_id", None)
-                    for prev_msg in reversed(messages[:messages.index(msg)]):
-                        if isinstance(prev_msg, AIMessage) and hasattr(prev_msg, "tool_calls") and prev_msg.tool_calls:
+                    for prev_msg in reversed(messages[: messages.index(msg)]):
+                        if (
+                            isinstance(prev_msg, AIMessage)
+                            and hasattr(prev_msg, "tool_calls")
+                            and prev_msg.tool_calls
+                        ):
                             for tc in prev_msg.tool_calls:
                                 # Match by tool_call_id if available
                                 if tool_call_id:
@@ -448,7 +518,7 @@ def process_message(
                                     )
                                     if tc_id != tool_call_id:
                                         continue
-                                
+
                                 tool_name = (
                                     tc.get("name", "")
                                     if isinstance(tc, dict)
@@ -460,25 +530,31 @@ def process_message(
                                         if isinstance(tc, dict)
                                         else getattr(tc, "args", {})
                                     )
-                                    if isinstance(args, dict):
-                                        suspect_name = args.get("suspect_name")
-                                        logger.info(f"Found suspect name in final state: {suspect_name}")
-                                    break
+                                if isinstance(args, dict):
+                                    suspect_name = args.get("suspect_name")
+                                    logger.info(
+                                        "Found suspect name in final state: %s",
+                                        suspect_name,
+                                    )
+                                break
                             if suspect_name:
                                 break
                 if isinstance(msg, AIMessage) and msg.content and not final_response:
                     final_response = msg.content
                     logger.info(
-                        f"Got response from final state: {final_response[:100]}..."
+                        "Got response from final state: %s...", final_response[:100]
                     )
-            
+
             # Also check for ToolMessage in final state if we still don't have a response
             if not final_response:
                 for msg in reversed(messages):
                     if isinstance(msg, ToolMessage):
-                        tool_content = getattr(msg, 'content', str(msg))
+                        tool_content = getattr(msg, "content", str(msg))
                         final_response = tool_content
-                        logger.info(f"Using ToolMessage from final state: {tool_content[:100]}...")
+                        logger.info(
+                            "Using ToolMessage from final state: %s...",
+                            tool_content[:100],
+                        )
                         break
 
     # Determine if the response is directly from the suspect
@@ -488,7 +564,7 @@ def process_message(
         # Check if final response matches or contains the tool message content
         tool_content_clean = tool_message_content.strip()
         final_response_clean = final_response.strip()
-        
+
         if final_response_clean == tool_content_clean:
             # Direct suspect response - use it as-is
             logger.info("Final response matches tool message - direct suspect response")
@@ -496,18 +572,22 @@ def process_message(
         elif tool_content_clean in final_response_clean:
             # Tool message is embedded - likely Game Master is narrating, but suspect spoke
             # We'll still attribute to suspect if the tool content is a significant part
-            logger.info("Tool message embedded in final response - suspect spoke, Game Master narrating")
+            logger.info(
+                "Tool message embedded in final response - suspect spoke, Game Master narrating"
+            )
             # Keep suspect_name to show suspect is speaking
         else:
             # Final response is completely different - Game Master is narrating
-            logger.info("Final response differs from tool message - Game Master narration")
+            logger.info(
+                "Final response differs from tool message - Game Master narration"
+            )
             suspect_name = None
     elif not suspect_name:
         # No tool call found - this is Game Master narration
         logger.info("No suspect tool call found - Game Master response")
 
-    logger.info(f"Returning: {final_response[:200] if final_response else 'Empty'}...")
-    logger.info(f"Speaker: {suspect_name or 'Game Master'}")
-    logger.info(f"{'='*60}\n")
+    logger.info("Returning: %s...", final_response[:200] if final_response else "Empty")
+    logger.info("Speaker: %s", suspect_name or "Game Master")
+    logger.info("%s\n", "=" * 60)
 
     return (final_response or "I'm processing your request...", suspect_name)

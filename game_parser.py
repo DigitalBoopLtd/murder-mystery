@@ -321,18 +321,22 @@ def find_clues_in_response_for_location(
             for i in range(len(desc_words) - 1):
                 phrase = " ".join(desc_words[i : i + 2])
                 # Only use 2-word phrases if they're meaningful (not common words)
-                if len(phrase) > 8 and phrase not in ["the", "a", "an", "of", "in", "at", "on", "to", "for", "with", "from", "about"]:
+                common = ["the", "a", "an", "of", "in", "at", "on", "to", "for"]
+                if len(phrase) > 8 and phrase not in common:
                     if phrase in response_lower:
                         phrase_found = True
                         break
 
         # Extract key words (nouns, names, important terms) for flexible matching
-        # This is used for both the 2-key-word check and the discovery-language fallback
+        stop_words = {
+            "the", "a", "an", "of", "in", "at", "on", "to", "for",
+            "with", "from", "about", "that", "this", "these", "those",
+        }
         key_words = [
             word.strip(".,!?;:'\"")
             for word in desc_words
-            if len(word.strip(".,!?;:'\"")) > 4  # Longer words are more likely to be key entities
-            and word.strip(".,!?;:'\"") not in ["the", "a", "an", "of", "in", "at", "on", "to", "for", "with", "from", "about", "that", "this", "these", "those"]
+            if len(word.strip(".,!?;:'\"")) > 4
+            and word.strip(".,!?;:'\"") not in stop_words
         ]
 
         # Also check for key entities: extract important nouns/names from clue description
@@ -344,13 +348,17 @@ def find_clues_in_response_for_location(
             if matches >= 2:
                 phrase_found = True
 
-        # If still no match, but response suggests discovery, try even more lenient matching
+        # If still no match, but response suggests discovery, try lenient matching
         if not phrase_found and len(key_words) >= 1:
-            discovery_keywords = ["find", "discover", "notice", "see", "read", "unfold", "letter", "document", "note", "paper", "envelope", "evidence", "threat", "threatening", "accus", "court", "inheritance"]
-            has_discovery_language = any(keyword in response_lower for keyword in discovery_keywords)
+            discovery_keywords = [
+                "find", "discover", "notice", "see", "read", "unfold",
+                "letter", "document", "note", "paper", "envelope",
+                "evidence", "threat", "threatening", "accus", "court",
+            ]
+            has_discovery = any(kw in response_lower for kw in discovery_keywords)
             
-            if has_discovery_language:
-                # If response has discovery language and at least 1 key word matches, consider it found
+            if has_discovery:
+                # Discovery language + 1 key word = found
                 matches = sum(1 for word in key_words if word in response_lower)
                 if matches >= 1:
                     phrase_found = True
