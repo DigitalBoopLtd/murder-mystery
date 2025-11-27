@@ -415,8 +415,8 @@ def create_app():
             # === CENTER: MAIN STAGE ===
             with gr.Column(scale=3, elem_classes="center-column"):
 
-                # Stage container
-                with gr.Group(elem_classes="stage-container"):
+                # Stage container (styled via .center-column > .gr-group in CSS)
+                with gr.Group():
 
                     # Speaker name - hidden initially, will show when game starts
                     speaker_html = gr.HTML(

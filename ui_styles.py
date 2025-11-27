@@ -42,7 +42,7 @@ RETRO_CSS = """
 
 .game-title {
     font-family: 'Courier New', 'Courier', 'Monaco', 'Menlo', monospace;
-    font-size: 32px;
+    font-size: 18px;
     font-weight: 700;
     color: var(--accent-blue);
     letter-spacing: 3px;
@@ -58,8 +58,8 @@ RETRO_CSS = """
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 70px;
-    height: 70px;
+    width: 32px;
+    height: 32px;
     border-radius: 50%;
     border: 2px solid var(--accent-blue);
     background: #1a1a2a;
@@ -94,35 +94,106 @@ RETRO_CSS = """
         order: 3 !important;
         width: 100% !important;
     }
+    
+    /* Ensure CRT effect works on smaller screens */
+    .center-column > .gr-group {
+        position: relative !important;
+        overflow: hidden !important;
+    }
+    
+    .center-column > .gr-group::before,
+    .center-column > .gr-group::after {
+        position: absolute !important;
+        top: 0 !important;
+        left: 0 !important;
+        right: 0 !important;
+        bottom: 0 !important;
+    }
 }
 
-/* The Stage - main viewing area */
-.stage-container {
-    background: var(--bg-card);
-    /* Match retro cyan/teal border styling used by status tracker */
-    border: 3px solid var(--border-color);
-    border-radius: 4px;
-    margin: 16px;
-    padding: 24px;
-    min-height: 350px;
+/* The Stage - CRT Monitor Effect */
+/* Target the gr-group inside center-column since elem_classes doesn't work on gr.Group */
+/* Using both direct child and descendant selectors for robustness */
+.center-column > .gr-group,
+.center-column .gr-group {
+    background: #050510 !important;
+    border: 4px solid var(--border-color) !important;
+    padding: 24px !important;
+    min-height: 350px !important;
     position: relative !important;
-    /* Inner dark outline for double-border effect */
-    outline: 2px solid var(--border-dark);
-    outline-offset: 0;
-    /* Subtle inset border, no heavy drop shadow */
-    box-shadow: inset 0 0 0 2px var(--border-dark);
+    overflow: hidden !important;
+    
+    /* CRT screen curvature effect */
+    border-radius: 16px / 12px !important;
+    
+    /* Phosphor glow */
+    box-shadow: 
+        inset 0 0 100px rgba(0, 255, 255, 0.1),
+        inset 0 0 30px rgba(0, 255, 255, 0.05),
+        0 0 40px rgba(0, 255, 255, 0.3),
+        0 0 80px rgba(0, 255, 255, 0.1) !important;
+}
+
+/* Center content inside the CRT stage */
+.center-column > .gr-group > .styler,
+.center-column .gr-group > .styler {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    width: 100% !important;
+}
+
+/* Scanlines overlay */
+.center-column > .gr-group::before,
+.center-column .gr-group::before {
+    content: '' !important;
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    background: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 1px,
+        rgba(0, 0, 0, 0.3) 1px,
+        rgba(0, 0, 0, 0.3) 2px
+    ) !important;
+    pointer-events: none !important;
+    z-index: 1000 !important;
+    border-radius: inherit !important;
+}
+
+/* Screen vignette */
+.center-column > .gr-group::after,
+.center-column .gr-group::after {
+    content: '' !important;
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    background: radial-gradient(
+        ellipse at center,
+        transparent 0%,
+        transparent 60%,
+        rgba(0, 0, 0, 0.4) 100%
+    ) !important;
+    pointer-events: none !important;
+    z-index: 999 !important;
+    border-radius: inherit !important;
 }
 
 /* Make portrait image container relative for absolute positioning of subtitles overlay */
-.stage-container > div:has(.portrait-image),
-.stage-container > div:has(img.portrait-image) {
+.center-column > .gr-group > div:has(.portrait-image),
+.center-column > .gr-group > div:has(img.portrait-image) {
     position: relative !important;
 }
 
 /* Ensure portrait image itself is relative and visible */
-.stage-container .portrait-image,
-.stage-container img[class*="portrait"],
-.stage-container .portrait-image img {
+.center-column > .gr-group .portrait-image,
+.center-column > .gr-group img[class*="portrait"],
+.center-column > .gr-group .portrait-image img {
     position: relative !important;
     display: block !important;
     visibility: visible !important;
@@ -197,7 +268,7 @@ img, .image-frame { border-radius: 4px !important; }
 /* Make the portrait image container a positioning context for overlay */
 .portrait-image,
 .portrait-image > div,
-.stage-container > div:has(.portrait-image) {
+.center-column > .gr-group > div:has(.portrait-image) {
     position: relative !important;
 }
 
@@ -566,19 +637,19 @@ img, .image-frame { border-radius: 4px !important; }
 
 /* Overlay subtitles on portrait image */
 /* Make the portrait image container relative for positioning context */
-.stage-container > div:has(.portrait-image),
-.stage-container > div:has(img.portrait-image) {
+.center-column > .gr-group > div:has(.portrait-image),
+.center-column > .gr-group > div:has(img.portrait-image) {
     position: relative !important;
 }
 
 /* Position audio player to overlay the bottom of the portrait image */
 /* Gradio wraps components in .block divs, so we need to target those */
-.stage-container:has(.portrait-image img[src]:not([src=""])) {
+.center-column > .gr-group:has(.portrait-image img[src]:not([src=""])) {
     position: relative !important;
 }
 
 /* Make the portrait-image block a positioning context and remove bottom spacing */
-.stage-container:has(.portrait-image img[src]:not([src=""])) .block.portrait-image {
+.center-column > .gr-group:has(.portrait-image img[src]:not([src=""])) .block.portrait-image {
     position: relative !important;
     margin-bottom: 0 !important;
     padding-bottom: 0 !important;
@@ -587,8 +658,8 @@ img, .image-frame { border-radius: 4px !important; }
 }
 
 /* Ensure portrait images are always visible */
-.stage-container:has(.portrait-image img[src]:not([src=""])) .block.portrait-image img,
-.stage-container:has(.portrait-image img[src]:not([src=""])) .portrait-image img {
+.center-column > .gr-group:has(.portrait-image img[src]:not([src=""])) .block.portrait-image img,
+.center-column > .gr-group:has(.portrait-image img[src]:not([src=""])) .portrait-image img {
     display: block !important;
     visibility: visible !important;
     opacity: 1 !important;
@@ -598,7 +669,7 @@ img, .image-frame { border-radius: 4px !important; }
 }
 
 /* Style audio player block when portrait image is present */
-.stage-container:has(.portrait-image img[src]:not([src=""])) .block.audio-player {
+.center-column > .gr-group:has(.portrait-image img[src]:not([src=""])) .block.audio-player {
     /* Removed absolute positioning - let it flow naturally after portrait */
     margin: 0 !important;
     background: transparent !important;
@@ -607,15 +678,15 @@ img, .image-frame { border-radius: 4px !important; }
 }
 
 /* Style the audio player content - fully opaque */
-.stage-container:has(.portrait-image img[src]:not([src=""])) .block.audio-player > div,
-.stage-container:has(.portrait-image img[src]:not([src=""])) .block.audio-player .minimal-audio-player {
+.center-column > .gr-group:has(.portrait-image img[src]:not([src=""])) .block.audio-player > div,
+.center-column > .gr-group:has(.portrait-image img[src]:not([src=""])) .block.audio-player .minimal-audio-player {
     padding: 16px 20px !important;
     # background: #00004d !important;
     opacity: 1 !important;
 }
 
 /* Position speaker name above subtitles in the overlay */
-.stage-container:has(.portrait-image img[src]:not([src=""])) .speaker-name {
+.center-column > .gr-group:has(.portrait-image img[src]:not([src=""])) .speaker-name {
     position: absolute !important;
     /* Position above the subtitle overlay (which is at bottom: 24px) */
     /* Subtitle area is ~60px tall, so position speaker above it */
@@ -639,7 +710,7 @@ img, .image-frame { border-radius: 4px !important; }
 }
 
 /* When there's no portrait image (e.g., start screen), don't overlay */
-.stage-container:not(:has(.portrait-image img[src]:not([src=""]))) .audio-player {
+.center-column > .gr-group:not(:has(.portrait-image img[src]:not([src=""]))) .audio-player {
     position: relative !important;
     background: var(--bg-panel) !important;
     border: 1px solid var(--border-color) !important;
@@ -1161,7 +1232,7 @@ footer {
 /* Hide ALL inline status trackers that would cause layout shifts */
 [data-testid="status-tracker"].wrap.center.translucent,
 [data-testid="status-tracker"].wrap.center.full.translucent,
-.stage-container [data-testid="status-tracker"].wrap.default.full.generating,
+.center-column > .gr-group [data-testid="status-tracker"].wrap.default.full.generating,
 [data-testid="status-tracker"].wrap.default.full.hide,
 .input-bar [data-testid="status-tracker"] {
     display: none !important;
