@@ -28,6 +28,46 @@ RETRO_CSS = """
 }
 
 
+/* ========== ANIMATIONS ========== */
+
+/* Title flicker effect - dramatic neon sign flicker */
+@keyframes title-flicker {
+    0%, 100% { 
+        opacity: 1; 
+        text-shadow: 2px 2px 0px rgba(0, 0, 0, 0.8), 0 0 20px rgba(0, 255, 255, 0.8), 0 0 40px rgba(0, 255, 255, 0.5), 0 0 60px rgba(0, 255, 255, 0.3);
+        filter: brightness(1);
+    }
+    18% { opacity: 1; filter: brightness(1); }
+    19% { opacity: 0.6; filter: brightness(0.7); text-shadow: 2px 2px 0px rgba(0, 0, 0, 0.8), 0 0 5px rgba(0, 255, 255, 0.3); }
+    20% { opacity: 1; filter: brightness(1.1); }
+    21% { opacity: 0.7; filter: brightness(0.8); }
+    22% { opacity: 1; filter: brightness(1); }
+    55% { opacity: 1; filter: brightness(1); }
+    56% { opacity: 0.5; filter: brightness(0.6); text-shadow: 2px 2px 0px rgba(0, 0, 0, 0.8), 0 0 3px rgba(0, 255, 255, 0.2); }
+    57% { opacity: 0.8; filter: brightness(0.9); }
+    58% { opacity: 1; filter: brightness(1.15); text-shadow: 2px 2px 0px rgba(0, 0, 0, 0.8), 0 0 25px rgba(0, 255, 255, 1), 0 0 50px rgba(0, 255, 255, 0.7); }
+    60% { opacity: 1; filter: brightness(1); }
+    85% { opacity: 1; filter: brightness(1); }
+    86% { opacity: 0.65; filter: brightness(0.75); text-shadow: 2px 2px 0px rgba(0, 0, 0, 0.8); }
+    87% { opacity: 1; filter: brightness(1); }
+}
+
+/* Button pulse glow effect - dramatic breathing glow */
+@keyframes button-pulse {
+    0%, 100% { 
+        box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.5), 0 0 10px rgba(0, 255, 255, 0.4), 0 0 20px rgba(0, 255, 255, 0.2);
+        transform: scale(1);
+        border-color: rgba(0, 255, 255, 0.8);
+    }
+    50% { 
+        box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.5), 0 0 25px rgba(0, 255, 255, 0.9), 0 0 50px rgba(0, 255, 255, 0.5), 0 0 80px rgba(0, 255, 255, 0.3);
+        transform: scale(1.02);
+        border-color: rgba(0, 255, 255, 1);
+    }
+}
+
+/* ========== LAYOUT ========== */
+
 /* Title bar */
 .title-bar {
     background: var(--bg-secondary);
@@ -50,7 +90,7 @@ RETRO_CSS = """
     display: flex;
     align-items: center;
     gap: 20px;
-    text-shadow: 2px 2px 0px rgba(0, 0, 0, 0.8);
+    text-shadow: 2px 2px 0px rgba(0, 0, 0, 0.8), 0 0 20px rgba(0, 255, 255, 0.8), 0 0 40px rgba(0, 255, 255, 0.5), 0 0 60px rgba(0, 255, 255, 0.3);
 }
 
 /* Detective avatar - circular frame */
@@ -58,8 +98,8 @@ RETRO_CSS = """
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 32px;
-    height: 32px;
+    width: 60px;
+    height: 60px;
     border-radius: 50%;
     border: 2px solid var(--accent-blue);
     background: #1a1a2a;
@@ -122,6 +162,7 @@ RETRO_CSS = """
     min-height: 350px !important;
     position: relative !important;
     overflow: hidden !important;
+    isolation: isolate !important;  /* Contains pseudo-elements within this stacking context */
     
     /* CRT screen curvature effect */
     border-radius: 16px / 12px !important;
@@ -132,6 +173,11 @@ RETRO_CSS = """
         inset 0 0 30px rgba(0, 255, 255, 0.05),
         0 0 40px rgba(0, 255, 255, 0.3),
         0 0 80px rgba(0, 255, 255, 0.1) !important;
+}
+
+.image-container {
+    padding-bottom: 2px;
+    border-radius: 6px;
 }
 
 /* Center content inside the CRT stage */
@@ -160,7 +206,7 @@ RETRO_CSS = """
         rgba(0, 0, 0, 0.3) 2px
     ) !important;
     pointer-events: none !important;
-    z-index: 1000 !important;
+    z-index: 5 !important;
     border-radius: inherit !important;
 }
 
@@ -180,7 +226,7 @@ RETRO_CSS = """
         rgba(0, 0, 0, 0.4) 100%
     ) !important;
     pointer-events: none !important;
-    z-index: 999 !important;
+    z-index: 4 !important;
     border-radius: inherit !important;
 }
 
@@ -1107,15 +1153,15 @@ div[data-testid="waveform-controls"],
     font-size: 16px !important;
     font-weight: 700 !important;
     background: var(--bg-card) !important;
-    border: 3px solid var(--accent-blue) !important;
+    border: 3px solid rgba(0, 255, 255, 0.8) !important;
     color: var(--accent-blue) !important;
     padding: 14px 32px !important;
     border-radius: 4px !important;
     cursor: pointer !important;
-    transition: all 0.2s ease !important;
     text-transform: uppercase !important;
     letter-spacing: 2px !important;
-    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.5) !important;
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.5), 0 0 10px rgba(0, 255, 255, 0.4), 0 0 20px rgba(0, 255, 255, 0.2) !important;
+    animation: button-pulse 1s ease-in-out 5 !important;
 }
 
 .start-button:hover {
