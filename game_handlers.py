@@ -1037,7 +1037,7 @@ def _prewarm_suspect_portraits(session_id: str, mystery):
                     e,
                 )
 
-    max_workers = 2  # Limit to 2 concurrent image generations
+    max_workers = 3  # Limit to 2 concurrent image generations
     num_workers = min(max_workers, len(tasks))
     for _ in range(num_workers):
         t = threading.Thread(target=_worker, daemon=True)
