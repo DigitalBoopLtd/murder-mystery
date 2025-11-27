@@ -662,13 +662,24 @@ def create_app():
                 "",  # Clear text input
             ]
 
-        def on_voice_input(audio_path: str, sess_id: str):
+        def on_voice_input(audio_path: str, sess_id):
             """Handle voice input."""
             if not audio_path:
                 return [gr.update()] * 8
 
-            # Store previous state to detect what changed
+            # Ensure sess_id is a string (handle case where State passes lambda)
+            if callable(sess_id):
+                sess_id = sess_id()
+            if not isinstance(sess_id, str):
+                sess_id = str(sess_id)
+            
+            # Check if game has been started
             state_before = get_or_create_state(sess_id)
+            if not state_before.mystery and not getattr(state_before, 'premise_setting', None):
+                logger.warning("[APP] Voice input received but no game started yet")
+                return [gr.update()] * 8
+
+            # Store previous state to detect what changed
             previous_locations = (
                 set(state_before.searched_locations)
                 if state_before.searched_locations

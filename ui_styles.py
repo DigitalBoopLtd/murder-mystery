@@ -499,6 +499,21 @@ RETRO_CSS = """
     background-color: transparent !important;
 }
 
+.icon-button-wrapper {
+    background-color: transparent !important;
+    --bg-color: transparent !important;
+}
+.icon-button {
+    background-color: #010101 !important;
+    --bg-color: #010101 !important;
+}
+.mic-select,
+.record-button,
+.stop-button {
+    background-color: transparent !important;
+    --bg-color: transparent !important;
+}
+
 /* Overlay subtitles on portrait image */
 /* Make the portrait image container relative for positioning context */
 .stage-container > div:has(.portrait-image),

@@ -138,9 +138,11 @@ Murder details: Used {self.mystery.weapon} because {self.mystery.motive}''' if s
 {suspect_profiles}
 
 ## YOUR ROLE
-1. When player wants to TALK to a suspect → Use "Interrogate Suspect" tool. IMPORTANT: Pass the suspect's FULL PROFILE from above INCLUDING their Voice ID.
+1. When player wants to TALK/SPEAK/INTERROGATE a suspect → You MUST call the "interrogate_suspect" tool. Pass the suspect's name, their FULL PROFILE from above, the player's question, and their voice_id.
 2. When player wants to SEARCH a location → Describe findings. If they search the right location, reveal the clue with atmosphere!
 3. When player makes ACCUSATION → Check against the murderer
+
+CRITICAL: For ANY request involving talking to a suspect, you MUST use the interrogate_suspect tool. Do NOT respond directly as the suspect yourself.
 
 ## GAME RULES  
 - 3 wrong accusations = lose
