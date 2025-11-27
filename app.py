@@ -428,20 +428,21 @@ def create_app():
             logger.info(f"Retrieving images for session {sess_id}")
             logger.info(f"Available image keys: {list(images.keys())}")
 
-            # Try to get title image, generate on-demand if needed
-            portrait = images.get("_title", None)
-            
-            # Generate title card on-demand if not available
+            # Try to get cached opening scene image (if it was generated earlier)
+            portrait = images.get("_opening_scene", None)
+
+            # Generate opening scene synchronously on first game start so the
+            # player sees a proper background instead of just the placeholder.
             if not portrait:
                 from image_service import generate_title_card_on_demand
                 state = get_or_create_state(sess_id)
                 if state.mystery:
-                    logger.info("Generating title card on-demand...")
+                    logger.info("Generating opening scene image for new mystery...")
                     portrait = generate_title_card_on_demand(state.mystery)
                     if portrait:
-                        images["_title"] = portrait
+                        images["_opening_scene"] = portrait
                         mystery_images[sess_id] = images
-                        logger.info(f"Generated title card: {portrait}")
+                        logger.info(f"Generated opening scene image: {portrait}")
 
             if portrait:
                 # Ensure path is absolute and file exists
@@ -449,12 +450,12 @@ def create_app():
                     portrait = os.path.abspath(portrait)
 
                 if not os.path.exists(portrait):
-                    logger.warning(f"Portrait image file does not exist: {portrait}")
+                    logger.warning(f"Opening scene image file does not exist: {portrait}")
                     portrait = None
                 else:
-                    logger.info(f"Portrait image file exists: {portrait}")
+                    logger.info(f"Opening scene image file exists: {portrait}")
 
-            # Use placeholder if no portrait available
+            # Use placeholder if no opening scene is available
             display_portrait = portrait if portrait else placeholder_img
 
             # Convert alignment_data to Gradio subtitles format
@@ -567,11 +568,11 @@ def create_app():
                     logger.info(f"Displaying scene image for location: {location}")
                     display_portrait = scene_image
 
-            # Priority 3: Fall back to title image (Game Master)
+            # Priority 3: Fall back to opening scene image (Game Master)
             if not display_portrait:
-                display_portrait = images.get("_title", None)
+                display_portrait = images.get("_opening_scene", None)
                 if display_portrait:
-                    logger.info("Displaying title image (Game Master)")
+                    logger.info("Displaying opening scene image (Game Master)")
 
             # Priority 4: Use placeholder if nothing available
             if not display_portrait:
@@ -667,11 +668,11 @@ def create_app():
                     logger.info(f"Displaying scene image for location: {location}")
                     display_portrait = scene_image
 
-            # Priority 3: Fall back to title image (Game Master)
+            # Priority 3: Fall back to opening scene image (Game Master)
             if not display_portrait:
-                display_portrait = images.get("_title", None)
+                display_portrait = images.get("_opening_scene", None)
                 if display_portrait:
-                    logger.info("Displaying title image (Game Master)")
+                    logger.info("Displaying opening scene image (Game Master)")
 
             # Priority 4: Use placeholder if nothing available
             if not display_portrait:

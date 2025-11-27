@@ -4,6 +4,7 @@ import os
 import re
 import json
 import logging
+from typing import Optional
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import PydanticOutputParser
@@ -49,7 +50,9 @@ def generate_mystery() -> Mystery:
     """Generate a unique murder mystery scenario."""
 
     llm = ChatOpenAI(
-        model="gpt-4o", temperature=0.9, api_key=os.getenv("OPENAI_API_KEY")
+        model="gpt-4o", 
+        temperature=0.9,
+        api_key=os.getenv("OPENAI_API_KEY")
     )
 
     parser = PydanticOutputParser(pydantic_object=Mystery)
@@ -62,7 +65,7 @@ def generate_mystery() -> Mystery:
         
 {format_instructions}
 
-Be creative with the setting - could be a mansion, cruise ship, theater, space station, etc.
+Be creative with the setting - could be a mansion, cruise ship, theater, space station, casino, hotel etc.
 
 Create an interesting victim with enemies, 4 distinct suspects with secrets and motives, and 5 clues that lead to solving the case. One suspect is the murderer. Include one red herring clue.
 
@@ -109,17 +112,86 @@ CRITICAL: Return ONLY valid JSON. Do NOT wrap it in markdown code blocks. Do NOT
     validate_json = RunnableLambda(validate_and_parse_json)
     chain = prompt | llm | strip_markdown | validate_json | parser
 
-    mystery = chain.invoke({"format_instructions": parser.get_format_instructions()})
+    # Robust invocation with simple retry on JSON/parse errors
+    attempts = 3
+    for attempt in range(1, attempts + 1):
+        try:
+            logger.info("Generating mystery (attempt %s/%s)...", attempt, attempts)
+            mystery = chain.invoke(
+                {"format_instructions": parser.get_format_instructions()}
+            )
+            logger.info("Successfully generated mystery on attempt %s", attempt)
+            break
+        except Exception as e:
+            last_error = e
+            logger.error("Error generating mystery on attempt %s: %s", attempt, e)
+            if attempt == attempts:
+                logger.error("All mystery generation attempts failed")
+                raise
+            logger.info("Retrying mystery generation...")
 
-    # Assign voices to suspects
-    mystery = assign_voices_to_mystery(mystery)
+    # Voices will be assigned on-demand when suspects are first talked to
+    # This avoids the API call delay during game startup
 
     return mystery
 
 
+def assign_voice_to_suspect(suspect, used_voice_ids: list = None) -> Optional[str]:
+    """Assign a voice to a single suspect on-demand.
+
+    Args:
+        suspect: Suspect object to assign voice to
+        used_voice_ids: List of voice IDs already assigned (to avoid duplicates)
+
+    Returns:
+        Assigned voice_id or None if assignment failed
+    """
+    try:
+        voice_service = get_voice_service()
+
+        if not voice_service.is_available:
+            logger.info("ElevenLabs not configured, skipping voice assignment")
+            return None
+
+        used_voice_ids = used_voice_ids or []
+
+        # Convert suspect to dict for voice matching
+        suspect_dict = {
+            "name": suspect.name,
+            "role": suspect.role,
+            "personality": suspect.personality,
+            "gender": suspect.gender,
+            "age": suspect.age,
+            "nationality": suspect.nationality,
+        }
+
+        # Get available voices (will be cached after first call)
+        voices = voice_service.get_available_voices(english_only=True, default_only=True)
+        if not voices:
+            logger.warning("No voices available for assignment")
+            return None
+
+        # Match voice to suspect
+        voice = voice_service.match_voice_to_suspect(suspect_dict, voices, used_voice_ids)
+        if voice:
+            suspect.voice_id = voice.voice_id
+            logger.info(f"Assigned voice '{voice.name}' ({voice.voice_id}) to {suspect.name}")
+            return voice.voice_id
+        else:
+            logger.warning(f"Could not assign voice to {suspect.name}")
+            return None
+
+    except Exception as e:
+        logger.error(f"Error assigning voice to {suspect.name}: {e}")
+        return None
+
+
 def assign_voices_to_mystery(mystery: Mystery) -> Mystery:
     """Assign ElevenLabs voices to suspects based on their characteristics.
-
+    
+    DEPRECATED: This function is kept for backward compatibility but is no longer
+    called during game startup. Voices are now assigned on-demand.
+    
     Args:
         mystery: The generated mystery
 

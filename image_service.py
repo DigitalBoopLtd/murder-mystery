@@ -156,10 +156,9 @@ No text, no words, no letters, no writing, no labels, no captions, no name tags.
                 "badge text, tag text, watermark text, copyright text, signature text"
             )
             
-            # Try Qwen-Image first (better negative prompt support), fallback to FLUX
+            # Use a single fast SDXL model via fal-ai
             models_to_try = [
-                "Qwen/Qwen-Image",
-                "black-forest-labs/FLUX.1-schnell"
+                "ByteDance/SDXL-Lightning",   # fast, low-step SDXL via fal-ai
             ]
             
             image = None
@@ -167,10 +166,13 @@ No text, no words, no letters, no writing, no labels, no captions, no name tags.
             for model in models_to_try:
                 try:
                     logger.info(f"Trying model: {model}")
+                    # Force 16:9 aspect ratio for all portraits
                     image = self.client.text_to_image(
                         prompt,
-                                model=model,
+                        model=model,
                         negative_prompt=negative_prompt,
+                        width=1024,
+                        height=576,
                     )
                     logger.info(f"Successfully generated with {model}")
                     break
@@ -253,10 +255,9 @@ No text, no words, no letters, no writing, no labels, no captions, no name tags.
                 "building signs, door signs, window signs, neon signs with text"
             )
             
-            # Try Qwen-Image first (better negative prompt support), fallback to FLUX
+            # Use a single fast SDXL model via fal-ai
             models_to_try = [
-                "Qwen/Qwen-Image",
-                "black-forest-labs/FLUX.1-schnell"
+                "ByteDance/SDXL-Lightning",   # fast, low-step SDXL via fal-ai
             ]
             
             image = None
@@ -264,10 +265,13 @@ No text, no words, no letters, no writing, no labels, no captions, no name tags.
             for model in models_to_try:
                 try:
                     logger.info(f"Trying model: {model}")
+                    # Force 16:9 aspect ratio for all location scenes
                     image = self.client.text_to_image(
                         prompt,
-                                model=model,
+                        model=model,
                         negative_prompt=negative_prompt,
+                        width=1024,
+                        height=576,
                     )
                     logger.info(f"Successfully generated with {model}")
                     break
@@ -288,11 +292,11 @@ No text, no words, no letters, no writing, no labels, no captions, no name tags.
             return None
 
     def generate_title_card(self, title: str, setting: str) -> Optional[str]:
-        """Generate a title card for the mystery.
+        """Generate an atmospheric opening scene image for the mystery.
 
         Args:
-            title: Mystery title
-            setting: Setting description
+            title: Mystery title (used only as semantic context, not rendered as text)
+            setting: Setting description for the scene
 
         Returns:
             Path to generated image, or None on error
@@ -301,11 +305,14 @@ No text, no words, no letters, no writing, no labels, no captions, no name tags.
             logger.warning("Image client not available")
             return None
 
-        prompt = f"""Title card for a murder mystery called "{title}".
-{setting}
+        # We describe this as an opening scene rather than a title card to
+        # avoid encouraging any rendered text in the image.
+        prompt = f"""Opening scene for a murder mystery.
+The case is called "{title}", but do NOT draw or write the title or ANY text in the image.
+Setting: {setting}
 {SCENE_ART_STYLE}
 Ominous, foreboding, sets the mood for a murder mystery.
-No text, no words, no letters, no writing, no labels, no captions, no title text, no signage.
+No text, no words, no letters, no writing, no labels, no captions, no signage, no title.
 Atmospheric scene only, no text overlay.
 """
 
@@ -316,7 +323,7 @@ Atmospheric scene only, no text overlay.
             return cached
 
         try:
-            logger.info(f"Generating title card...")
+            logger.info(f"Generating opening scene image...")
             # Comprehensive negative prompt to prevent any text in images
             negative_prompt = (
                 "text, words, letters, writing, labels, captions, title text, signage, signs, "
@@ -330,10 +337,9 @@ Atmospheric scene only, no text overlay.
                 "title overlay, title card overlay, game title overlay, movie title overlay"
             )
             
-            # Try Qwen-Image first (better negative prompt support), fallback to FLUX
+            # Use a single fast SDXL model via fal-ai
             models_to_try = [
-                "Qwen/Qwen-Image",
-                "black-forest-labs/FLUX.1-schnell"
+                "ByteDance/SDXL-Lightning",   # fast, low-step SDXL via fal-ai
             ]
             
             image = None
@@ -341,10 +347,13 @@ Atmospheric scene only, no text overlay.
             for model in models_to_try:
                 try:
                     logger.info(f"Trying model: {model}")
+                    # Force 16:9 aspect ratio for the opening scene image
                     image = self.client.text_to_image(
                         prompt,
-                                model=model,
+                        model=model,
                         negative_prompt=negative_prompt,
+                        width=1024,
+                        height=576,
                     )
                     logger.info(f"Successfully generated with {model}")
                     break
@@ -357,7 +366,7 @@ Atmospheric scene only, no text overlay.
                 raise Exception(f"All models failed. Last error: {last_error}")
 
             path = self._save_to_cache(image, cache_key)
-            logger.info(f"Generated title card: {path}")
+            logger.info(f"Generated opening scene image: {path}")
             return path
 
         except Exception as e:
@@ -409,7 +418,7 @@ def generate_portrait_on_demand(suspect, mystery_setting: str) -> Optional[str]:
 
 
 def generate_title_card_on_demand(mystery) -> Optional[str]:
-    """Generate a title card for the mystery on-demand.
+    """Generate an opening scene image for the mystery on-demand.
     
     Args:
         mystery: Mystery object with victim and setting
@@ -419,17 +428,17 @@ def generate_title_card_on_demand(mystery) -> Optional[str]:
     """
     service = get_image_service()
     if not service.is_available:
-        logger.warning("Image service not available for title card generation")
+        logger.warning("Image service not available for opening scene generation")
         return None
     
-    logger.info("Generating title card on-demand...")
+    logger.info("Generating opening scene image on-demand...")
     path = service.generate_title_card(
         title=f"The Murder of {mystery.victim.name}",
         setting=mystery.setting
     )
     
     if path:
-        logger.info("✓ Generated title card on-demand")
+        logger.info("✓ Generated opening scene image on-demand")
     
     return path
 
@@ -440,7 +449,7 @@ def generate_all_mystery_images(mystery, generate_portraits: bool = False, gener
     Args:
         mystery: Mystery object with suspects and setting
         generate_portraits: If True, generate all suspect portraits (default: False for on-demand)
-        generate_title: If True, generate title card (default: False for on-demand)
+        generate_title: If True, generate opening scene image (default: False for on-demand)
 
     Returns:
         Dict mapping names/locations to image paths
@@ -476,10 +485,10 @@ def generate_all_mystery_images(mystery, generate_portraits: bool = False, gener
             ))
     
     if generate_title:
-        # Add title card task
+        # Add opening scene task
         tasks.append((
-            "_title",
-            "title",
+            "_opening_scene",
+            "opening_scene",
             lambda: service.generate_title_card(
                 title=f"The Murder of {mystery.victim.name}", 
                 setting=mystery.setting

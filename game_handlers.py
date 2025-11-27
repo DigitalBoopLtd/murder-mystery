@@ -3,6 +3,7 @@
 import os
 import re
 import logging
+import time
 from typing import Optional, Tuple, List, Dict
 
 from game_state import GameState
@@ -10,7 +11,7 @@ from image_service import (
     generate_portrait_on_demand,
     get_image_service,
 )
-from mystery_generator import generate_mystery, prepare_game_prompt
+from mystery_generator import generate_mystery, prepare_game_prompt, assign_voice_to_suspect
 from agent import create_game_master_agent, process_message
 from game_parser import parse_game_actions
 from tts_service import text_to_speech
@@ -55,22 +56,30 @@ def start_new_game(session_id: str):
 
     # Generate mystery
     logger.info("Generating new mystery...")
+    t0 = time.perf_counter()
     mystery = generate_mystery()
+    t1 = time.perf_counter()
+    logger.info(f"[PERF] Mystery generation took {t1 - t0:.2f}s")
     state.mystery = mystery
     state.system_prompt = prepare_game_prompt(mystery)
 
     # Initialize with agent and narration (images generated on-demand)
     logger.info("Starting game initialization (images will be generated on-demand)...")
 
-    # Create agent and get narration immediately (no waiting for images)
-    agent = create_game_master_agent()
+    # Create or reuse shared agent and get narration immediately (no waiting for images)
+    if not hasattr(start_new_game, "agent"):
+        start_new_game.agent = create_game_master_agent()
+
+    t2 = time.perf_counter()
     response, speaker = process_message(
-        agent,
+        start_new_game.agent,
         "The player has just arrived. Welcome them to the mystery with atmosphere.",
         state.system_prompt,
         session_id,
         thread_id=session_id,
     )
+    t3 = time.perf_counter()
+    logger.info(f"[PERF] First Game Master response took {t3 - t2:.2f}s")
 
     # Initialize empty images dict - images will be generated on-demand
     mystery_images[session_id] = {}
@@ -80,9 +89,12 @@ def start_new_game(session_id: str):
 
     # Generate audio (needs the response text)
     logger.info(f"[GAME] Calling TTS for welcome message ({len(response)} chars)")
+    t4 = time.perf_counter()
     audio_path, alignment_data = text_to_speech(
         response, GAME_MASTER_VOICE_ID, speaker_name="Game Master"
     )
+    t5 = time.perf_counter()
+    logger.info(f"[PERF] Welcome TTS (with timestamps) took {t5 - t4:.2f}s")
 
     # Verify audio was generated
     if audio_path:
@@ -145,11 +157,29 @@ def process_player_action(
     # Store player message
     state.messages.append({"role": "user", "content": message, "speaker": "You"})
 
+    # If talking to a suspect, assign voice on-demand before processing
+    # This ensures the system prompt includes the voice_id for the tool
+    if action_type == "talk" and target:
+        suspect = None
+        for s in state.mystery.suspects:
+            if s.name == target:
+                suspect = s
+                break
+        
+        if suspect and not suspect.voice_id:
+            logger.info(f"Assigning voice on-demand for suspect: {target}")
+            # Get list of already-used voice IDs to avoid duplicates
+            used_voice_ids = [
+                s.voice_id for s in state.mystery.suspects 
+                if s.voice_id and s.name != target
+            ]
+            assign_voice_to_suspect(suspect, used_voice_ids)
+
     # Get or create agent
     if not hasattr(process_player_action, "agent"):
         process_player_action.agent = create_game_master_agent()
 
-    # Update system prompt
+    # Update system prompt (will include newly assigned voice_id if any)
     state.system_prompt = state.get_continue_prompt()
 
     # Process with agent
@@ -176,20 +206,33 @@ def process_player_action(
         clean_response = re.sub(audio_marker_pattern, "", response).strip()
         logger.info(f"Extracted audio path from tool: {audio_path_from_tool}")
 
-    # Generate portrait on-demand if a suspect was talked to for the first time
+    # Generate portrait and assign voice on-demand if a suspect was talked to
+    # (This handles cases where speaker is detected from custom messages)
     if speaker and speaker != "Game Master":
         session_images = mystery_images.get(session_id, {})
         
-        # Check if we need to generate this suspect's portrait
-        if speaker not in session_images:
-            # Find the suspect in the mystery
-            suspect = None
-            for s in state.mystery.suspects:
-                if s.name == speaker:
-                    suspect = s
-                    break
+        # Find the suspect in the mystery
+        suspect = None
+        for s in state.mystery.suspects:
+            if s.name == speaker:
+                suspect = s
+                break
+        
+        if suspect:
+            # Assign voice on-demand if not already assigned
+            # (May have been assigned earlier for "talk" action, but check here too for custom messages)
+            if not suspect.voice_id:
+                logger.info(f"Assigning voice on-demand for suspect: {speaker}")
+                # Get list of already-used voice IDs to avoid duplicates
+                used_voice_ids = [
+                    s.voice_id for s in state.mystery.suspects 
+                    if s.voice_id and s.name != speaker
+                ]
+                assign_voice_to_suspect(suspect, used_voice_ids)
+                # Note: System prompt was already generated, but voice_id will be available for next interaction
             
-            if suspect:
+            # Check if we need to generate this suspect's portrait
+            if speaker not in session_images:
                 logger.info(f"Generating portrait on-demand for suspect: {speaker}")
                 portrait_path = generate_portrait_on_demand(
                     suspect, 
@@ -203,8 +246,8 @@ def process_player_action(
                     logger.info(f"Generated and stored portrait for {speaker}: {portrait_path}")
                 else:
                     logger.warning(f"Failed to generate portrait for {speaker}")
-            else:
-                logger.warning(f"Suspect {speaker} not found in mystery for portrait generation")
+        else:
+            logger.warning(f"Suspect {speaker} not found in mystery for portrait/voice generation")
 
     # Generate scene image on-demand if a location was searched
     if actions.get("location_searched"):
