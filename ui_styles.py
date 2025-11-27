@@ -116,6 +116,8 @@ RETRO_CSS = """
     letter-spacing: 1px;
 }
 
+img, .image-frame { border-radius: 4px !important; }
+
 
 .portrait-image {
     width: 100% !important;
@@ -1014,171 +1016,6 @@ div[data-testid="waveform-controls"],
     gap: 12px;
 }
 
-/* Status tracker for start button */
-.start-status-tracker {
-    font-family: 'Source Sans Pro', sans-serif;
-    font-size: 14px;
-    font-weight: 500;
-    color: var(--accent-yellow) !important;
-    text-align: center;
-    padding: 8px 16px;
-    background: transparent;
-    border-radius: 6px;
-    min-height: 20px;
-    display: block !important;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-}
-
-/* Hide when empty */
-.start-status-tracker:empty {
-    display: none !important;
-}
-
-/* Start status progress tracker layout */
-.start-status-title {
-    font-size: 12px;
-    font-weight: 600;
-    color: var(--accent-yellow) !important;
-    margin-bottom: 4px;
-}
-
-.start-status-steps {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    justify-content: center;
-}
-
-.start-status-step {
-    font-size: 11px;
-    padding: 2px 8px;
-    border-radius: 4px;
-    border: 1px solid var(--border-dark);
-}
-
-.start-status-step.step-active {
-    border-color: var(--accent-blue);
-    color: var(--accent-blue) !important;
-}
-
-.start-status-step.step-done {
-    border-color: var(--accent-green);
-    color: var(--accent-green) !important;
-}
-
-.start-status-step.step-pending {
-    border-color: var(--border-dark);
-    color: var(--text-secondary) !important;
-    opacity: 0.7;
-}
-
-/* Hide the entire block wrapper by default - only show when it has content */
-/* But only hide if it's truly empty - check for empty prose element */
-.block.start-status-tracker:has(.prose.start-status-tracker:empty),
-.block.start-status-tracker:has(.html-container:has(.prose.start-status-tracker:empty)) {
-    display: none !important;
-    visibility: hidden !important;
-    height: 0 !important;
-    min-height: 0 !important;
-    max-height: 0 !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    overflow: hidden !important;
-    opacity: 0 !important;
-    border: none !important;
-}
-
-/* Hide the entire block wrapper when status tracker is empty (additional specificity) */
-.block.start-status-tracker:has(.prose.start-status-tracker:empty),
-.block.start-status-tracker:has(.html-container:has(.prose.start-status-tracker:empty)),
-.block.start-status-tracker:not(:has(.prose.start-status-tracker:not(:empty))) {
-    display: none !important;
-    visibility: hidden !important;
-    height: 0 !important;
-    min-height: 0 !important;
-    max-height: 0 !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    overflow: hidden !important;
-    opacity: 0 !important;
-    border: none !important;
-}
-
-/* Hide HTML containers that contain start-status-tracker - hide by default */
-.html-container:has(.start-status-tracker),
-.html-container:has(.prose.start-status-tracker),
-.html-container.svelte-1jts93g:has(.start-status-tracker) {
-    display: none !important;
-    visibility: hidden !important;
-    height: 0 !important;
-    min-height: 0 !important;
-    max-height: 0 !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    overflow: hidden !important;
-    opacity: 0 !important;
-}
-
-/* Hide the prose div when empty */
-.prose.start-status-tracker:empty,
-.prose.gradio-style.start-status-tracker:empty {
-    display: none !important;
-    visibility: hidden !important;
-    height: 0 !important;
-    min-height: 0 !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    overflow: hidden !important;
-}
-
-/* Show the block wrapper when status tracker has content - higher specificity */
-/* Check for any text content in the status tracker */
-.block.start-status-tracker:has(.prose.start-status-tracker:not(:empty)),
-.block.start-status-tracker:has(.html-container .prose.start-status-tracker:not(:empty)),
-.block.start-status-tracker:has(.prose.gradio-style.start-status-tracker:not(:empty)),
-.block.start-status-tracker:has(.start-status-tracker:not(:empty)),
-.block.start-status-tracker:has([class*="start-status"]:not(:empty)),
-/* Also show if any child has text content (more lenient) */
-.block.start-status-tracker:has(.prose.start-status-tracker *),
-.block.start-status-tracker:has(.html-container:has(*:not(:empty))) {
-    display: block !important;
-    visibility: visible !important;
-    height: auto !important;
-    min-height: auto !important;
-    max-height: none !important;
-    margin: inherit !important;
-    padding: inherit !important;
-    overflow: visible !important;
-    opacity: 1 !important;
-    border: inherit !important;
-}
-
-/* Show the HTML container only when status tracker has actual text content */
-.html-container:has(.start-status-tracker:not(:empty)),
-.html-container:has(.prose.start-status-tracker:not(:empty)),
-.html-container.svelte-1jts93g:has(.start-status-tracker:not(:empty)),
-.html-container:has(.prose.gradio-style.start-status-tracker:not(:empty)) {
-    display: block !important;
-    visibility: visible !important;
-    height: auto !important;
-    min-height: auto !important;
-    max-height: none !important;
-    margin: inherit !important;
-    padding: inherit !important;
-    overflow: visible !important;
-    opacity: 1 !important;
-}
-
-/* Show the prose div when it has content */
-.prose.start-status-tracker:not(:empty),
-.prose.gradio-style.start-status-tracker:not(:empty) {
-    display: block !important;
-    visibility: visible !important;
-    height: auto !important;
-    min-height: auto !important;
-}
-
 /* Hide prose containers that are empty */
 .prose.gradio-style:empty {
     display: none !important;
@@ -1211,13 +1048,6 @@ div[data-testid="waveform-controls"],
     margin: 0 !important;
     padding: 0 !important;
     overflow: hidden !important;
-}
-
-/* Ensure the HTML component wrapper shows the content */
-.start-button-container .start-status-tracker,
-.start-button-container [class*="start-status"] {
-    display: block !important;
-    visibility: visible !important;
 }
 
 /* Gradio overrides */
@@ -1266,9 +1096,17 @@ footer {
     display: none !important;
 }
 
-/* Hide the translucent center status tracker that overlays the image */
+/* ==========================================================================
+   STATUS TRACKER - Fixed Position Loading Indicator
+   Shows elapsed time during processing without causing layout shifts
+   ========================================================================== */
+
+/* Hide ALL inline status trackers that would cause layout shifts */
 [data-testid="status-tracker"].wrap.center.translucent,
-[data-testid="status-tracker"].wrap.center.full.translucent {
+[data-testid="status-tracker"].wrap.center.full.translucent,
+.stage-container [data-testid="status-tracker"].wrap.default.full.generating,
+[data-testid="status-tracker"].wrap.default.full.hide,
+.input-bar [data-testid="status-tracker"] {
     display: none !important;
     visibility: hidden !important;
     opacity: 0 !important;
@@ -1278,71 +1116,83 @@ footer {
     pointer-events: none !important;
 }
 
-/* Hide empty/generating status tracker overlay in the main stage */
-.stage-container [data-testid="status-tracker"].wrap.default.full.svelte-1uj8rng.generating {
-    display: none !important;
-    visibility: hidden !important;
-    opacity: 0 !important;
-    height: 0 !important;
-    width: 0 !important;
-    overflow: hidden !important;
-    pointer-events: none !important;
+/* Main status tracker - FIXED position at bottom center */
+[data-testid="status-tracker"]:not(.translucent):not(.wrap.center):not(.hide) {
+    /* Fixed positioning - won't affect layout */
+    position: fixed !important;
+    bottom: 24px !important;
+    left: 50% !important;
+    transform: translateX(-50%) !important;
+    z-index: 9999 !important;
+    
+    /* Consistent sizing */
+    min-width: 200px !important;
+    max-width: 400px !important;
+    width: auto !important;
+    height: auto !important;
+    min-height: 48px !important;
+    
+    /* Styling */
+    background: linear-gradient(135deg, rgba(0, 0, 51, 0.98) 0%, rgba(20, 20, 80, 0.98) 100%) !important;
+    border: 2px solid var(--accent-gold) !important;
+    backdrop-filter: blur(8px) !important;
+    border-radius: 8px !important;
+    padding: 12px 24px !important;
+    
+    /* Visual effects */
+    animation: statusPulse 2s ease-in-out infinite !important;
 }
 
-/* Also hide empty default/hide status tracker blocks that Gradio leaves around */
-[data-testid="status-tracker"].wrap.default.full.svelte-1uj8rng.hide {
-    display: none !important;
-    visibility: hidden !important;
-    opacity: 0 !important;
-    height: 0 !important;
-    width: 0 !important;
-    overflow: hidden !important;
-    pointer-events: none !important;
+/* Pulse animation for the status tracker */
+@keyframes statusPulse {
+    0%, 100% {
+        border-color: var(--accent-gold);
+    }
+    50% {
+        border-color: var(--accent-blue);
+    }
 }
 
-/* Style the remaining status tracker with darker background for better text visibility */
-[data-testid="status-tracker"]:not(.translucent):not(.wrap.center) {
-    background: rgba(0, 0, 51, 0.95) !important;
-    border: 2px solid var(--accent-blue) !important;
-    backdrop-filter: blur(4px) !important;
-    border-radius: 4px !important;
-    padding: 8px 16px !important;
-    opacity: 1 !important;
-    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.6) !important;
-}
-
-/* Remove dark background from status tracker inside input-bar */
-.input-bar [data-testid="status-tracker"]:not(.translucent):not(.wrap.center) {
-    background: transparent !important;
-    backdrop-filter: none !important;
-}
-
-/* Target text elements in status tracker - be specific to avoid affecting images */
-[data-testid="status-tracker"]:not(.translucent):not(.wrap.center) .progress-text,
-[data-testid="status-tracker"]:not(.translucent):not(.wrap.center) .meta-text,
-[data-testid="status-tracker"]:not(.translucent):not(.wrap.center) .meta-text-center {
-    color: var(--accent-yellow) !important;
+/* Status tracker text styling */
+[data-testid="status-tracker"]:not(.translucent):not(.wrap.center):not(.hide) .progress-text,
+[data-testid="status-tracker"]:not(.translucent):not(.wrap.center):not(.hide) .meta-text,
+[data-testid="status-tracker"]:not(.translucent):not(.wrap.center):not(.hide) .meta-text-center,
+[data-testid="status-tracker"]:not(.translucent):not(.wrap.center):not(.hide) span {
+    color: var(--accent-gold) !important;
+    font-family: var(--font-mono) !important;
     font-weight: 700 !important;
-    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8) !important;
-    opacity: 1 !important;
-    visibility: visible !important;
-    background: transparent !important;
+    font-size: 14px !important;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8) !important;
     text-transform: uppercase !important;
-    letter-spacing: 1px !important;
-}
-
-/* Ensure images and SVGs are not affected */
-[data-testid="status-tracker"]:not(.translucent):not(.wrap.center) img,
-[data-testid="status-tracker"]:not(.translucent):not(.wrap.center) svg,
-[data-testid="status-tracker"]:not(.translucent):not(.wrap.center) path {
-    color: inherit !important;
-}
-
-/* Remove dark blue background from SVG spinner in status tracker */
-[data-testid="status-tracker"]:not(.translucent):not(.wrap.center) .svelte-1vhirvf,
-[data-testid="status-tracker"]:not(.translucent):not(.wrap.center) .svelte-1vhirvf.margin,
-[data-testid="status-tracker"]:not(.translucent):not(.wrap.center) .svelte-1vhirvf svg,
-[data-testid="status-tracker"]:not(.translucent):not(.wrap.center) .svelte-1vhirvf.margin svg {
+    letter-spacing: 1.5px !important;
     background: transparent !important;
+}
+
+/* Spinner styling */
+[data-testid="status-tracker"]:not(.translucent):not(.wrap.center):not(.hide) svg {
+    color: var(--accent-gold) !important;
+    width: 20px !important;
+    height: 20px !important;
+    margin-right: 8px !important;
+}
+
+/* Remove any background from spinner wrapper */
+[data-testid="status-tracker"]:not(.translucent):not(.wrap.center):not(.hide) .svelte-1vhirvf,
+[data-testid="status-tracker"]:not(.translucent):not(.wrap.center):not(.hide) .svelte-1vhirvf.margin {
+    background: transparent !important;
+}
+
+/* Hide status tracker when it has .hide class or is empty */
+[data-testid="status-tracker"].hide,
+[data-testid="status-tracker"]:empty {
+    display: none !important;
+    opacity: 0 !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+}
+
+/* Smooth fade in/out transition */
+[data-testid="status-tracker"] {
+    transition: opacity 0.3s ease, transform 0.3s ease !important;
 }
 """
