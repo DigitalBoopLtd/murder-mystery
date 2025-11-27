@@ -493,19 +493,19 @@ def create_app():
         # ====== EVENT HANDLERS ======
 
         def _normalize_session_id(sess_id) -> str:
-            """Ensure we always use a stable string session id.
+            """Ensure we always use a *stable* string session id.
 
-            Gradio's State can pass a callable (e.g. lambda) as the stored value;
-            we standardize everything to a concrete string so all handlers
-            share the same keys for game state and image caches.
+            Important: do NOT *call* callables here (e.g. ``lambda: uuid4()``),
+            because that would generate a new id on every callback and break
+            the link between background tasks, the timer, and voice turns.
+            Instead, we treat the callable object itself as an opaque, stable
+            identifier and use its ``repr`` as the session key.
             """
             if callable(sess_id):
-                try:
-                    sess_id = sess_id()
-                except TypeError:
-                    sess_id = str(sess_id)
+                # Use a stable string representation of the callable object itself
+                return repr(sess_id)
             if not isinstance(sess_id, str):
-                sess_id = str(sess_id)
+                return str(sess_id)
             return sess_id
 
         def on_start_game(sess_id, progress=gr.Progress()):
@@ -591,15 +591,17 @@ def create_app():
             logger.info("Retrieving images for session %s", sess_id)
             logger.info("Available image keys: %s", list(images.keys()))
 
-            # Generate opening scene image using premise data
+            # Opening scene image: we REQUIRE this before "starting" the game.
+            # First, try to use any prewarmed image generated in the background
+            # right after the premise was created. If it's not available yet,
+            # fall back to generating it synchronously here.
             progress(0.9, desc="🎨 Creating scene image...")
-            
+
             portrait = images.get("_opening_scene", None)
             if not portrait:
                 from image_service import generate_title_card_on_demand
                 from types import SimpleNamespace
 
-                # Use premise data (always available) to generate scene
                 if getattr(state, "premise_setting", None) and getattr(
                     state, "premise_victim_name", None
                 ):
@@ -608,9 +610,13 @@ def create_app():
                         victim=victim_stub,
                         setting=state.premise_setting,
                     )
-                    logger.info("Generating opening scene image for new mystery...")
+                    logger.info(
+                        "Generating opening scene image for new mystery (fallback)..."
+                    )
                     portrait = generate_title_card_on_demand(mystery_like)
                     if portrait:
+                        # Merge into existing images dict without clobbering
+                        images = mystery_images.get(sess_id, {}) or {}
                         images["_opening_scene"] = portrait
                         mystery_images[sess_id] = images
                         logger.info("Generated opening scene image: %s", portrait)
@@ -691,11 +697,14 @@ def create_app():
             """Timer callback to check if full mystery is ready and update UI."""
             sess_id = _normalize_session_id(sess_id)
             state = get_or_create_state(sess_id)
-            logger.info("[APP] Timer tick - session: %s, mystery_ready: %s", 
-                        sess_id[:8] if sess_id else "None", 
-                        state.mystery is not None)
+            ready = getattr(state, "mystery_ready", False)
+            logger.info(
+                "[APP] Timer tick - session: %s, mystery_ready: %s",
+                sess_id[:8] if sess_id else "None",
+                ready,
+            )
 
-            if state.mystery is not None:
+            if ready and state.mystery is not None:
                 # Mystery is ready - update UI and stop timer
                 logger.info("[APP] Timer: Full mystery ready, updating UI panels")
                 return [
@@ -887,14 +896,16 @@ def create_app():
                 return
 
             # ========== STAGE 1: FAST - Run LLM logic only ==========
-            progress(0.3, desc="🧠 Thinking...")
-            
+            # Use the full 0→100 range for the "thinking" phase
+            progress(0.5, desc="🧠 Figuring out what happens...")
+
             t2 = time.perf_counter()
             clean_response, speaker, state, actions, audio_path_from_tool = (
                 run_action_logic("custom", "", text, sess_id)
             )
             t3 = time.perf_counter()
             logger.info("[PERF] Action logic took %.2fs", t3 - t2)
+            progress(1.0, desc="🧠 Figuring out what happens...")
 
             # Get images dict (may not have new portrait yet)
             images = mystery_images.get(sess_id, {})
@@ -947,7 +958,6 @@ def create_app():
                 display_portrait = placeholder_img
 
             # YIELD STAGE 1: Show text response + updated panels immediately (no audio yet)
-            progress(0.5, desc="🔊 Generating voice...")
             logger.info("[APP] Stage 1 complete - yielding fast UI update")
             
             yield [
@@ -962,6 +972,8 @@ def create_app():
             ]
 
             # ========== STAGE 2: SLOW - Generate audio + images ==========
+            # Restart the progress counter for the voice generation phase
+            progress(0, desc="🔊 Generating voice...")
             # Use background_images=False so portrait is ready before we yield
             t4 = time.perf_counter()
             audio_resp, alignment_data = generate_turn_media(

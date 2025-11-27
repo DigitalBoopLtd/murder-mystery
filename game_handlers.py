@@ -4,6 +4,8 @@ import os
 import re
 import logging
 import time
+import threading
+import queue
 from typing import Optional, Tuple, List, Dict
 
 from game_state import GameState
@@ -17,7 +19,6 @@ from mystery_generator import (
     prepare_game_prompt,
     assign_voice_to_suspect,
 )
-import threading
 from agent import create_game_master_agent, process_message
 from game_parser import parse_game_actions
 from tts_service import text_to_speech
@@ -38,6 +39,67 @@ def init_game_handlers(states_dict, images_dict, game_master_voice_id: str):
     GAME_MASTER_VOICE_ID = game_master_voice_id
 
 
+def _background_generate_title_card_from_premise(session_id: str):
+    """Generate opening scene image in the background using premise-only data.
+
+    This can run before the full mystery is ready. It uses the stored
+    ``premise_setting`` and ``premise_victim_name`` on the GameState to
+    build a lightweight mystery-like object for the image service.
+    """
+    try:
+        # If another process (e.g. the foreground fallback) has already
+        # generated the opening scene, don't do duplicate work.
+        existing = mystery_images.get(session_id, {})
+        if existing.get("_opening_scene"):
+            logger.info(
+                "[BG] Title-card prewarm: opening scene already exists for %s, skipping",
+                session_id,
+            )
+            return
+
+        bg_state = get_or_create_state(session_id)
+        setting = getattr(bg_state, "premise_setting", None)
+        victim_name = getattr(bg_state, "premise_victim_name", None)
+        if not setting or not victim_name:
+            logger.info(
+                "[BG] Title-card prewarm: missing premise data for session %s, skipping",
+                session_id,
+            )
+            return
+
+        from types import SimpleNamespace
+        from image_service import generate_title_card_on_demand
+
+        victim_stub = SimpleNamespace(name=victim_name)
+        mystery_like = SimpleNamespace(victim=victim_stub, setting=setting)
+
+        logger.info(
+            "[BG] Generating opening scene image from premise for session %s",
+            session_id,
+        )
+        portrait = generate_title_card_on_demand(mystery_like)
+        if not portrait:
+            logger.warning(
+                "[BG] Failed to generate opening scene image for session %s",
+                session_id,
+            )
+            return
+
+        # Ensure session image dict exists without clobbering any existing images
+        if session_id not in mystery_images:
+            mystery_images[session_id] = {}
+        mystery_images[session_id]["_opening_scene"] = portrait
+        logger.info(
+            "[BG] Prewarmed opening scene image for session %s: %s",
+            session_id,
+            portrait,
+        )
+    except Exception:
+        logger.exception(
+            "[BG] Error prewarming opening scene image for session %s", session_id
+        )
+
+
 def get_or_create_state(session_id: str) -> GameState:
     """Get or create game state for session."""
     if session_id not in game_states:
@@ -55,32 +117,19 @@ def get_suspect_voice_id(suspect_name: str, state: GameState) -> Optional[str]:
     return None
 
 
-def start_new_game_staged(session_id: str):
-    """Generator that yields progress stages during game initialization.
-    
-    Fast path: premise → welcome → TTS (~6s total)
-    Background: full mystery generation (~15s, non-blocking)
-    
-    Yields tuples of (stage_name, stage_progress, stage_data) where:
-    - stage_name: str describing current stage
-    - stage_progress: float 0.0-1.0
-    - stage_data: dict with any data from that stage (or None)
-    
-    Final yield has stage_name="complete" with all game data.
-    """
+def start_new_game(session_id: str):
+    """Start a new mystery game with fast premise + background case generation."""
     state = get_or_create_state(session_id)
     state.reset_game()
 
-    # ========== STAGE 1: PREMISE (20%) ==========
-    yield ("premise", 0.2, None)
-    
+    # ========== STAGE 1: FAST PREMISE ==========
     logger.info("Generating mystery premise...")
     t0 = time.perf_counter()
     premise = generate_mystery_premise()
     t1 = time.perf_counter()
     logger.info("[PERF] Mystery premise generation took %.2fs", t1 - t0)
 
-    # Store premise on state
+    # Store premise on state for later use
     state.premise_setting = premise.setting
     state.premise_victim_name = premise.victim_name
     state.premise_victim_background = premise.victim_background
@@ -92,7 +141,7 @@ def start_new_game_staged(session_id: str):
 {premise.setting}
 
 ## VICTIM
-{premise.victim_name}: {premise.victim_background}
+{premise.victim_name}: {premise.premise_victim_background if hasattr(premise, 'premise_victim_background') else premise.victim_background}
 
 The full case file with suspects and clues is still being compiled off-screen.
 
@@ -105,43 +154,33 @@ Keep ALL responses SHORT for voice narration (10-20 seconds of speech).
 Do NOT mention that the case file is still generating or anything about the
 system or background tasks. Stay purely in-world."""
 
-    # ========== START BACKGROUND MYSTERY GENERATION ==========
-    def _background_generate_full_case(sess_id: str, premise_obj):
-        bg_state = get_or_create_state(sess_id)
-        try:
-            logger.info("[BG] Starting full mystery generation in background...")
-            t_full_0 = time.perf_counter()
-            full_mystery = generate_mystery(premise=premise_obj)
-            t_full_1 = time.perf_counter()
-            logger.info(
-                "[PERF] Full mystery generation (background) took %.2fs",
-                t_full_1 - t_full_0,
-            )
-            bg_state.mystery = full_mystery
-            bg_state.system_prompt = prepare_game_prompt(full_mystery)
-            bg_state.mystery_ready = True
-            logger.info("[BG] Full mystery is ready for session %s", sess_id)
-        except Exception as e:
-            logger.error("[BG] Error generating full mystery in background: %s", e)
+    # Initialize with agent and narration (images generated on-demand)
+    logger.info("Starting game initialization (images will be generated on-demand)...")
 
-    threading.Thread(
-        target=_background_generate_full_case,
-        args=(session_id, premise),
-        daemon=True,
-    ).start()
+    # Kick off background generation of the opening scene image as soon as
+    # we have the premise (victim + setting). This runs concurrently with
+    # the welcome LLM + TTS so the image is often ready by the time we show
+    # the first screen, without blocking startup.
+    try:
+        threading.Thread(
+            target=_background_generate_title_card_from_premise,
+            args=(session_id,),
+            daemon=True,
+        ).start()
+    except Exception as e:  # noqa: BLE001
+        logger.error(
+            "[BG] Error starting title-card prewarm thread for %s: %s",
+            session_id,
+            e,
+        )
 
-    # ========== STAGE 2: WELCOME MESSAGE (50%) ==========
-    yield ("welcome", 0.5, {"premise": premise})
-    
-    logger.info("Generating welcome message...")
-    
-    # Create or reuse shared agent
-    if not hasattr(start_new_game_staged, "agent"):
-        start_new_game_staged.agent = create_game_master_agent()
+    # Create or reuse shared agent and get narration immediately (no waiting for images)
+    if not hasattr(start_new_game, "agent"):
+        start_new_game.agent = create_game_master_agent()
 
     t2 = time.perf_counter()
     response, _speaker = process_message(
-        start_new_game_staged.agent,
+        start_new_game.agent,
         (
             "The player has just arrived. Welcome them briefly "
             "(2-3 sentences, max 50 words) with atmosphere, "
@@ -154,17 +193,11 @@ system or background tasks. Stay purely in-world."""
     t3 = time.perf_counter()
     logger.info("[PERF] First Game Master response took %.2fs", t3 - t2)
 
-    # Initialize empty images dict
-    mystery_images[session_id] = {}
+    # Ensure images dict exists for this session (do not clobber prewarmed images)
+    if session_id not in mystery_images:
+        mystery_images[session_id] = {}
 
-    # Store in messages
-    state.messages.append(
-        {"role": "assistant", "content": response, "speaker": "Game Master"}
-    )
-
-    # ========== STAGE 3: TTS (80%) ==========
-    yield ("tts", 0.8, {"response": response})
-    
+    # Generate audio (needs the response text)
     logger.info("[GAME] Calling TTS for welcome message (%d chars)", len(response))
     t4 = time.perf_counter()
     audio_path, alignment_data = text_to_speech(
@@ -192,23 +225,93 @@ system or background tasks. Stay purely in-world."""
     else:
         logger.warning("[GAME] ⚠️ No alignment data (captions will use estimation)")
 
-    # ========== STAGE 4: COMPLETE (100%) ==========
-    yield ("complete", 1.0, {
-        "state": state,
-        "response": response,
-        "audio_path": audio_path,
-        "speaker": "Game Master",
-        "alignment_data": alignment_data,
-    })
+    # Store in messages
+    state.messages.append(
+        {"role": "assistant", "content": response, "speaker": "Game Master"}
+    )
+
+    # ========== STAGE 2: FULL CASE IN BACKGROUND ==========
+
+    def _background_generate_full_case(sess_id: str, premise_obj):
+        bg_state = get_or_create_state(sess_id)
+        try:
+            logger.info("[BG] Starting full mystery generation in background...")
+            t_full_0 = time.perf_counter()
+            full_mystery = generate_mystery(premise=premise_obj)
+            t_full_1 = time.perf_counter()
+            logger.info(
+                "[PERF] Full mystery generation (background) took %.2fs",
+                t_full_1 - t_full_0,
+            )
+            bg_state.mystery = full_mystery
+            bg_state.system_prompt = prepare_game_prompt(full_mystery)
+            bg_state.mystery_ready = True
+            logger.info("[BG] Full mystery is ready for session %s", sess_id)
+
+            # Kick off background prewarming of suspect portraits using a
+            # small bounded worker pool so first interrogations are fast.
+            try:
+                threading.Thread(
+                    target=_prewarm_suspect_portraits,
+                    args=(sess_id, full_mystery),
+                    daemon=True,
+                ).start()
+            except Exception as e2:  # noqa: BLE001
+                logger.error(
+                    "[BG] Error starting suspect portrait prewarm thread for %s: %s",
+                    sess_id,
+                    e2,
+                )
+        except Exception as e:
+            logger.error("[BG] Error generating full mystery in background: %s", e)
+
+    threading.Thread(
+        target=_background_generate_full_case,
+        args=(session_id, premise),
+        daemon=True,
+    ).start()
+
+    return state, response, audio_path, "Game Master", alignment_data
 
 
-def run_action_logic(
+def start_new_game_staged(session_id: str):
+    """Staged version of start_new_game used by the UI to show progress.
+
+    This wraps the existing start_new_game() function and exposes coarse
+    progress stages as a generator:
+      - ("premise", 0.2, None)
+      - ("welcome", 0.5, None)
+      - ("tts", 0.8, None)
+      - ("complete", 1.0, {...})
+    """
+    # Initial stage - premise (we don't re-run premise here, just expose stage)
+    yield ("premise", 0.2, None)
+
+    # Run the actual startup logic (premise + welcome + TTS + BG full mystery)
+    state, response, audio_path, speaker, alignment_data = start_new_game(session_id)
+
+    # Expose additional coarse stages so the UI can animate the progress bar
+    yield ("welcome", 0.5, None)
+    yield ("tts", 0.8, None)
+
+    # Final stage with full data
+    yield (
+        "complete",
+        1.0,
+        {
+            "state": state,
+            "response": response,
+            "audio_path": audio_path,
+            "speaker": speaker,
+            "alignment_data": alignment_data,
+        },
+    )
+
+
+def process_player_action(
     action_type: str, target: str, custom_message: str, session_id: str
-) -> Tuple[str, str, GameState, Dict, Optional[str]]:
-    """Process player action logic WITHOUT generating audio/images (fast path).
-
-    This is the core logic that runs the LLM agent and parses actions,
-    but does NOT block on TTS or image generation.
+) -> Tuple[str, Optional[str], str, GameState, Optional[List[Dict]]]:
+    """Process a player action and return response.
 
     Args:
         action_type: "talk", "search", "accuse", or "custom"
@@ -217,12 +320,7 @@ def run_action_logic(
         session_id: Session identifier
 
     Returns:
-        Tuple of (clean_response, speaker, state, actions_dict, audio_path_from_tool)
-        - clean_response: The text response (with audio markers stripped)
-        - speaker: Speaker name (suspect name or "Game Master")
-        - state: Updated game state
-        - actions_dict: Parsed actions (location_searched, etc.)
-        - audio_path_from_tool: Pre-generated audio path if tool created it, else None
+        Tuple of (response_text, audio_path, speaker_name, state)
     """
     state = get_or_create_state(session_id)
 
@@ -233,9 +331,9 @@ def run_action_logic(
         return (
             "Your full case file is still being prepared. "
             "Give me just a moment, then try again.",
+            None,
             "Game Master",
             state,
-            {},
             None,
         )
 
@@ -249,7 +347,7 @@ def run_action_logic(
     elif action_type == "custom" and custom_message:
         message = custom_message
     else:
-        return "I didn't understand that action.", "Game Master", state, {}, None
+        return "I didn't understand that action.", None, "Game Master", state
 
     # Store player message
     state.messages.append({"role": "user", "content": message, "speaker": "You"})
@@ -393,15 +491,15 @@ def run_action_logic(
         assign_voice_to_suspect(suspect_to_assign, used_voice_ids)
 
     # Get or create agent
-    if not hasattr(run_action_logic, "agent"):
-        run_action_logic.agent = create_game_master_agent()
+    if not hasattr(process_player_action, "agent"):
+        process_player_action.agent = create_game_master_agent()
 
     # Update system prompt (will include newly assigned voice_id if any)
     state.system_prompt = state.get_continue_prompt()
 
     # Process with agent
     response, speaker = process_message(
-        run_action_logic.agent,
+        process_player_action.agent,
         message,
         state.system_prompt,
         session_id,
@@ -441,9 +539,11 @@ def run_action_logic(
         clean_response = re.sub(audio_marker_pattern, "", response).strip()
         logger.info("Extracted audio path from tool: %s", audio_path_from_tool)
 
-    # Assign voice on-demand if a suspect was talked to
+    # Generate portrait and assign voice on-demand if a suspect was talked to
     # (This handles cases where speaker is detected from custom messages)
     if speaker and speaker != "Game Master":
+        session_images = mystery_images.get(session_id, {})
+
         # Find the suspect in the mystery
         suspect = None
         for s in state.mystery.suspects:
@@ -463,12 +563,346 @@ def run_action_logic(
                     if s.voice_id and s.name != speaker
                 ]
                 assign_voice_to_suspect(suspect, used_voice_ids)
+                # voice_id will be available for next interaction
+
+            # Check if we need to generate this suspect's portrait
+            if speaker not in session_images:
+                logger.info("Generating portrait on-demand for suspect: %s", speaker)
+                portrait_path = generate_portrait_on_demand(
+                    suspect, state.mystery.setting if state.mystery else ""
+                )
+                if portrait_path:
+                    # Store in mystery_images dict for this session
+                    if session_id not in mystery_images:
+                        mystery_images[session_id] = {}
+                    mystery_images[session_id][speaker] = portrait_path
+                    logger.info(
+                        "Generated and stored portrait for %s: %s",
+                        speaker,
+                        portrait_path,
+                    )
+                else:
+                    logger.warning("Failed to generate portrait for %s", speaker)
         else:
             logger.warning(
-                "Suspect %s not found in mystery for voice assignment", speaker
+                "Suspect %s not found in mystery for portrait/voice generation", speaker
             )
 
+    # Generate scene image on-demand if a location was searched
+    if actions.get("location_searched"):
+        location = actions["location_searched"]
+        session_images = mystery_images.get(session_id, {})
+
+        # Only generate if we don't already have this scene
+        if location not in session_images:
+            logger.info("Generating scene image for location: %s", location)
+            service = get_image_service()
+            if service and service.is_available:
+                # Use the response text as context for scene generation
+                # Clean the response to extract relevant descriptive content
+                context_text = clean_response[:500]  # Use first 500 chars as context
+                scene_path = service.generate_scene(
+                    location_name=location,
+                    setting_description=state.mystery.setting if state.mystery else "",
+                    mood="mysterious",
+                    context=context_text,
+                )
+                if scene_path:
+                    # Store in mystery_images dict for this session
+                    if session_id not in mystery_images:
+                        mystery_images[session_id] = {}
+                    mystery_images[session_id][location] = scene_path
+                    logger.info(
+                        "Generated and stored scene for %s: %s", location, scene_path
+                    )
+                else:
+                    logger.warning("Failed to generate scene for %s", location)
+            else:
+                logger.warning("Image service not available for scene generation")
+
+    # Determine voice
+    voice_id = None
+    if speaker and speaker != "Game Master":
+        voice_id = get_suspect_voice_id(speaker, state)
+    voice_id = voice_id or GAME_MASTER_VOICE_ID
+
+    # Generate audio
+    tts_text = clean_response.replace("**", "").replace("*", "")
+    speaker = speaker or "Game Master"
+
+    alignment_data = None
+    if audio_path_from_tool:
+        # Try to get alignment data from tool-generated audio
+        audio_path = audio_path_from_tool
+        from game_tools import get_audio_alignment_data
+
+        alignment_data = get_audio_alignment_data(audio_path)
+        if alignment_data:
+            logger.info(
+                "[GAME] Using audio from tool with %d word timestamps: %s",
+                len(alignment_data),
+                audio_path,
+            )
+        else:
+            logger.info(
+                "[GAME] Using audio from tool (no alignment data): %s", audio_path
+            )
+    else:
+        logger.info("[GAME] Calling TTS for response (%d chars)", len(tts_text))
+        audio_path, alignment_data = text_to_speech(
+            tts_text, voice_id, speaker_name=speaker
+        )
+
+        # Verify audio was generated
+        if audio_path:
+
+            if os.path.exists(audio_path):
+                file_size = os.path.getsize(audio_path)
+                logger.info(
+                    "[GAME] ✅ Audio generated: %s (%d bytes)", audio_path, file_size
+                )
+            else:
+                logger.error(
+                    "[GAME] ❌ Audio path returned but file doesn't exist: %s",
+                    audio_path,
+                )
+        else:
+            logger.error("[GAME] ❌ No audio path returned from TTS!")
+
+        if alignment_data:
+            logger.info("[GAME] ✅ Got %d word timestamps", len(alignment_data))
+        else:
+            logger.warning("[GAME] ⚠️ No alignment data")
+
     # Store response (without audio marker)
+    state.messages.append(
+        {
+            "role": "assistant",
+            "content": clean_response,
+            "speaker": speaker or "Game Master",
+        }
+    )
+
+    return clean_response, audio_path, speaker or "Game Master", state, alignment_data
+
+
+# ============================================================================
+# FAST ACTION LOGIC + MEDIA GENERATION (for voice UI)
+# ============================================================================
+
+
+def run_action_logic(
+    action_type: str, target: str, custom_message: str, session_id: str
+) -> Tuple[str, str, GameState, Dict, Optional[str]]:
+    """Process player action logic WITHOUT generating audio/images (fast path).
+
+    This is used by the voice UI to:
+      - Run transcription + LLM agent + tools
+      - Parse actions
+      - Extract any tool-generated audio path (from [AUDIO:...] markers)
+    and then hand off to generate_turn_media() for the slow TTS/image work.
+
+    Returns:
+        Tuple of (clean_response, speaker_name, state, actions_dict, audio_path_from_tool)
+    """
+    state = get_or_create_state(session_id)
+
+    # If the full mystery is not ready yet, keep the player in the intro phase.
+    if not getattr(state, "mystery_ready", False):
+        clean = (
+            "Your full case file is still being prepared. "
+            "Give me just a moment, then try again."
+        )
+        return clean, "Game Master", state, {}, None
+
+    # Build the message based on action type (same as process_player_action)
+    if action_type == "talk" and target:
+        message = f"I want to talk to {target}. Hello, {target}."
+    elif action_type == "search" and target:
+        message = f"I want to search {target}."
+    elif action_type == "accuse" and target:
+        message = f"I accuse {target} of the murder!"
+    elif action_type == "custom" and custom_message:
+        message = custom_message
+    else:
+        return "I didn't understand that action.", "Game Master", state, {}, None
+
+    # Store player message
+    state.messages.append({"role": "user", "content": message, "speaker": "You"})
+
+    # Assign voice on-demand before processing if talking to a suspect
+    suspect_to_assign = None
+    if action_type == "talk" and target:
+        for s in state.mystery.suspects:
+            if s.name == target:
+                suspect_to_assign = s
+                break
+    elif action_type == "custom" and custom_message:
+        # Reuse the same heuristic + AI resolver logic as process_player_action
+        message_lower = custom_message.lower()
+        message_words = set(message_lower.split())
+
+        for s in state.mystery.suspects:
+            name_parts = s.name.lower().split()
+
+            if s.name.lower() in message_lower:
+                suspect_to_assign = s
+                logger.info("Detected suspect mention (full name): %s", s.name)
+                break
+
+            for i in range(len(name_parts) - 1):
+                partial_name = f"{name_parts[i]} {name_parts[i+1]}"
+                if partial_name in message_lower:
+                    suspect_to_assign = s
+                    logger.info("Detected suspect mention (partial name): %s", s.name)
+                    break
+            if suspect_to_assign:
+                break
+
+            for part in name_parts:
+                if len(part) >= 3 and part in message_words:
+                    suspect_to_assign = s
+                    logger.info(
+                        "Detected suspect mention (name part '%s'): %s",
+                        part,
+                        s.name,
+                    )
+                    break
+            if suspect_to_assign:
+                break
+
+        if not suspect_to_assign and state.mystery:
+            try:
+                from langchain_openai import ChatOpenAI
+                from langchain_core.prompts import ChatPromptTemplate
+
+                suspects = state.mystery.suspects
+                suspects_summary = "\n".join(
+                    f"- {s.name} ({s.role})" for s in suspects
+                )
+
+                llm = ChatOpenAI(
+                    model=os.getenv("SUSPECT_RESOLVER_MODEL", "gpt-4o-mini"),
+                    temperature=0,
+                    api_key=os.getenv("OPENAI_API_KEY"),
+                )
+
+                prompt = ChatPromptTemplate.from_messages(
+                    [
+                        (
+                            "system",
+                            (
+                                "You map a player's message to ONE suspect from a list.\n"
+                                "You MUST answer with exactly one suspect name from the list, "
+                                "or the word NONE if no suspect clearly matches.\n"
+                                "Do not add any explanation."
+                            ),
+                        ),
+                        (
+                            "human",
+                            (
+                                "Suspects:\n"
+                                "{suspect_list}\n\n"
+                                "Player message:\n"
+                                "{player_message}\n\n"
+                                "Answer with exactly one suspect name from the list above, "
+                                "or NONE if you are not sure."
+                            ),
+                        ),
+                    ]
+                )
+
+                chain = prompt | llm
+                result = chain.invoke(
+                    {
+                        "suspect_list": suspects_summary,
+                        "player_message": custom_message,
+                    }
+                )
+                choice = (result.content or "").strip()
+                first_line = choice.splitlines()[0].strip()
+                first_line = first_line.lstrip("-• ").strip().strip('"').strip("'")
+
+                if first_line and first_line.upper() != "NONE":
+                    for s in suspects:
+                        if s.name.lower() == first_line.lower():
+                            suspect_to_assign = s
+                            logger.info(
+                                "AI-resolved suspect mention: %s (from '%s')",
+                                s.name,
+                                custom_message,
+                            )
+                            break
+                    else:
+                        logger.info(
+                            "AI suspect resolver returned '%s', which did not match any known suspect",
+                            first_line,
+                        )
+                else:
+                    logger.info(
+                        "AI suspect resolver chose NONE for message: %s", custom_message
+                    )
+            except Exception:
+                logger.exception(
+                    "Error resolving suspect name via AI; falling back to heuristics only"
+                )
+
+    if suspect_to_assign and not suspect_to_assign.voice_id:
+        logger.info("Assigning voice on-demand for suspect: %s", suspect_to_assign.name)
+        used_voice_ids = [
+            s.voice_id
+            for s in state.mystery.suspects
+            if s.voice_id and s.name != suspect_to_assign.name
+        ]
+        assign_voice_to_suspect(suspect_to_assign, used_voice_ids)
+
+    # Get or create agent
+    if not hasattr(run_action_logic, "agent"):
+        run_action_logic.agent = create_game_master_agent()
+
+    # Update system prompt (will include newly assigned voice_id if any)
+    state.system_prompt = state.get_continue_prompt()
+
+    # Process with agent
+    response, speaker = process_message(
+        run_action_logic.agent,
+        message,
+        state.system_prompt,
+        session_id,
+        thread_id=session_id,
+    )
+
+    # Handle empty or placeholder responses
+    empty_responses = ["", "Empty", "I'm processing your request", "No content"]
+    if not response or response.strip() in empty_responses:
+        logger.warning(
+            "[GAME] LLM returned empty/placeholder response, generating fallback"
+        )
+        message_lower = message.lower()
+        if "search" in message_lower:
+            response = (
+                "You carefully examine the area, taking in every detail. "
+                "The atmosphere is thick with tension as you search for clues."
+            )
+        elif "talk" in message_lower or "speak" in message_lower:
+            response = "You approach to have a conversation."
+        else:
+            response = "You consider your next move carefully."
+
+    # Parse actions
+    actions = parse_game_actions(message, response, state)
+
+    # Extract audio path marker if present (from interrogate_suspect tool)
+    audio_path_from_tool = None
+    clean_response = response
+    audio_marker_pattern = r"\[AUDIO:([^\]]+)\]"
+    match = re.search(audio_marker_pattern, response)
+    if match:
+        audio_path_from_tool = match.group(1)
+        clean_response = re.sub(audio_marker_pattern, "", response).strip()
+        logger.info("Extracted audio path from tool: %s", audio_path_from_tool)
+
+    # Store assistant message (text only)
     state.messages.append(
         {
             "role": "assistant",
@@ -531,6 +965,80 @@ def _generate_scene_background(
         logger.error("[BG] Error generating scene for %s: %s", location, e)
 
 
+def _prewarm_suspect_portraits(session_id: str, mystery):
+    """Pre-generate portraits for all suspects in the background.
+
+    Uses a small bounded worker pool (max 2 concurrent workers) so we don't
+    overwhelm the image API but still parallelize enough to be snappy.
+    """
+    if not mystery or not getattr(mystery, "suspects", None):
+        logger.info(
+            "[BG] No suspects available for portrait prewarm in session %s", session_id
+        )
+        return
+
+    setting = getattr(mystery, "setting", "") or ""
+    session_images = mystery_images.get(session_id, {})
+
+    tasks: List[Tuple[str, object]] = []
+    for suspect in mystery.suspects:
+        name = getattr(suspect, "name", None)
+        if not name:
+            continue
+        if name in session_images:
+            # Already have a portrait for this suspect
+            continue
+        tasks.append((name, suspect))
+
+    if not tasks:
+        logger.info(
+            "[BG] No new suspect portraits to prewarm for session %s", session_id
+        )
+        return
+
+    task_queue: "queue.Queue[Tuple[str, object]]" = queue.Queue()
+    for task in tasks:
+        task_queue.put(task)
+
+    def _worker():
+        while True:
+            try:
+                name, suspect = task_queue.get_nowait()
+                try:
+                    logger.info(
+                        "[BG] Worker generating prewarm portrait for %s in session %s",
+                        name,
+                        session_id,
+                    )
+                    _generate_portrait_background(name, suspect, setting, session_id)
+                finally:
+                    # Ensure task is marked done even if generation fails
+                    task_queue.task_done()
+            except queue.Empty:
+                break
+            except Exception as e:  # noqa: BLE001
+                logger.error(
+                    "[BG] Worker error generating portrait for %s in session %s: %s",
+                    name if "name" in locals() else "<unknown>",
+                    session_id,
+                    e,
+                )
+
+    max_workers = 2  # Limit to 2 concurrent image generations
+    num_workers = min(max_workers, len(tasks))
+    for _ in range(num_workers):
+        t = threading.Thread(target=_worker, daemon=True)
+        t.start()
+
+    logger.info(
+        "[BG] Launched %d prewarm portrait workers for session %s (tasks=%d)",
+        num_workers,
+        session_id,
+        len(tasks),
+    )
+    # No need to join here, as these are daemon threads and we don't block on them.
+
+
 def generate_turn_media(
     clean_response: str,
     speaker: str,
@@ -573,7 +1081,9 @@ def generate_turn_media(
             if speaker not in session_images:
                 mystery_setting = state.mystery.setting if state.mystery else ""
                 if background_images:
-                    logger.info("[GAME] Starting background portrait generation for: %s", speaker)
+                    logger.info(
+                        "[GAME] Starting background portrait generation for: %s", speaker
+                    )
                     threading.Thread(
                         target=_generate_portrait_background,
                         args=(speaker, suspect, mystery_setting, session_id),
@@ -581,7 +1091,9 @@ def generate_turn_media(
                     ).start()
                 else:
                     # Foreground (blocking)
-                    logger.info("Generating portrait on-demand for suspect: %s", speaker)
+                    logger.info(
+                        "Generating portrait on-demand for suspect: %s", speaker
+                    )
                     portrait_path = generate_portrait_on_demand(suspect, mystery_setting)
                     if portrait_path:
                         if session_id not in mystery_images:
@@ -604,9 +1116,11 @@ def generate_turn_media(
         if location not in session_images:
             mystery_setting = state.mystery.setting if state.mystery else ""
             context_text = clean_response[:500]  # Use first 500 chars as context
-            
+
             if background_images:
-                logger.info("[GAME] Starting background scene generation for: %s", location)
+                logger.info(
+                    "[GAME] Starting background scene generation for: %s", location
+                )
                 threading.Thread(
                     target=_generate_scene_background,
                     args=(location, mystery_setting, context_text, session_id),
@@ -643,6 +1157,7 @@ def generate_turn_media(
 
     # Generate audio (always foreground - needed for immediate playback)
     tts_text = clean_response.replace("**", "").replace("*", "")
+    speaker = speaker or "Game Master"
 
     alignment_data = None
     if audio_path_from_tool:
@@ -688,34 +1203,3 @@ def generate_turn_media(
             logger.warning("[GAME] ⚠️ No alignment data")
 
     return audio_path, alignment_data
-
-
-def process_player_action(
-    action_type: str, target: str, custom_message: str, session_id: str
-) -> Tuple[str, Optional[str], str, GameState, Optional[List[Dict]]]:
-    """Process a player action and return response (legacy interface).
-
-    This is a convenience wrapper that calls run_action_logic + generate_turn_media
-    synchronously. For better UX, use run_action_logic first, update UI, then
-    call generate_turn_media separately.
-
-    Args:
-        action_type: "talk", "search", "accuse", or "custom"
-        target: Suspect name, location, or None
-        custom_message: Free-form message if action_type is "custom"
-        session_id: Session identifier
-
-    Returns:
-        Tuple of (response_text, audio_path, speaker_name, state, alignment_data)
-    """
-    # Run core logic (fast)
-    clean_response, speaker, state, actions, audio_path_from_tool = run_action_logic(
-        action_type, target, custom_message, session_id
-    )
-
-    # Generate media (slow)
-    audio_path, alignment_data = generate_turn_media(
-        clean_response, speaker, state, actions, audio_path_from_tool, session_id
-    )
-
-    return clean_response, audio_path, speaker, state, alignment_data
