@@ -40,6 +40,8 @@ from game_handlers import (
     init_game_handlers,
     start_new_game,
     process_player_action,
+    run_action_logic,
+    generate_turn_media,
     get_or_create_state,
 )
 
@@ -823,7 +825,11 @@ def create_app():
             ]
 
         def on_voice_input(audio_path: str, sess_id, progress=gr.Progress()):
-            """Handle voice input with progress indicator."""
+            """Handle voice input with two-stage yield for faster perceived response.
+            
+            Stage 1 (fast): Transcribe + run LLM logic, yield text/panels immediately
+            Stage 2 (slow): Generate TTS audio + images, yield final update with audio
+            """
             if not audio_path:
                 yield [gr.update()] * 8
                 return
@@ -841,7 +847,7 @@ def create_app():
                 return
 
             # Show progress indicator while processing
-            progress(0, desc="🗣️ Processing your message...")
+            progress(0, desc="🗣️ Transcribing...")
             yield [gr.update()] * 8
 
             # Store previous state to detect what changed
@@ -861,20 +867,27 @@ def create_app():
             )
 
             # Transcribe
+            t0 = time.perf_counter()
             text = transcribe_audio(audio_path)
+            t1 = time.perf_counter()
+            logger.info("[PERF] Transcription took %.2fs", t1 - t0)
+            
             if not text.strip():
                 yield [gr.update()] * 8
                 return
 
-            _response, audio_resp, speaker, state, alignment_data = (
-                process_player_action("custom", "", text, sess_id)
+            # ========== STAGE 1: FAST - Run LLM logic only ==========
+            progress(0.3, desc="🧠 Thinking...")
+            
+            t2 = time.perf_counter()
+            clean_response, speaker, state, actions, audio_path_from_tool = (
+                run_action_logic("custom", "", text, sess_id)
             )
+            t3 = time.perf_counter()
+            logger.info("[PERF] Action logic took %.2fs", t3 - t2)
 
-            # Refresh images dict after processing (in case new images were generated)
+            # Get images dict (may not have new portrait yet)
             images = mystery_images.get(sess_id, {})
-            logger.info(
-                "Available images for session %s: %s", sess_id, list(images.keys())
-            )
             placeholder_img = create_placeholder_image()
 
             # Determine image to display based on action type
@@ -892,7 +905,7 @@ def create_app():
             newly_talked_suspect = current_suspects - previous_suspects
 
             # Priority 0: If speaker is a suspect name, show their portrait directly
-            # This is the most reliable method since state comparison can fail
+            # (may not exist yet on first talk - will be generated in stage 2)
             if speaker and speaker != "Game Master":
                 suspect_portrait = images.get(speaker, None)
                 if suspect_portrait:
@@ -904,56 +917,101 @@ def create_app():
             # Priority 1: Check if a suspect was just talked to
             if not display_portrait and newly_talked_suspect:
                 suspect_name = list(newly_talked_suspect)[0]
-                logger.info("Looking for portrait for suspect: %s", suspect_name)
                 portrait = images.get(suspect_name, None)
                 if portrait:
-                    logger.info(
-                        "✓ Found portrait for suspect %s: %s", suspect_name, portrait
-                    )
                     display_portrait = portrait
-                else:
-                    logger.warning(
-                        "✗ No portrait found for suspect %s in images dict",
-                        suspect_name,
-                    )
-                    # Try to get it directly from mystery_images in case of timing issue
-                    session_images = mystery_images.get(sess_id, {})
-                    portrait = session_images.get(suspect_name, None)
-                    if portrait:
-                        logger.info("✓ Found portrait in direct lookup: %s", portrait)
-                        display_portrait = portrait
-                        # Update images dict for next time
-                        images[suspect_name] = portrait
 
             # Priority 2: Check if a location was just searched
             if not display_portrait and newly_searched_location:
                 location = list(newly_searched_location)[0]
                 scene_image = images.get(location, None)
                 if scene_image:
-                    logger.info("Displaying scene image for location: %s", location)
                     display_portrait = scene_image
 
             # Priority 3: Fall back to opening scene image (Game Master)
             if not display_portrait:
                 display_portrait = images.get("_opening_scene", None)
-                if display_portrait:
-                    logger.info("Displaying opening scene image (Game Master)")
 
             # Priority 4: Use placeholder if nothing available
             if not display_portrait:
                 display_portrait = placeholder_img
-                logger.info("Using placeholder image")
+
+            # YIELD STAGE 1: Show text response + updated panels immediately (no audio yet)
+            progress(0.5, desc="🔊 Generating voice...")
+            logger.info("[APP] Stage 1 complete - yielding fast UI update")
+            
+            yield [
+                f'<div class="speaker-name" style="padding: 16px 0 !important;">🗣️ {speaker} SPEAKING...</div>',
+                gr.update(),  # Audio placeholder - will be filled in stage 2
+                gr.update(value=display_portrait, visible=True),
+                format_victim_scene_html(state.mystery),
+                format_suspects_list_html(state.mystery, state.suspects_talked_to),
+                format_locations_html(state.mystery, state.searched_locations),
+                format_clues_html(state.clues_found),
+                _format_accusations_html(state.wrong_accusations),
+            ]
+
+            # ========== STAGE 2: SLOW - Generate audio + images ==========
+            t4 = time.perf_counter()
+            audio_resp, alignment_data = generate_turn_media(
+                clean_response, speaker, state, actions, audio_path_from_tool, sess_id
+            )
+            t5 = time.perf_counter()
+            logger.info("[PERF] Media generation took %.2fs", t5 - t4)
+
+            # Refresh images dict after media generation (portraits/scenes may be new)
+            images = mystery_images.get(sess_id, {})
+            logger.info(
+                "Available images for session %s: %s", sess_id, list(images.keys())
+            )
+
+            # Re-determine portrait (may have been generated in stage 2)
+            display_portrait = None
+
+            # Priority 0: If speaker is a suspect name, show their portrait directly
+            if speaker and speaker != "Game Master":
+                suspect_portrait = images.get(speaker, None)
+                if suspect_portrait:
+                    logger.info(
+                        "✓ Found portrait for speaker %s: %s", speaker, suspect_portrait
+                    )
+                    display_portrait = suspect_portrait
+
+            # Priority 1: Check if a suspect was just talked to
+            if not display_portrait and newly_talked_suspect:
+                suspect_name = list(newly_talked_suspect)[0]
+                portrait = images.get(suspect_name, None)
+                if portrait:
+                    display_portrait = portrait
+
+            # Priority 2: Check if a location was just searched
+            if not display_portrait and newly_searched_location:
+                location = list(newly_searched_location)[0]
+                scene_image = images.get(location, None)
+                if scene_image:
+                    display_portrait = scene_image
+
+            # Priority 3: Fall back to opening scene image (Game Master)
+            if not display_portrait:
+                display_portrait = images.get("_opening_scene", None)
+
+            # Priority 4: Use placeholder if nothing available
+            if not display_portrait:
+                display_portrait = placeholder_img
 
             # Convert alignment_data to Gradio subtitles format
-            # Use alignment data directly - it represents what was actually spoken
             subtitles = convert_alignment_to_subtitles(alignment_data)
+
+            # YIELD STAGE 2: Final update with audio + updated portrait
+            progress(1.0, desc="Done!")
+            logger.info("[APP] Stage 2 complete - yielding final UI with audio")
 
             yield [
                 f'<div class="speaker-name" style="padding: 16px 0 !important;">🗣️ {speaker} SPEAKING...</div>',
                 (
-                    gr.update(value=audio_resp, subtitles=subtitles)
+                    gr.update(value=audio_resp, subtitles=subtitles, autoplay=True)
                     if audio_resp
-                    else None
+                    else gr.update()
                 ),
                 gr.update(value=display_portrait, visible=True),
                 format_victim_scene_html(state.mystery),
