@@ -368,6 +368,9 @@ def create_app():
                         '<div class="accusations-display">Accusations: <span class="accusations-pip"></span><span class="accusations-pip"></span><span class="accusations-pip"></span></div>'
                     )
 
+        # Hidden timer for checking mystery completion (inactive by default)
+        mystery_check_timer = gr.Timer(value=1.0, active=False)
+
         # ====== EVENT HANDLERS ======
 
         def on_start_game(sess_id, progress=gr.Progress()):
@@ -385,6 +388,7 @@ def create_app():
                 gr.update(),  # locations_html
                 gr.update(),  # clues_html
                 gr.update(),  # accusations_html
+                gr.update(),  # mystery_check_timer
             ]
 
             # Step 2: while generating the mystery (longest step)
@@ -392,6 +396,7 @@ def create_app():
             yield [
                 gr.update(), gr.update(), gr.update(), gr.update(), gr.update(),
                 gr.update(), gr.update(), gr.update(), gr.update(), gr.update(),
+                gr.update(),  # mystery_check_timer
             ]
             
             state, response, audio_path, speaker, alignment_data = start_new_game(
@@ -508,11 +513,9 @@ def create_app():
             else:
                 victim_html = format_victim_scene_html(None)
 
-            # Return final results
-            progress(1.0, desc="Mystery ready")
-            
-            # Check if mystery is still loading (background generation not complete)
-            mystery_loading = state.mystery is None
+            # Return initial results (mystery still loading in background)
+            # The gr.Timer will handle updating the UI when mystery is ready
+            progress(1.0, desc="Mystery started!")
             
             yield [
                 # Speaker - show when game starts
@@ -526,11 +529,13 @@ def create_app():
                 gr.update(visible=False),  # start_btn
                 # Side panels - use premise-based victim_html, others show "loading" state
                 victim_html,
-                format_suspects_list_html(state.mystery, state.suspects_talked_to, loading=mystery_loading),
-                format_locations_html(state.mystery, state.searched_locations, loading=mystery_loading),
+                format_suspects_list_html(None, state.suspects_talked_to, loading=True),
+                format_locations_html(None, state.searched_locations, loading=True),
                 format_clues_html(state.clues_found),
                 # Accusations
                 _format_accusations_html(state.wrong_accusations),
+                # Activate the mystery check timer
+                gr.Timer(active=True),
             ]
 
         def _format_accusations_html(wrong: int):
@@ -539,6 +544,28 @@ def create_app():
                 cls = "accusations-pip used" if i < wrong else "accusations-pip"
                 pips += f'<span class="{cls}"></span>'
             return f'<div class="accusations-display">Accusations: {pips}</div>'
+
+        def check_mystery_ready(sess_id: str):
+            """Timer callback to check if full mystery is ready and update UI."""
+            state = get_or_create_state(sess_id)
+            
+            if state.mystery is not None:
+                # Mystery is ready - update UI and stop timer
+                logger.info("[APP] Timer: Full mystery ready, updating UI panels")
+                return [
+                    format_victim_scene_html(state.mystery),
+                    format_suspects_list_html(state.mystery, state.suspects_talked_to, loading=False),
+                    format_locations_html(state.mystery, state.searched_locations, loading=False),
+                    gr.Timer(active=False),  # Stop the timer
+                ]
+            else:
+                # Mystery still loading - keep timer active, no UI changes
+                return [
+                    gr.update(),  # victim_scene_html - no change
+                    gr.update(),  # suspects_list_html - no change  
+                    gr.update(),  # locations_html - no change
+                    gr.Timer(active=True),  # Keep timer running
+                ]
 
         def on_custom_message(message: str, sess_id: str):
             """Handle free-form text input."""
@@ -767,6 +794,19 @@ def create_app():
                 locations_html,
                 clues_html,
                 accusations_html,
+                mystery_check_timer,  # Timer activation
+            ],
+        )
+
+        # Timer to check for mystery completion and update UI
+        mystery_check_timer.tick(
+            fn=check_mystery_ready,
+            inputs=[session_id],
+            outputs=[
+                victim_scene_html,
+                suspects_list_html,
+                locations_html,
+                mystery_check_timer,
             ],
         )
 
