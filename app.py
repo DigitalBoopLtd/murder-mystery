@@ -510,6 +510,10 @@ def create_app():
 
             # Return final results
             progress(1.0, desc="Mystery ready")
+            
+            # Check if mystery is still loading (background generation not complete)
+            mystery_loading = state.mystery is None
+            
             yield [
                 # Speaker - show when game starts
                 f'<div class="speaker-name" style="padding: 16px 0 !important;">🗣️ {speaker}</div>',
@@ -522,8 +526,8 @@ def create_app():
                 gr.update(visible=False),  # start_btn
                 # Side panels - use premise-based victim_html, others show "loading" state
                 victim_html,
-                format_suspects_list_html(state.mystery, state.suspects_talked_to),
-                format_locations_html(state.mystery, state.searched_locations),
+                format_suspects_list_html(state.mystery, state.suspects_talked_to, loading=mystery_loading),
+                format_locations_html(state.mystery, state.searched_locations, loading=mystery_loading),
                 format_clues_html(state.clues_found),
                 # Accusations
                 _format_accusations_html(state.wrong_accusations),

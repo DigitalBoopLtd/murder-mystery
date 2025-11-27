@@ -29,9 +29,11 @@ def format_clues_html(clues: List[str]) -> str:
     return "".join(f'<div class="clue-item">• {clue}</div>' for clue in clues)
 
 
-def format_suspects_list_html(mystery, talked_to: List[str] = None) -> str:
+def format_suspects_list_html(mystery, talked_to: List[str] = None, loading: bool = False) -> str:
     """Format suspects list as HTML for quick reference."""
     if not mystery:
+        if loading:
+            return '<em style="color: var(--accent-gold);">🔍 Gathering suspect information...</em>'
         return "<em>Start a game to see suspects</em>"
     
     talked_to = talked_to or []
@@ -58,9 +60,11 @@ def format_suspects_list_html(mystery, talked_to: List[str] = None) -> str:
     return "".join(html_parts)
 
 
-def format_locations_html(mystery, searched: List[str]) -> str:
+def format_locations_html(mystery, searched: List[str], loading: bool = False) -> str:
     """Format locations as HTML."""
     if not mystery:
+        if loading:
+            return '<em style="color: var(--accent-gold);">🔍 Mapping the crime scene...</em>'
         return "<em>Start a game to see locations</em>"
 
     locations = list(set(clue.location for clue in mystery.clues))
