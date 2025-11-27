@@ -480,7 +480,7 @@ def create_app():
                 ):
                     accusations_html = gr.HTML(
                         '<div class="accusations-display">Accusations: '
-                        '<span>'
+                        "<span>"
                         '<span class="accusations-pip"></span>'
                         '<span class="accusations-pip"></span>'
                         '<span class="accusations-pip"></span>'
@@ -510,12 +510,12 @@ def create_app():
 
         def on_start_game(sess_id, progress=gr.Progress()):
             """Handle game start with staged progress updates.
-            
+
             Fast path (~6s): premise → welcome → TTS → image
             Background: full mystery generation (~15s, timer updates panels when ready)
             """
             sess_id = _normalize_session_id(sess_id)
-            
+
             # Initial yield to hide start button immediately
             progress(0, desc="🔍 Starting mystery generation...")
             yield [
@@ -546,12 +546,18 @@ def create_app():
             audio_path = None
             speaker = None
             alignment_data = None
-            
-            for stage_name, stage_progress, stage_data in start_new_game_staged(sess_id):
+
+            for stage_name, stage_progress, stage_data in start_new_game_staged(
+                sess_id
+            ):
                 desc = stage_descriptions.get(stage_name, f"Processing {stage_name}...")
                 progress(stage_progress, desc=desc)
-                logger.info("[APP] Game start stage: %s (%.0f%%)", stage_name, stage_progress * 100)
-                
+                logger.info(
+                    "[APP] Game start stage: %s (%.0f%%)",
+                    stage_name,
+                    stage_progress * 100,
+                )
+
                 if stage_name == "complete" and stage_data:
                     state = stage_data["state"]
                     response = stage_data["response"]
@@ -845,7 +851,7 @@ def create_app():
 
         def on_voice_input(audio_path: str, sess_id, progress=gr.Progress()):
             """Handle voice input with two-stage yield for faster perceived response.
-            
+
             Stage 1 (fast): Transcribe + run LLM logic, yield text/panels immediately
             Stage 2 (slow): Generate TTS audio + images, yield final update with audio
             """
@@ -890,7 +896,7 @@ def create_app():
             text = transcribe_audio(audio_path)
             t1 = time.perf_counter()
             logger.info("[PERF] Transcription took %.2fs", t1 - t0)
-            
+
             if not text.strip():
                 yield [gr.update()] * 8
                 return
@@ -959,7 +965,7 @@ def create_app():
 
             # YIELD STAGE 1: Show text response + updated panels immediately (no audio yet)
             logger.info("[APP] Stage 1 complete - yielding fast UI update")
-            
+
             yield [
                 f'<div class="speaker-name" style="padding: 16px 0 !important;">🗣️ {speaker} SPEAKING...</div>',
                 gr.update(),  # Audio placeholder - will be filled in stage 2
@@ -977,8 +983,13 @@ def create_app():
             # Use background_images=False so portrait is ready before we yield
             t4 = time.perf_counter()
             audio_resp, alignment_data = generate_turn_media(
-                clean_response, speaker, state, actions, audio_path_from_tool, sess_id,
-                background_images=False  # Wait for portrait so it's ready in Stage 2
+                clean_response,
+                speaker,
+                state,
+                actions,
+                audio_path_from_tool,
+                sess_id,
+                background_images=False,  # Wait for portrait so it's ready in Stage 2
             )
             t5 = time.perf_counter()
             logger.info("[PERF] Media generation took %.2fs", t5 - t4)
@@ -1102,6 +1113,25 @@ def create_app():
             inputs=None,
             outputs=[voice_input],
         )
+
+        # Hide speaker name when audio finishes playing
+        def on_audio_stop():
+            """Clear speaker name when audio playback ends."""
+            return '<div class="speaker-name" style="display: none;"></div>'
+
+        # Use getattr to access the stop event (works across Gradio versions)
+        if hasattr(audio_output, "stop"):
+            getattr(audio_output, "stop")(
+                fn=on_audio_stop,
+                inputs=None,
+                outputs=[speaker_html],
+            )
+        elif hasattr(audio_output, "pause"):
+            getattr(audio_output, "pause")(
+                fn=on_audio_stop,
+                inputs=None,
+                outputs=[speaker_html],
+            )
 
     return app
 

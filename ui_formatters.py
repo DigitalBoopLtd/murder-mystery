@@ -52,7 +52,7 @@ def format_suspects_list_html(mystery, talked_to: List[str] = None, loading: boo
             f'</div>'
             f'</summary>'
             f'<div class="suspect-details">'
-            f'<div class="suspect-motive">Motive: <em>{suspect.secret}</em></div>'
+            f'<div class="suspect-motive"><strong>Motive:</strong> <em>{suspect.secret}</em></div>'
             f'</div>'
             f'</details>'
         )

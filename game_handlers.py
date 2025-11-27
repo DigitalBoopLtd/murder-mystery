@@ -248,8 +248,8 @@ system or background tasks. Stay purely in-world."""
             bg_state.mystery_ready = True
             logger.info("[BG] Full mystery is ready for session %s", sess_id)
 
-            # Kick off background prewarming of suspect portraits using a
-            # small bounded worker pool so first interrogations are fast.
+            # Kick off background prewarming of suspect portraits AND scene images
+            # Both run in parallel using separate worker pools (2 workers each)
             try:
                 threading.Thread(
                     target=_prewarm_suspect_portraits,
@@ -261,6 +261,19 @@ system or background tasks. Stay purely in-world."""
                     "[BG] Error starting suspect portrait prewarm thread for %s: %s",
                     sess_id,
                     e2,
+                )
+
+            try:
+                threading.Thread(
+                    target=_prewarm_scene_images,
+                    args=(sess_id, full_mystery),
+                    daemon=True,
+                ).start()
+            except Exception as e3:  # noqa: BLE001
+                logger.error(
+                    "[BG] Error starting scene image prewarm thread for %s: %s",
+                    sess_id,
+                    e3,
                 )
         except Exception as e:
             logger.error("[BG] Error generating full mystery in background: %s", e)
@@ -1037,6 +1050,81 @@ def _prewarm_suspect_portraits(session_id: str, mystery):
         len(tasks),
     )
     # No need to join here, as these are daemon threads and we don't block on them.
+
+
+def _prewarm_scene_images(session_id: str, mystery):
+    """Pre-generate scene images for all locations in the background.
+
+    Runs concurrently with portrait prewarming. Uses 2 workers to generate
+    scene images for each unique location mentioned in the clues.
+    """
+    if not mystery or not getattr(mystery, "clues", None):
+        logger.info(
+            "[BG] No clues available for scene prewarm in session %s", session_id
+        )
+        return
+
+    setting = getattr(mystery, "setting", "") or ""
+    session_images = mystery_images.get(session_id, {})
+
+    # Extract unique locations from clues
+    locations = set()
+    for clue in mystery.clues:
+        location = getattr(clue, "location", None)
+        if location and location not in session_images:
+            locations.add(location)
+
+    if not locations:
+        logger.info(
+            "[BG] No new scene images to prewarm for session %s", session_id
+        )
+        return
+
+    task_queue: "queue.Queue[str]" = queue.Queue()
+    for location in locations:
+        task_queue.put(location)
+
+    def _worker():
+        while True:
+            try:
+                location = task_queue.get_nowait()
+                try:
+                    logger.info(
+                        "[BG] Worker generating prewarm scene for %s in session %s",
+                        location,
+                        session_id,
+                    )
+                    # Generate scene without specific context (since player hasn't searched yet)
+                    _generate_scene_background(
+                        location=location,
+                        mystery_setting=setting,
+                        context_text="",  # No context yet - player hasn't searched
+                        session_id=session_id,
+                    )
+                finally:
+                    task_queue.task_done()
+            except queue.Empty:
+                break
+            except Exception as e:  # noqa: BLE001
+                logger.error(
+                    "[BG] Worker error generating scene for %s in session %s: %s",
+                    location if "location" in locals() else "<unknown>",
+                    session_id,
+                    e,
+                )
+
+    max_workers = 3  # Limit to 2 concurrent scene generations
+    num_workers = min(max_workers, len(locations))
+    for _ in range(num_workers):
+        t = threading.Thread(target=_worker, daemon=True)
+        t.start()
+
+    logger.info(
+        "[BG] Launched %d prewarm scene workers for session %s (locations=%d)",
+        num_workers,
+        session_id,
+        len(locations),
+    )
 
 
 def generate_turn_media(

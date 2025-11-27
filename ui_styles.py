@@ -451,24 +451,16 @@ img { border: 4px solid white !important; }
     --bg-color: #010101 !important;
 }
 
-/* ========== SIDE PANELS ========== */
+/* ========== SIDE PANELS - BASE ========== */
 .side-panel {
-    background: var(--bg-card) !important;
-    border: none !important;
-    border-radius: 4px;
     height: fit-content;
-    margin-bottom: 12px;
+    margin-bottom: 24px;
 }
 
-.gr-group:has(.panel-title) {
-    border: 3px solid var(--border-color) !important;
-    border-radius: 4px !important;
-    background: var(--bg-card) !important;
-    margin-bottom: 12px !important;
-    padding: 8px 0 10px 0 !important;
-    outline: 2px solid var(--border-dark) !important;
-    outline-offset: 0;
-    box-shadow: inset 0 0 0 2px var(--border-dark);
+/* Add margin to panels to account for bezel */
+.side-column-left .gr-group:has(.panel-title),
+.side-column-right .gr-group:has(.panel-title) {
+    margin: 16px 8px 24px 8px;
 }
 
 .gr-group:has(.panel-title) .block {
@@ -478,9 +470,367 @@ img { border: 4px solid white !important; }
 .side-panel .block,
 .side-panel .prose {
     padding: 0 !important;
-    background: var(--bg-card) !important;
 }
 
+/* ========== LEFT PANEL - GREEN PHOSPHOR TERMINAL ========== */
+.side-column-left .gr-group:has(.panel-title) {
+    background: #040804 !important;
+    /* Screen glass edge - subtle green tint */
+    border: 2px solid #0a2a0a !important;
+    border-radius: 6px !important;
+    position: relative;
+    overflow: hidden;
+    padding: 12px 10px 10px 10px !important;
+    box-sizing: border-box;
+    /* CRT monitor bezel - layered effect using box-shadow */
+    /* Inner bevel (dark) -> Mid bezel (gray) -> Outer bevel (highlight) -> Ambient glow */
+    box-shadow: 
+        inset 0 0 20px rgba(0, 0, 0, 0.8),
+        0 0 0 4px #1a1a1a,
+        0 0 0 6px #3a3a3a,
+        0 0 0 10px #2d2d2d,
+        0 0 0 12px #1a1a1a,
+        0 0 20px rgba(51, 255, 51, 0.15) !important;
+}
+
+/* Power LED indicator */
+.side-column-left .gr-group:has(.panel-title) .panel-title::after {
+    content: '●';
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 8px;
+    color: #33ff33;
+    text-shadow: 0 0 6px #33ff33, 0 0 12px #33ff33;
+    animation: led-pulse 2s ease-in-out infinite;
+}
+
+@keyframes led-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+}
+
+/* Terminal scanlines */
+.side-column-left .gr-group:has(.panel-title)::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 2px,
+        rgba(0, 0, 0, 0.4) 2px,
+        rgba(0, 0, 0, 0.4) 4px
+    );
+    pointer-events: none;
+    z-index: 10;
+}
+
+/* Phosphor screen glow */
+.side-column-left .gr-group:has(.panel-title)::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse at center, rgba(51, 255, 51, 0.08) 0%, transparent 70%);
+    pointer-events: none;
+    z-index: 1;
+}
+
+/* Terminal header with system prompt */
+.side-column-left .panel-title {
+    font-family: 'Courier New', monospace !important;
+    color: #33ff33 !important;
+    font-size: 13px !important;
+    font-weight: 400 !important;
+    text-shadow: 0 0 8px #33ff33, 0 0 16px rgba(51, 255, 51, 0.5);
+    letter-spacing: 2px !important;
+    text-transform: uppercase !important;
+    padding: 4px 8px !important;
+    margin-bottom: 8px !important;
+    border-bottom: 1px solid rgba(51, 255, 51, 0.3);
+    position: relative;
+    z-index: 20;
+}
+
+/* Add terminal prompt before title */
+.side-column-left .panel-title::before {
+    content: 'C:\\> ';
+    opacity: 0.7;
+}
+
+/* Left panel content */
+.side-column-left .transcript-panel,
+.side-column-left .suspects-list {
+    color: #33ff33 !important;
+    font-family: 'Courier New', monospace !important;
+    font-size: 12px !important;
+    line-height: 1.6 !important;
+    position: relative;
+    z-index: 20;
+}
+
+.side-column-left .side-panel .block,
+.side-column-left .side-panel .prose {
+    background: transparent !important;
+}
+
+/* Suspect items in terminal style */
+.side-column-left .suspect-item {
+    background: rgba(0, 20, 0, 0.4) !important;
+    border: 1px solid rgba(51, 255, 51, 0.3) !important;
+    border-radius: 0 !important;
+    margin-bottom: 6px;
+    font-family: 'Courier New', monospace !important;
+    position: relative;
+    z-index: 20;
+}
+
+.side-column-left .suspect-item summary {
+    color: #33ff33 !important;
+    font-weight: 400;
+}
+
+.side-column-left .suspect-item summary::before {
+    color: #33ff33 !important;
+    content: '>' !important;
+    text-shadow: 0 0 6px #33ff33;
+}
+
+.side-column-left .suspect-item[open] summary::before {
+    content: 'v' !important;
+    transform: none !important;
+}
+
+.side-column-left .suspect-item summary:hover {
+    background: rgba(51, 255, 51, 0.1) !important;
+}
+
+.side-column-left .suspect-details {
+    background: rgba(0, 30, 0, 0.5) !important;
+    border-top: 1px solid rgba(51, 255, 51, 0.2) !important;
+    color: #33ff33 !important;
+}
+
+.side-column-left .suspect-role-preview {
+    color: #90EE90 !important;
+}
+
+.side-column-left .suspect-check {
+    color: #90EE90 !important;
+    text-shadow: 0 0 6px #33ff33;
+}
+
+/* Left panel accordion buttons */
+.side-column-left button.label-wrap {
+    background: transparent !important;
+    color: #33ff33 !important;
+}
+
+.side-column-left button.label-wrap:hover {
+    background: rgba(51, 255, 51, 0.1) !important;
+}
+
+.side-column-left button.label-wrap svg {
+    color: #33ff33 !important;
+    filter: drop-shadow(0 0 4px #33ff33);
+}
+
+/* ========== RIGHT PANEL - GREEN PHOSPHOR TERMINAL ========== */
+.side-column-right .gr-group:has(.panel-title) {
+    background: #040804 !important;
+    /* Screen glass edge - subtle green tint */
+    border: 2px solid #0a2a0a !important;
+    border-radius: 6px !important;
+    position: relative;
+    overflow: hidden;
+    padding: 12px 10px 10px 10px !important;
+    box-sizing: border-box;
+    /* CRT monitor bezel - layered effect using box-shadow */
+    /* Inner bevel (dark) -> Mid bezel (gray) -> Outer bevel (highlight) -> Ambient glow */
+    box-shadow: 
+        inset 0 0 20px rgba(0, 0, 0, 0.8),
+        0 0 0 4px #1a1a1a,
+        0 0 0 6px #3a3a3a,
+        0 0 0 10px #2d2d2d,
+        0 0 0 12px #1a1a1a,
+        0 0 20px rgba(51, 255, 51, 0.15) !important;
+}
+
+/* Power LED indicator */
+.side-column-right .gr-group:has(.panel-title) .panel-title::after {
+    content: '●';
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 8px;
+    color: #33ff33;
+    text-shadow: 0 0 6px #33ff33, 0 0 12px #33ff33;
+    animation: led-pulse 2s ease-in-out infinite;
+}
+
+/* Terminal scanlines */
+.side-column-right .gr-group:has(.panel-title)::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 2px,
+        rgba(0, 0, 0, 0.4) 2px,
+        rgba(0, 0, 0, 0.4) 4px
+    );
+    pointer-events: none;
+    z-index: 10;
+}
+
+/* Phosphor screen glow */
+.side-column-right .gr-group:has(.panel-title)::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse at center, rgba(51, 255, 51, 0.08) 0%, transparent 70%);
+    pointer-events: none;
+    z-index: 1;
+}
+
+/* Terminal header with system prompt */
+.side-column-right .panel-title {
+    font-family: 'Courier New', monospace !important;
+    color: #33ff33 !important;
+    font-size: 13px !important;
+    font-weight: 400 !important;
+    text-shadow: 0 0 8px #33ff33, 0 0 16px rgba(51, 255, 51, 0.5);
+    letter-spacing: 2px !important;
+    text-transform: uppercase !important;
+    padding: 4px 8px !important;
+    margin-bottom: 8px !important;
+    border-bottom: 1px solid rgba(51, 255, 51, 0.3);
+    position: relative;
+    z-index: 20;
+}
+
+/* Add terminal prompt before title */
+.side-column-right .panel-title::before {
+    content: 'C:\\> ';
+    opacity: 0.7;
+}
+
+/* Right panel content */
+.side-column-right .side-panel .block,
+.side-column-right .side-panel .prose {
+    background: transparent !important;
+}
+
+/* Location items - terminal style */
+.side-column-right .location-item {
+    font-family: 'Courier New', monospace !important;
+    font-size: 12px !important;
+    color: #ffffff !important;
+    background: transparent !important;
+    border-radius: 0 !important;
+    padding: 4px 8px !important;
+    margin-bottom: 2px !important;
+    position: relative;
+    z-index: 20;
+}
+
+.side-column-right .location-item::before {
+    content: '> ';
+    opacity: 0.6;
+}
+
+.side-column-right .location-item.searched {
+    color: #1a8f1a !important;
+    text-decoration: line-through;
+    opacity: 0.6;
+}
+
+.side-column-right .location-check {
+    color: #90EE90 !important;
+    text-shadow: 0 0 6px #33ff33;
+}
+
+/* Clue items - terminal log entries */
+.side-column-right .clue-item {
+    font-family: 'Courier New', monospace !important;
+    font-size: 11px !important;
+    color: #33ff33 !important;
+    background: rgba(0, 20, 0, 0.4) !important;
+    border-left: 2px solid #33ff33 !important;
+    border-radius: 0 !important;
+    padding: 6px 10px !important;
+    margin-bottom: 4px !important;
+    position: relative;
+    z-index: 20;
+    text-shadow: 0 0 4px rgba(51, 255, 51, 0.3);
+}
+
+.side-column-right .clue-item::before {
+    content: '[LOG] ';
+    color: #1a8f1a;
+    font-weight: 700;
+}
+
+/* Accusations display - terminal warning style */
+.side-column-right .accusations-display {
+    font-family: 'Courier New', monospace !important;
+    font-size: 12px !important;
+    color: #33ff33 !important;
+    position: relative;
+    z-index: 20;
+    padding: 8px;
+}
+
+.side-column-right .accusations-pip {
+    background: #33ff33 !important;
+    width: 12px !important;
+    height: 12px !important;
+    border: 1px solid #1a8f1a;
+}
+
+.side-column-right .accusations-pip.used {
+    background: #ff3333 !important;
+    border-color: #8b0000;
+    animation: pip-warning 1s ease-in-out infinite;
+}
+
+@keyframes pip-warning {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+/* Terminal cursor blink effect on last clue */
+.side-column-right .clue-item:last-child::after {
+    content: '█';
+    animation: cursor-blink 1s step-end infinite;
+    margin-left: 4px;
+    color: #33ff33;
+}
+
+@keyframes cursor-blink {
+    0%, 50% { opacity: 1; }
+    51%, 100% { opacity: 0; }
+}
+
+/* Right panel accordion buttons */
+.side-column-right button.label-wrap {
+    background: transparent !important;
+    color: #33ff33 !important;
+}
+
+.side-column-right button.label-wrap:hover {
+    background: rgba(51, 255, 51, 0.1) !important;
+}
+
+.side-column-right button.label-wrap svg {
+    color: #33ff33 !important;
+    filter: drop-shadow(0 0 4px #33ff33);
+}
+
+/* ========== BASE PANEL TITLE (fallback) ========== */
 .panel-title {
     font-family: 'Source Sans Pro', sans-serif;
     font-size: 16px;
