@@ -38,13 +38,21 @@ def format_suspects_list_html(mystery, talked_to: List[str] = None) -> str:
     html_parts = []
     
     for suspect in mystery.suspects:
-        talked_class = "location-item searched" if suspect.name in talked_to else "location-item"
-        check = " ✓" if suspect.name in talked_to else ""
+        # Use a dedicated suspect item class so we can style progressive disclosure
+        talked_class = "suspect-item searched" if suspect.name in talked_to else "suspect-item"
+        check = '<span class="suspect-check"> ✓</span>' if suspect.name in talked_to else ""
         html_parts.append(
-            f'<div class="{talked_class}">'
-            f'<strong>{suspect.name}</strong> - {suspect.role}{check}<br>'
-            f'<em style="font-size: 0.9em; color: var(--text-secondary);">Motive: {suspect.secret}</em>'
+            f'<details class="{talked_class}">'
+            f'<summary>'
+            f'<div class="suspect-header">'
+            f'<strong>{suspect.name}</strong>{check}<br>'
+            f'<span class="suspect-role-preview">{suspect.role}</span>'
             f'</div>'
+            f'</summary>'
+            f'<div class="suspect-details">'
+            f'<div class="suspect-motive">Motive: <em>{suspect.secret}</em></div>'
+            f'</div>'
+            f'</details>'
         )
     
     return "".join(html_parts)
@@ -60,7 +68,7 @@ def format_locations_html(mystery, searched: List[str]) -> str:
 
     for loc in locations:
         cls = "location-item searched" if loc in searched else "location-item"
-        check = " ✓" if loc in searched else ""
+        check = '<span class="location-check"> ✓</span>' if loc in searched else ""
         html_parts.append(f'<div class="{cls}">{loc}{check}</div>')
 
     return "".join(html_parts)

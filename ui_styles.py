@@ -12,6 +12,8 @@ RETRO_CSS = """
     --bg-card: #0d0d26;
     --text-primary: #FFFFFF;
     --text-secondary: #CCCCFF;
+    /* Ensure Gradio's body text color matches our dark-theme primary text */
+    --body-text-color: var(--text-primary);
     --accent-blue: #00FFFF;
     --accent-blue-dark: #00CCCC;
     --accent-green: #00FF00;
@@ -25,19 +27,13 @@ RETRO_CSS = """
     --shadow-hover: rgba(0, 0, 0, 0.7);
 }
 
-/* Main container */
-.adventure-game {
-    background: var(--bg-primary) !important;
-    min-height: 100vh;
-    font-family: 'Source Sans Pro', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
-}
 
 /* Title bar */
 .title-bar {
     background: var(--bg-secondary);
     border-bottom: 3px solid var(--accent-blue);
     border-top: 2px solid var(--accent-blue);
-    padding: 16px 24px;
+    padding: 8px;
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -120,31 +116,6 @@ RETRO_CSS = """
     letter-spacing: 1px;
 }
 
-/* Caption display area */
-.caption-display {
-    font-family: 'Source Sans Pro', sans-serif;
-    font-size: 16px;
-    line-height: 1.6;
-    color: var(--text-primary);
-    text-align: center;
-    padding: 20px 24px;
-    min-height: 120px;
-    max-height: 200px;
-    overflow-y: auto;
-    background: var(--bg-card);
-    border: 1px solid var(--border-dark);
-    border-radius: 4px;
-}
-
-.caption-display em {
-    color: var(--accent-yellow);
-}
-
-/* Portrait display */
-.portrait-container {
-    text-align: center;
-    margin: 10px 0;
-}
 
 .portrait-image {
     width: 100% !important;
@@ -196,115 +167,6 @@ RETRO_CSS = """
     position: relative !important;
 }
 
-/* Speaking indicator */
-.speaking-indicator {
-    display: flex;
-    justify-content: center;
-    gap: 4px;
-    margin: 15px 0;
-}
-
-.speaking-indicator .bar {
-    width: 4px;
-    height: 20px;
-    background: var(--accent-blue);
-    animation: pulse 0.5s ease-in-out infinite;
-    border-radius: 2px;
-}
-
-.speaking-indicator .bar:nth-child(2) { animation-delay: 0.1s; }
-.speaking-indicator .bar:nth-child(3) { animation-delay: 0.2s; }
-.speaking-indicator .bar:nth-child(4) { animation-delay: 0.3s; }
-.speaking-indicator .bar:nth-child(5) { animation-delay: 0.4s; }
-
-@keyframes pulse {
-    0%, 100% { transform: scaleY(0.5); opacity: 0.5; }
-    50% { transform: scaleY(1); opacity: 1; }
-}
-
-/* Suspect buttons */
-.suspect-bar {
-    display: flex;
-    justify-content: center;
-    gap: 12px;
-    padding: 16px;
-    background: var(--bg-primary);
-    flex-wrap: wrap;
-}
-
-.suspect-button {
-    background: var(--bg-card);
-    border: 2px solid var(--border-dark);
-    border-radius: 4px;
-    padding: 12px 16px;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    text-align: center;
-    min-width: 140px;
-    color: var(--text-primary);
-    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.5);
-}
-
-.suspect-button:hover {
-    border-color: var(--accent-blue);
-    transform: translateY(-2px);
-    background: var(--bg-panel);
-    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.5);
-}
-
-.suspect-button img {
-    width: 80px;
-    height: 80px;
-    border: 1px solid var(--border-color);
-    margin-bottom: 8px;
-}
-
-.suspect-button .name {
-    font-family: 'Source Sans Pro', sans-serif;
-    font-size: 14px;
-    font-weight: 600;
-    color: var(--text-primary);
-}
-
-.suspect-button .role {
-    font-family: 'Source Sans Pro', sans-serif;
-    font-size: 12px;
-    color: var(--text-secondary);
-}
-
-/* Action bar */
-.action-bar {
-    display: flex;
-    justify-content: center;
-    gap: 12px;
-    padding: 16px;
-    background: var(--bg-primary);
-}
-
-.action-button {
-    font-family: 'Source Sans Pro', sans-serif !important;
-    font-size: 14px !important;
-    font-weight: 700 !important;
-    background: var(--bg-card) !important;
-    border: 2px solid var(--accent-blue) !important;
-    color: var(--accent-blue) !important;
-    padding: 10px 20px !important;
-    border-radius: 4px !important;
-    cursor: pointer !important;
-    transition: all 0.2s ease !important;
-    text-transform: uppercase !important;
-    letter-spacing: 1px !important;
-    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.5) !important;
-}
-
-.action-button:hover {
-    background: var(--accent-blue) !important;
-    color: #000033 !important;
-    transform: translateY(-1px) !important;
-    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.3) !important;
-    text-shadow: none !important;
-}
-
 /* Input area - use column layout to stack audio above text input */
 .input-bar {
     display: flex !important;
@@ -314,212 +176,6 @@ RETRO_CSS = """
     background: var(--bg-secondary);
     border-top: 2px solid var(--accent-blue);
     box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.5);
-}
-
-/* Text input accordion - dark theme styling */
-.text-input-accordion,
-.text-input-accordion .gr-accordion,
-.text-input-accordion .gr-accordion-item {
-    background: var(--bg-secondary) !important;
-    border: none !important;
-    border-top: 1px solid var(--border-dark) !important;
-    margin: 0 !important;
-    padding: 0 !important;
-}
-
-.text-input-accordion .gr-accordion-header,
-.text-input-accordion .gr-accordion-title,
-.text-input-accordion button[aria-expanded] {
-    background: var(--bg-secondary) !important;
-    color: var(--accent-blue) !important;
-    border: none !important;
-    padding: 12px 16px !important;
-    font-family: 'Source Sans Pro', sans-serif !important;
-    font-size: 13px !important;
-    font-weight: 600 !important;
-    text-transform: uppercase !important;
-    letter-spacing: 1px !important;
-    cursor: pointer !important;
-    transition: all 0.2s ease !important;
-}
-
-.text-input-accordion .gr-accordion-header:hover,
-.text-input-accordion button[aria-expanded]:hover {
-    background: var(--bg-panel) !important;
-    color: var(--accent-blue) !important;
-}
-
-.text-input-accordion .gr-accordion-content {
-    background: var(--bg-secondary) !important;
-    padding: 16px !important;
-    border-top: 1px solid var(--border-dark) !important;
-}
-
-/* Audio container - own row above text input */
-.audio-container,
-.audio-container.svelte-ocxd3m,
-[data-testid="waveform-Audio"].audio-container,
-.input-bar .audio-container,
-.input-bar [data-testid="waveform-Audio"] {
-    display: block !important;
-    width: 100% !important;
-    margin: 0 !important;
-    padding: 16px !important;
-    background: var(--bg-secondary) !important;
-    border-top: none !important;
-    border-bottom: 1px solid var(--border-dark) !important;
-    box-shadow: none !important;
-    order: -1 !important; /* Place above other elements */
-    flex: 0 0 auto !important;
-    pointer-events: auto !important; /* Ensure interactions work */
-}
-
-/* Ensure all audio container controls are interactive */
-.audio-container *,
-.audio-container button,
-.audio-container .record-button,
-.audio-container .stop-button,
-.audio-container .controls {
-    pointer-events: auto !important;
-    cursor: pointer !important;
-}
-
-/* Style microphone select dropdown - dark theme */
-.mic-select,
-.audio-container .mic-select,
-.audio-container select.mic-select,
-select.mic-select.svelte-ym1wxn {
-    background: var(--bg-card) !important;
-    background-color: var(--bg-card) !important;
-    border: 2px solid var(--border-dark) !important;
-    color: var(--text-primary) !important;
-    border-radius: 4px !important;
-    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.6) !important;
-    font-family: 'Source Sans Pro', sans-serif !important;
-    font-size: 10px !important;
-}
-
-.mic-select:focus,
-.audio-container .mic-select:focus {
-    border-color: var(--accent-blue) !important;
-    outline: none !important;
-    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.6), 0 0 10px rgba(0, 255, 255, 0.3) !important;
-}
-
-.mic-select option {
-    background: var(--bg-card) !important;
-    color: var(--text-primary) !important;
-}
-
-/* Style record button - dark theme */
-.record-button,
-.audio-container .record-button,
-.audio-container button.record-button,
-button.record-button.svelte-1xuh0j1 {
-    background: var(--bg-card) !important;
-    background-color: var(--bg-card) !important;
-    border: 2px solid var(--accent-blue) !important;
-    color: var(--accent-blue) !important;
-    border-radius: 4px !important;
-    font-family: 'Source Sans Pro', sans-serif !important;
-    font-size: 10px !important;
-    font-weight: 700 !important;
-    text-transform: uppercase !important;
-    letter-spacing: 1px !important;
-    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.5) !important;
-    cursor: pointer !important;
-    transition: all 0.2s ease !important;
-}
-
-.record-button:hover,
-.audio-container .record-button:hover {
-    background: var(--accent-blue) !important;
-    color: #000033 !important;
-    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.3), 0 0 15px rgba(0, 255, 255, 0.4) !important;
-}
-
-/* Style stop button - dark theme */
-.stop-button,
-.audio-container .stop-button,
-.audio-container button.stop-button,
-button.stop-button.svelte-1xuh0j1 {
-    background: var(--bg-card) !important;
-    background-color: var(--bg-card) !important;
-    border: 2px solid var(--accent-red) !important;
-    color: var(--accent-red) !important;
-    padding: 10px 20px !important;
-    border-radius: 4px !important;
-    font-family: 'Source Sans Pro', sans-serif !important;
-    font-size: 10px !important;
-    font-weight: 700 !important;
-    text-transform: uppercase !important;
-    letter-spacing: 1px !important;
-    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.5) !important;
-    cursor: pointer !important;
-    transition: all 0.2s ease !important;
-}
-
-.stop-button:hover,
-.audio-container .stop-button:hover {
-    background: var(--accent-red) !important;
-    color: #FFFFFF !important;
-    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.3), 0 0 15px rgba(255, 0, 136, 0.4) !important;
-}
-
-/* Style icon buttons in audio container (clear/refresh button) - dark theme */
-.audio-container .icon-button,
-.audio-container button.icon-button,
-.audio-container [class*="icon-button"],
-.audio-container button[aria-label*="Clear"],
-.audio-container button[aria-label*="clear"],
-.audio-container button[aria-label*="Refresh"],
-.audio-container button[aria-label*="refresh"] {
-    background: var(--bg-card) !important;
-    background-color: var(--bg-card) !important;
-    border: 2px solid var(--border-dark) !important;
-    color: var(--text-primary) !important;
-    border-radius: 4px !important;
-    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.6) !important;
-}
-
-.audio-container .icon-button:hover,
-.audio-container button.icon-button:hover,
-.audio-container [class*="icon-button"]:hover {
-    background: var(--bg-panel) !important;
-    border-color: var(--accent-blue) !important;
-    color: var(--accent-blue) !important;
-}
-
-/* Text input and button row - inside accordion */
-.text-input-accordion .text-input,
-.text-input-accordion .action-button,
-.text-input-accordion .gr-row,
-.text-input-accordion > div:has(.text-input) {
-    display: flex !important;
-    flex-direction: row !important;
-    gap: 12px !important;
-    align-items: center !important;
-    justify-content: center !important;
-    flex: 0 0 auto !important;
-}
-
-.text-input {
-    font-family: 'Source Sans Pro', sans-serif !important;
-    font-size: 14px !important;
-    background: var(--bg-card) !important;
-    border: 2px solid var(--border-dark) !important;
-    color: var(--text-primary) !important;
-    padding: 10px 16px !important;
-    border-radius: 4px !important;
-    flex-grow: 1 !important;
-    max-width: 500px !important;
-    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.6) !important;
-}
-
-.text-input:focus {
-    border-color: var(--accent-blue) !important;
-    outline: none !important;
-    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.6) !important;
 }
 
 /* Side panel */
@@ -634,6 +290,91 @@ button.stop-button.svelte-1xuh0j1 {
     color: var(--text-secondary);
     text-decoration: line-through;
     background: var(--bg-panel);
+}
+
+/* Checkmarks for suspects and locations */
+.suspect-check,
+.location-check {
+    color: var(--accent-green) !important;
+    font-weight: 700;
+}
+
+/* Suspect item styling - collapsible (progressive disclosure) */
+.suspect-item {
+    font-family: 'Source Sans Pro', sans-serif;
+    font-size: 14px;
+    color: var(--text-primary);
+    border-radius: 4px;
+    margin-bottom: 4px;
+    border: 1px solid var(--border-dark);
+    background: var(--bg-card);
+}
+
+.suspect-item summary {
+    padding: 8px 12px;
+    cursor: pointer;
+    user-select: none;
+    list-style: none;
+    transition: background 0.2s ease;
+    display: flex;
+    align-items: flex-start;
+}
+
+.suspect-item summary::-webkit-details-marker {
+    display: none;
+}
+
+.suspect-item summary::before {
+    content: '▶';
+    display: inline-block;
+    width: 12px;
+    margin-right: 8px;
+    font-size: 10px;
+    color: var(--accent-green);
+    transition: transform 0.2s ease;
+}
+
+.suspect-item[open] summary::before {
+    transform: rotate(90deg);
+}
+
+.suspect-item summary:hover {
+    background: var(--bg-panel);
+}
+
+.suspect-item.searched {
+    opacity: 0.7;
+    background: var(--bg-panel);
+}
+
+.suspect-item.searched summary {
+    color: var(--text-secondary);
+}
+
+.suspect-header {
+    flex: 1;
+    line-height: 1.4;
+}
+
+
+
+.suspect-role-preview {
+    font-size: 0.85em;
+    color: var(--accent-orange) !important;
+    font-weight: normal;
+    font-style: italic;
+}
+
+.suspect-details {
+    padding: 8px 12px 12px 32px;
+    border-top: 1px solid var(--border-dark);
+    background: rgba(0, 0, 0, 0.2);
+}
+
+.suspect-motive {
+    font-size: 0.85em;
+    color: var(--text-secondary);
+    line-height: 1.4;
 }
 
 /* Status bar */
@@ -1052,7 +793,7 @@ div[data-testid="waveform-controls"],
     opacity: 1 !important;
     height: auto !important;
     max-height: none !important;
-    min-height: 50px !important;
+    min-height: 30px !important;
     overflow-y: visible !important;
     overflow-x: hidden !important;
     flex-shrink: 0 !important;
@@ -1182,7 +923,7 @@ div[data-testid="waveform-controls"],
     min-height: 0px !important;
     z-index: 100 !important;
     position: absolute !important;
-    bottom: 10px !important;
+    bottom: 5px !important;
 }
 
 /* Center all text elements within subtitle containers and ensure good contrast */
@@ -1209,36 +950,6 @@ div[data-testid="waveform-controls"],
 .audio-player [class*="highlight"] {
     text-align: center !important;
     display: inline-block !important;
-}
-
-/* Individual word - inline display for natural text flow */
-.caption-word {
-    display: inline;
-    transition: all 0.2s ease;
-    padding: 1px 2px;
-}
-
-/* Upcoming words - dimmed, waiting to be spoken */
-.caption-word.upcoming {
-    color: var(--text-secondary);
-    opacity: 0.5;
-}
-
-/* Active word - currently being spoken - HIGHLIGHTED */
-.caption-word.active {
-    color: var(--accent-blue);
-    font-weight: 700;
-    opacity: 1;
-    background: rgba(0, 162, 255, 0.15);
-    padding: 2px 4px;
-    border-radius: 3px;
-    text-shadow: 0 0 2px rgba(0, 162, 255, 0.3);
-}
-
-/* Spoken words - already said, normal visibility */
-.caption-word.spoken {
-    color: var(--text-primary);
-    opacity: 0.9;
 }
 
 .html-container > div {
@@ -1273,48 +984,6 @@ div[data-testid="waveform-controls"],
     height: auto !important;
     max-height: none !important;
     overflow: visible !important;
-}
-
-.transcript-entry {
-    padding: 8px 0;
-    border-bottom: 1px solid var(--border-color);
-}
-
-.transcript-speaker {
-    font-family: 'Source Sans Pro', sans-serif;
-    font-weight: 600;
-    color: var(--accent-blue);
-    font-size: 13px;
-}
-
-.transcript-text {
-    color: var(--text-secondary);
-    margin-top: 4px;
-}
-
-/* New game splash */
-.splash-screen {
-    text-align: center;
-    padding: 60px 20px;
-}
-
-.splash-title {
-    font-family: 'Source Sans Pro', sans-serif;
-    font-size: 32px;
-    font-weight: 700;
-    color: var(--accent-blue);
-    margin-bottom: 16px;
-    text-transform: uppercase;
-    letter-spacing: 2px;
-}
-
-.splash-subtitle {
-    font-family: 'Source Sans Pro', sans-serif;
-    font-size: 16px;
-    color: var(--accent-yellow);
-    margin-bottom: 32px;
-    text-transform: uppercase;
-    letter-spacing: 1px;
 }
 
 .start-button {
@@ -1354,7 +1023,7 @@ div[data-testid="waveform-controls"],
     font-family: 'Source Sans Pro', sans-serif;
     font-size: 14px;
     font-weight: 500;
-    color: var(--accent-yellow);
+    color: var(--accent-yellow) !important;
     text-align: center;
     padding: 8px 16px;
     background: transparent;
@@ -1368,6 +1037,44 @@ div[data-testid="waveform-controls"],
 /* Hide when empty */
 .start-status-tracker:empty {
     display: none !important;
+}
+
+/* Start status progress tracker layout */
+.start-status-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--accent-yellow) !important;
+    margin-bottom: 4px;
+}
+
+.start-status-steps {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    justify-content: center;
+}
+
+.start-status-step {
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    border: 1px solid var(--border-dark);
+}
+
+.start-status-step.step-active {
+    border-color: var(--accent-blue);
+    color: var(--accent-blue) !important;
+}
+
+.start-status-step.step-done {
+    border-color: var(--accent-green);
+    color: var(--accent-green) !important;
+}
+
+.start-status-step.step-pending {
+    border-color: var(--border-dark);
+    color: var(--text-secondary) !important;
+    opacity: 0.7;
 }
 
 /* Hide the entire block wrapper by default - only show when it has content */
@@ -1517,45 +1224,6 @@ div[data-testid="waveform-controls"],
     visibility: visible !important;
 }
 
-/* Theme toggle */
-.theme-toggle {
-    font-family: 'Source Sans Pro', sans-serif !important;
-    font-size: 13px !important;
-    font-weight: 500 !important;
-    background: var(--bg-card) !important;
-    border: 2px solid var(--border-dark) !important;
-    color: var(--text-primary) !important;
-    padding: 6px 12px !important;
-    border-radius: 4px !important;
-    cursor: pointer !important;
-    transition: all 0.2s ease !important;
-    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.5) !important;
-}
-
-.theme-toggle:hover {
-    border-color: var(--accent-blue) !important;
-    color: var(--accent-blue) !important;
-    background: var(--bg-panel) !important;
-    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.5) !important;
-}
-
-/* Loading state */
-.loading-indicator {
-    font-family: 'Source Sans Pro', sans-serif;
-    font-size: 16px;
-    font-weight: 500;
-    color: var(--accent-blue);
-    text-align: center;
-    animation: blink 1s infinite;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-}
-
-@keyframes blink {
-    0%, 50% { opacity: 1; }
-    51%, 100% { opacity: 0; }
-}
-
 /* Gradio overrides */
 .gradio-container {
     background: var(--bg-primary) !important;
@@ -1563,11 +1231,6 @@ div[data-testid="waveform-controls"],
     color: var(--text-primary) !important;
 }
 
-/* Make all Gradio text light colored */
-.gradio-container,
-.gradio-container * {
-    color: var(--text-primary) !important;
-}
 
 /* Override Gradio's default light backgrounds */
 .gr-box,
@@ -1607,20 +1270,9 @@ footer {
     display: none !important;
 }
 
-/* Hide Gradio loading/processing status tracker only above the image */
-.stage-container [data-testid="status-tracker"],
-.stage-container div[data-testid="status-tracker"],
-.portrait-image [data-testid="status-tracker"],
-.portrait-image ~ [data-testid="status-tracker"],
-.stage-container .wrap.default.full.svelte-1uj8rng,
-.stage-container .eta-bar.svelte-1uj8rng,
-.stage-container .progress-text.svelte-1uj8rng,
-.portrait-image ~ .wrap.default.full.svelte-1uj8rng,
 /* Hide the translucent center status tracker that overlays the image */
 [data-testid="status-tracker"].wrap.center.translucent,
-[data-testid="status-tracker"].wrap.center.full.translucent,
-.stage-container [data-testid="status-tracker"].translucent,
-.portrait-image ~ [data-testid="status-tracker"].translucent {
+[data-testid="status-tracker"].wrap.center.full.translucent {
     display: none !important;
     visibility: hidden !important;
     opacity: 0 !important;
@@ -1630,39 +1282,26 @@ footer {
     pointer-events: none !important;
 }
 
-/* Hide status tracker with wrap center full classes (especially with hide class) */
-/* Target all variations with maximum specificity */
-[data-testid="status-tracker"].wrap.center.full,
-[data-testid="status-tracker"].wrap.center.full.hide,
-[data-testid="status-tracker"].wrap.center.full.svelte-1uj8rng,
-[data-testid="status-tracker"].wrap.center.full.svelte-1uj8rng.hide,
-[data-testid="status-tracker"].wrap.center,
-[data-testid="status-tracker"].wrap.center.full[style*="position: absolute"],
-div[data-testid="status-tracker"].wrap.center.full,
-div[data-testid="status-tracker"].wrap.center.full.hide,
-div[data-testid="status-tracker"].wrap.center.full.svelte-1uj8rng,
-div[data-testid="status-tracker"].wrap.center.full.svelte-1uj8rng.hide,
-/* Also target by class combination directly */
-.wrap.center.full.svelte-1uj8rng.hide[data-testid="status-tracker"],
-.wrap.center.full.hide[data-testid="status-tracker"] {
+/* Hide empty/generating status tracker overlay in the main stage */
+.stage-container [data-testid="status-tracker"].wrap.default.full.svelte-1uj8rng.generating {
     display: none !important;
     visibility: hidden !important;
     opacity: 0 !important;
     height: 0 !important;
     width: 0 !important;
-    min-height: 0 !important;
-    min-width: 0 !important;
-    max-height: 0 !important;
-    max-width: 0 !important;
     overflow: hidden !important;
     pointer-events: none !important;
-    position: absolute !important;
-    left: -9999px !important;
-    top: -9999px !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    border: none !important;
-    clip: rect(0, 0, 0, 0) !important;
+}
+
+/* Also hide empty default/hide status tracker blocks that Gradio leaves around */
+[data-testid="status-tracker"].wrap.default.full.svelte-1uj8rng.hide {
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+    height: 0 !important;
+    width: 0 !important;
+    overflow: hidden !important;
+    pointer-events: none !important;
 }
 
 /* Style the remaining status tracker with darker background for better text visibility */

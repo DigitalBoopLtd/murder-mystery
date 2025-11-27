@@ -186,7 +186,7 @@ def create_placeholder_image() -> str:
 
     # Instructions text
     instructions = [
-        "Click 'Start Mystery' to begin",
+        "Click 'START NEW MYSTERY' to begin",
         "your investigation!"
     ]
     
@@ -336,13 +336,7 @@ def create_app():
                 # Start game button (shown initially)
                 with gr.Column(elem_classes="start-button-container"):
                     start_btn = gr.Button(
-                        "▶ START NEW MYSTERY", elem_classes="start-button", size="lg"
-                    )
-                    # Status tracker for start button
-                    start_status = gr.HTML(
-                        "", 
-                        elem_classes="start-status-tracker",
-                        visible=True
+                        "🚀 START NEW MYSTERY", elem_classes="start-button", size="lg"
                     )
 
                 # Input bar - voice only
@@ -376,10 +370,10 @@ def create_app():
 
         # ====== EVENT HANDLERS ======
 
-        def on_start_game(sess_id):
+        def on_start_game(sess_id, progress=gr.Progress()):
             """Handle game start with status updates."""
-            # Show status tracker - generating mystery
-            status_html = '<div class="start-status-tracker">🎲 Generating mystery...</div>'
+            # Use Gradio's built-in progress tracker instead of custom HTML
+            progress(0.0, desc="Preparing your mystery...")
             yield [
                 gr.update(),  # speaker_html
                 gr.update(),  # audio_output
@@ -391,15 +385,13 @@ def create_app():
                 gr.update(),  # locations_html
                 gr.update(),  # clues_html
                 gr.update(),  # accusations_html
-                gr.update(value=status_html, visible=True),  # start_status
             ]
-            
-            # Generate mystery (this is the longest step)
-            status_html = '<div class="start-status-tracker">🎭 Creating scenario...</div>'
+
+            # Step 2: while generating the mystery (longest step)
+            progress(0.5, desc="Creating your case file...")
             yield [
                 gr.update(), gr.update(), gr.update(), gr.update(), gr.update(),
                 gr.update(), gr.update(), gr.update(), gr.update(), gr.update(),
-                gr.update(value=status_html, visible=True),
             ]
             
             state, response, audio_path, speaker, alignment_data = start_new_game(
@@ -479,7 +471,8 @@ def create_app():
                     autoplay=True  # Autoplay after user interaction
                 )
 
-            # Hide status tracker and return final results
+            # Return final results
+            progress(1.0, desc="Mystery ready")
             yield [
                 # Speaker - show when game starts
                 f'<div class="speaker-name" style="padding: 16px 0 !important;">🗣️ {speaker}</div>',
@@ -497,8 +490,6 @@ def create_app():
                 format_clues_html(state.clues_found),
                 # Accusations
                 _format_accusations_html(state.wrong_accusations),
-                # Hide status tracker
-                gr.update(value="", visible=False),  # start_status
             ]
 
         def _format_accusations_html(wrong: int):
@@ -702,6 +693,10 @@ def create_app():
                 _format_accusations_html(state.wrong_accusations),
             ]
 
+        def reset_voice_input():
+            """Clear the voice input so it's ready for the next recording."""
+            return gr.update(value=None)
+
         # ====== WIRE UP EVENTS ======
 
         # Common outputs for game actions
@@ -731,13 +726,16 @@ def create_app():
                 locations_html,
                 clues_html,
                 accusations_html,
-                start_status,
             ],
         )
 
         # Voice input - only input method
         getattr(voice_input, "stop_recording")(
             on_voice_input, inputs=[voice_input, session_id], outputs=game_outputs
+        ).then(
+            reset_voice_input,
+            inputs=None,
+            outputs=[voice_input],
         )
 
     return app
@@ -749,4 +747,5 @@ def create_app():
 
 if __name__ == "__main__":
     app = create_app()
-    app.launch(server_name="0.0.0.0", server_port=7860, share=False)
+    # Use Gradio's queue so the global progress/status tracker is visible
+    app.queue().launch(server_name="0.0.0.0", server_port=7860, share=False)
