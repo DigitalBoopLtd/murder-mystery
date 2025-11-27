@@ -4,7 +4,7 @@ RETRO_CSS = """
 /* Import Roblox-style fonts */
 @import url('https://fonts.googleapis.com/css2?family=Source+Sans+Pro:wght@400;600;700&family=Inter:wght@400;500;600;700&display=swap');
 
-/* Root variables for theming - Amiga 90s dark mode palette */
+/* ========== ROOT VARIABLES ========== */
 :root {
     --bg-primary: #000033;
     --bg-secondary: #0a0a1a;
@@ -12,7 +12,6 @@ RETRO_CSS = """
     --bg-card: #0d0d26;
     --text-primary: #FFFFFF;
     --text-secondary: #CCCCFF;
-    /* Ensure Gradio's body text color matches our dark-theme primary text */
     --body-text-color: var(--text-primary);
     --accent-blue: #00FFFF;
     --accent-blue-dark: #00CCCC;
@@ -23,23 +22,58 @@ RETRO_CSS = """
     --accent-yellow: #FFFF00;
     --border-color: #00FFFF;
     --border-dark: #006666;
-    --shadow-color: rgba(0, 0, 0, 0.5);
-    --shadow-hover: rgba(0, 0, 0, 0.7);
 }
 
+/* ========== UTILITY PATTERNS ========== */
+/* Consolidated "hide element" pattern - use on selectors that need complete hiding */
+.u-hidden,
+.audio-player .play-pause-wrapper,
+.audio-player .play-pause-button,
+.audio-player .rewind,
+.audio-player .skip,
+.audio-player .controls,
+.audio-player .volume,
+.audio-player .playback,
+.audio-player .cc-button,
+.audio-player .waveform-container,
+.audio-player #waveform,
+.audio-player .timestamps,
+.audio-player time,
+.audio-player canvas,
+.audio-player button,
+.audio-player [role="button"],
+.audio-player [class*="button"],
+.audio-player [class*="control"]:not(:has(.subtitle-display)),
+.audio-player [class*="waveform"],
+.audio-player [class*="wave"],
+.audio-player [aria-label*="Skip"],
+.audio-player [aria-label*="Pause"],
+.audio-player [aria-label*="Play"],
+.audio-player [aria-label*="volume"],
+.audio-player [aria-label*="playback speed"],
+.audio-player [data-testid="waveform-controls"],
+.audio-player [data-testid="subtitles-toggle"],
+.audio-player [class*="download"],
+.audio-player [class*="share"],
+.audio-player svg:not([class*="subtitle"]),
+.audio-player .component-wrapper:not(:has(.subtitle-display)),
+[data-testid="waveform-controls"],
+[data-testid="status-tracker"].wrap.center.translucent,
+[data-testid="status-tracker"].wrap.default.full.hide,
+.input-bar [data-testid="status-tracker"],
+.audio-player [data-testid="status-tracker"] {
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+    height: 0 !important;
+    width: 0 !important;
+    overflow: hidden !important;
+    pointer-events: none !important;
+    position: absolute !important;
+    left: -9999px !important;
+}
 
 /* ========== ANIMATIONS ========== */
-
-
-
-
-
-.loading-message {
-    font-size: 20px !important;
-    color: var(--accent-blue) !important;
-}
-
-/* Button pulse glow effect - dramatic breathing glow */
 @keyframes button-pulse {
     0%, 100% { 
         box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.5), 0 0 10px rgba(0, 255, 255, 0.4), 0 0 20px rgba(0, 255, 255, 0.2);
@@ -53,9 +87,50 @@ RETRO_CSS = """
     }
 }
 
-/* ========== LAYOUT ========== */
+@keyframes statusPulse {
+    0%, 100% { border-color: var(--border-color); }
+    50% { border-color: var(--border-dark); }
+}
 
-/* Title bar */
+/* ========== BASE LAYOUT ========== */
+.gradio-container {
+    background: var(--bg-primary) !important;
+    max-width: 100% !important;
+    color: var(--text-primary) !important;
+}
+
+.gr-box,
+.gr-form,
+.gr-block,
+.gr-group,
+.block,
+.group {
+    background: var(--bg-card) !important;
+    border-color: var(--border-dark) !important;
+    color: var(--text-primary) !important;
+}
+
+/* Ensure portrait-image and ALL its children have transparent background */
+.block.portrait-image,
+.block.portrait-image *,
+.portrait-image,
+.portrait-image * {
+    background: transparent !important;
+    border: none !important;
+}
+
+.gr-box {
+    border-radius: 4px !important;
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.6) !important;
+}
+
+.gr-button {
+    font-family: 'Source Sans Pro', sans-serif !important;
+}
+
+footer { display: none !important; }
+
+/* ========== TITLE BAR ========== */
 .title-bar {
     background: var(--bg-secondary);
     border-bottom: 3px solid var(--accent-blue);
@@ -68,7 +143,7 @@ RETRO_CSS = """
 }
 
 .game-title {
-    font-family: 'Courier New', 'Courier', 'Monaco', 'Menlo', monospace;
+    font-family: 'Courier New', monospace;
     font-size: 18px;
     font-weight: 700;
     color: var(--accent-blue);
@@ -80,7 +155,6 @@ RETRO_CSS = """
     text-shadow: 2px 2px 0px rgba(0, 0, 0, 0.8), 0 0 20px rgba(0, 255, 255, 0.8), 0 0 40px rgba(0, 255, 255, 0.5), 0 0 60px rgba(0, 255, 255, 0.3);
 }
 
-/* Detective avatar - circular frame */
 .detective-avatar {
     display: inline-flex;
     align-items: center;
@@ -96,51 +170,26 @@ RETRO_CSS = """
     flex-shrink: 0;
 }
 
-/* Main layout row and responsive column ordering */
+/* ========== MAIN LAYOUT ========== */
 .main-layout-row {
     align-items: stretch !important;
 }
 
-/* On smaller screens, stack columns with the center stage at the top */
 @media (max-width: 900px) {
     .main-layout-row {
         flex-direction: column !important;
     }
-
-    .main-layout-row .center-column {
-        order: 1 !important;
-        width: 100% !important;
-    }
-
-    .main-layout-row .side-column-left {
-        order: 2 !important;
-        width: 100% !important;
-    }
-
-    .main-layout-row .side-column-right {
-        order: 3 !important;
-        width: 100% !important;
-    }
+    .main-layout-row .center-column { order: 1 !important; width: 100% !important; }
+    .main-layout-row .side-column-left { order: 2 !important; width: 100% !important; }
+    .main-layout-row .side-column-right { order: 3 !important; width: 100% !important; }
     
-    /* Ensure CRT effect works on smaller screens */
     .center-column > .gr-group {
         position: relative !important;
         overflow: hidden !important;
     }
-    
-    .center-column > .gr-group::before,
-    .center-column > .gr-group::after {
-        position: absolute !important;
-        top: 0 !important;
-        left: 0 !important;
-        right: 0 !important;
-        bottom: 0 !important;
-    }
 }
 
-/* The Stage - CRT Monitor Effect */
-/* Target the gr-group inside center-column since elem_classes doesn't work on gr.Group */
-/* Using both direct child and descendant selectors for robustness */
+/* ========== CRT STAGE (Center Column) ========== */
 .center-column > .gr-group,
 .center-column .gr-group {
     background: #050510 !important;
@@ -150,11 +199,7 @@ RETRO_CSS = """
     position: relative !important;
     overflow: visible !important;
     isolation: isolate !important;
-    
-    /* CRT screen curvature effect */
     border-radius: 16px / 12px !important;
-    
-    /* Phosphor glow */
     box-shadow: 
         inset 0 0 100px rgba(0, 255, 255, 0.1),
         inset 0 0 30px rgba(0, 255, 255, 0.05),
@@ -162,73 +207,134 @@ RETRO_CSS = """
         0 0 80px rgba(0, 255, 255, 0.1) !important;
 }
 
-.image-container {
-    padding-bottom: 2px;
-    border-radius: 6px;
-}
-
-/* Let Gradio handle the styler layout naturally */
-
-/* Scanlines overlay - behind content */
+/* Scanlines overlay */
 .center-column > .gr-group::before,
 .center-column .gr-group::before {
-    content: '' !important;
-    position: absolute !important;
-    top: 0 !important;
-    left: 0 !important;
-    right: 0 !important;
-    bottom: 0 !important;
-    background: repeating-linear-gradient(
-        0deg,
-        transparent,
-        transparent 1px,
-        rgba(0, 0, 0, 0.3) 1px,
-        rgba(0, 0, 0, 0.3) 2px
-    ) !important;
-    pointer-events: none !important;
-    z-index: 100 !important;
-    border-radius: inherit !important;
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: repeating-linear-gradient(0deg, transparent, transparent 1px, rgba(0, 0, 0, 0.3) 1px, rgba(0, 0, 0, 0.3) 2px);
+    pointer-events: none;
+    z-index: 100;
+    border-radius: inherit;
 }
 
-/* Screen vignette - on top with scanlines */
+/* Screen vignette */
 .center-column > .gr-group::after,
 .center-column .gr-group::after {
-    content: '' !important;
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse at center, transparent 0%, transparent 60%, rgba(0, 0, 0, 0.4) 100%);
+    pointer-events: none;
+    z-index: 101;
+    border-radius: inherit;
+}
+
+/* ========== PORTRAIT IMAGE ========== */
+img, .image-frame { border-radius: 4px !important; }
+img { border: 4px solid white !important; }
+
+.portrait-image {
+    width: 100% !important;
+    max-width: 100% !important;
+    height: auto !important;
+    border: 3px solid var(--accent-blue);
+    border-radius: 4px;
+    display: block !important;
+    margin: 0 auto;
+    position: relative !important;
+    margin-bottom: 0 !important;
+    box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.5);
+}
+
+/* Force image elements inside portrait-image to be visible */
+/* But respect sr-only, hide classes for accessibility labels */
+.portrait-image.portrait-image,
+.portrait-image.portrait-image img,
+.portrait-image.portrait-image > div,
+.portrait-image.portrait-image > div > div,
+.portrait-image.portrait-image > div > div > img {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    position: relative !important;
+    z-index: auto !important;
+    background: transparent !important;
+    height: auto !important;
+    width: auto !important;
+    max-height: none !important;
+    max-width: 100% !important;
+    overflow: visible !important;
+    left: auto !important;
+    top: auto !important;
+}
+
+/* Keep Gradio's hidden labels hidden */
+.portrait-image .sr-only,
+.portrait-image .hide,
+.portrait-image [data-testid="block-label"],
+.portrait-image label.sr-only {
     position: absolute !important;
-    top: 0 !important;
-    left: 0 !important;
-    right: 0 !important;
-    bottom: 0 !important;
-    background: radial-gradient(
-        ellipse at center,
-        transparent 0%,
-        transparent 60%,
-        rgba(0, 0, 0, 0.4) 100%
-    ) !important;
-    pointer-events: none !important;
-    z-index: 101 !important;
-    border-radius: inherit !important;
+    width: 1px !important;
+    height: 1px !important;
+    padding: 0 !important;
+    margin: -1px !important;
+    overflow: hidden !important;
+    clip: rect(0, 0, 0, 0) !important;
+    white-space: nowrap !important;
+    border: 0 !important;
 }
 
-/* Make portrait image container relative for absolute positioning of subtitles overlay */
-.center-column > .gr-group > div:has(.portrait-image),
-.center-column > .gr-group > div:has(img.portrait-image) {
+/* Override for the main container to have proper width */
+.portrait-image {
+    width: 100% !important;
+}
+
+/* Make sure img elements have proper sizing */
+.portrait-image img {
+    width: 100% !important;
+    height: auto !important;
+    max-width: 100% !important;
+}
+
+/* Portrait image container positioning */
+.center-column > .gr-group > div:has(.portrait-image) {
     position: relative !important;
 }
 
-/* Ensure portrait image itself is relative and visible */
-.center-column > .gr-group .portrait-image,
-.center-column > .gr-group img[class*="portrait"],
-.center-column > .gr-group .portrait-image img {
-    position: relative !important;
+/* Hide image control buttons (share, fullscreen, download) */
+/* Only target actual button elements, not containers */
+.portrait-image button:not(:has(img)),
+.portrait-image button[aria-label],
+.portrait-image a[aria-label*="Share"],
+.portrait-image a[aria-label*="Download"],
+.portrait-image button[aria-label*="Share"],
+.portrait-image button[aria-label*="Fullscreen"],
+.portrait-image button[aria-label*="Download"],
+.portrait-image button[title*="Share"],
+.portrait-image button[title*="Fullscreen"],
+.portrait-image button[title*="Download"],
+.portrait-image div[class*="icon-buttons"],
+.portrait-image div[class*="toolbar"]:not(:has(img)),
+.portrait-image div[class*="image-button"] {
+    display: none !important;
+    visibility: hidden !important;
+}
+
+/* Ensure portrait images are visible when source is set */
+.center-column > .gr-group:has(.portrait-image img[src]:not([src=""])) .block.portrait-image,
+.center-column > .gr-group:has(.portrait-image img[src]:not([src=""])) .block.portrait-image img,
+.center-column > .gr-group:has(.portrait-image img[src]:not([src=""])) .portrait-image img {
     display: block !important;
     visibility: visible !important;
     opacity: 1 !important;
     background: transparent !important;
-    z-index: 1 !important;
+    z-index: 2 !important;
+    position: relative !important;
 }
 
-/* Speaker indicator - styled as a retro name badge */
+/* ========== SPEAKER NAME ========== */
 .speaker-name {
     font-family: 'Courier New', monospace !important;
     font-size: 16px !important;
@@ -244,61 +350,87 @@ RETRO_CSS = """
     min-width: 200px !important;
 }
 
-img, .image-frame { border-radius: 4px !important; }
-
-img {border: 4px solid white !important;}
-
-.portrait-image {
+/* ========== AUDIO PLAYER & SUBTITLES ========== */
+.audio-player {
+    position: relative !important;
     width: 100% !important;
-    max-width: 100% !important;
-    height: auto !important;
-    border: 3px solid var(--accent-blue);
-    border-radius: 4px;
-    display: block;
-    margin: 0 auto;
-    position: relative;
-    margin-bottom: 0 !important; /* Remove margin so overlay can align properly */
-    box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.5);
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    border-radius: 0 !important;
+    min-height: 60px !important;
+    max-height: 60px !important;
+    overflow: visible !important;
+    z-index: 10 !important;
+    background: transparent !important;
 }
 
-/* Hide image component buttons fullscreen, share, download) - be very specific */
-.portrait-image button[aria-label*="Fullscreen"],
-.portrait-image button[aria-label*="Share"],
-.portrait-image button[aria-label*="Download"],
-.portrait-image button[title*="Fullscreen"] {
+/* Hide audio element visually but keep functional */
+.audio-player audio {
+    position: absolute !important;
+    width: 1px !important;
+    height: 1px !important;
+    opacity: 0 !important;
+    clip: rect(0, 0, 0, 0) !important;
+}
+
+/* Hide audio player when empty */
+.audio-player:has(.empty),
+.block.audio-player:has(.empty) {
     display: none !important;
-    visibility: hidden !important;
+    height: 0 !important;
+    min-height: 0 !important;
 }
 
-/* Hide Gradio's image action button containers - but not the image */
-.portrait-image [class*="image-controls"]:not(img),
-.portrait-image [class*="image-actions"]:not(img),
-.portrait-image [class*="toolbar"]:not(img) {
-    display: none !important;
-    visibility: hidden !important;
-}
-
-/* Ensure the image itself and its container are always visible */
-.portrait-image,
-.portrait-image img,
-.portrait-image > img,
-.portrait-image [class*="image"]:not([class*="button"]):not([class*="control"]):not([class*="action"]),
-.portrait-image [class*="svelte"] img {
+/* Subtitle display - always visible */
+.audio-player .subtitle-display,
+.audio-player [data-testid="subtitle-display"] {
     display: block !important;
     visibility: visible !important;
     opacity: 1 !important;
+    color: #2d2418 !important;
+    text-align: center !important;
+    font-size: 20px !important;
+    font-family: 'Courier New', monospace !important;
+    font-weight: 600 !important;
+    margin: 0 !important;
+    height: auto !important;
+    min-height: 0px !important;
+    z-index: 100 !important;
+    position: absolute !important;
+    bottom: 10px !important;
+    width: 100% !important;
+}
+
+/* Component wrapper containing subtitles */
+.audio-player .component-wrapper:has(.subtitle-display) {
     background: transparent !important;
-    color: inherit !important;
+    border: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
 }
 
-/* Make the portrait image container a positioning context for overlay */
-.portrait-image,
-.portrait-image > div,
-.center-column > .gr-group > div:has(.portrait-image) {
+/* Audio player in context of portrait image */
+.center-column > .gr-group:has(.portrait-image img[src]:not([src=""])) .block.audio-player {
+    margin: 0 !important;
+    background: transparent !important;
+    border: none !important;
+    padding: 0 !important;
+}
+
+/* Audio player without portrait image */
+.center-column > .gr-group:not(:has(.portrait-image img[src]:not([src=""]))) .audio-player {
     position: relative !important;
+    background: var(--bg-panel) !important;
+    border: 1px solid var(--border-color) !important;
+    padding: 8px !important;
 }
 
-/* Input area - use column layout to stack audio above text input */
+/* ========== INPUT BAR ========== */
 .input-bar {
     display: flex !important;
     flex-direction: column !important;
@@ -308,94 +440,50 @@ img {border: 4px solid white !important;}
     border-top: 2px solid var(--accent-blue);
     box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.5);
     flex-shrink: 0 !important;
-    flex-grow: 0 !important;
     height: auto !important;
-    max-height: fit-content !important;
 }
 
-/* Side panel cards (case details, suspects, locations, etc.) */
+.icon-button-wrapper,
+.mic-select,
+.record-button,
+.stop-button {
+    background-color: transparent !important;
+    --bg-color: transparent !important;
+}
+
+.icon-button {
+    background-color: #010101 !important;
+    --bg-color: #010101 !important;
+}
+
+/* ========== SIDE PANELS ========== */
 .side-panel {
     background: var(--bg-card) !important;
-    /* Let the outer block wrapper carry the visible border */
     border: none !important;
     border-radius: 4px;
     height: fit-content;
     margin-bottom: 12px;
 }
 
-/* Apply retro cyan/teal border styling to the OUTER card wrappers
-   Gradio renders cards as:
-   <div class="gr-group ...">           (optional side-panel class)
-     <div class="styler">...</div>
-     <div class="block">title</div>
-     <div class="block transcript-panel">content</div>
-   We match groups that contain a .panel-title to style all side cards,
-   regardless of whether the side-panel class is actually present. */
 .gr-group:has(.panel-title) {
-    border: 3px solid var(--border-color) !important;   /* outer cyan */
+    border: 3px solid var(--border-color) !important;
     border-radius: 4px !important;
     background: var(--bg-card) !important;
     margin-bottom: 12px !important;
     padding: 8px 0 10px 0 !important;
-
-    /* Inner dark outline for double-border effect */
-    outline: 2px solid var(--border-dark) !important;   /* inner teal */
+    outline: 2px solid var(--border-dark) !important;
     outline-offset: 0;
-    /* Subtle inset border instead of heavy shadow */
     box-shadow: inset 0 0 0 2px var(--border-dark);
 }
 
-/* Remove any inner borders from the title/content blocks inside cards */
 .gr-group:has(.panel-title) .block {
     border: none !important;
 }
 
-/* Force dark background on all Gradio elements within side panels */
-.side-panel,
 .side-panel .block,
-.side-panel .group,
-.side-panel .gr-group,
-.side-panel .gr-box,
-.side-panel .gr-block,
-.side-panel [class*="block"],
-.side-panel [class*="group"],
-.side-panel [class*="svelte"],
-.side-panel > div,
-.side-panel > div > div,
-.side-panel [style*="background"] {
-    background: var(--bg-card) !important;
-    background-color: var(--bg-card) !important;
-}
-
-/* Override any inline styles on side panel elements */
-.side-panel[style*="background"],
-.side-panel [style*="background"] {
-    background: var(--bg-card) !important;
-    background-color: var(--bg-card) !important;
-}
-
-/* Target Gradio's internal structure for side panels */
-/* Remove default padding from Gradio's internal containers */
-.side-panel .block,
-.side-panel .prose,
-.side-panel [class*="svelte"] {
+.side-panel .prose {
     padding: 0 !important;
-}
-
-/* Ensure panel title and content have proper spacing */
-.side-panel .panel-title {
-    margin-top: 0;
-    margin-bottom: 16px;
-    padding: 8px !important;
-}
-
-/* Ensure content inside side panels has proper spacing */
-.side-panel > * {
-    margin: 0;
-}
-
-.side-panel > *:not(:last-child) {
-    margin-bottom: 12px;
+    background: var(--bg-card) !important;
 }
 
 .panel-title {
@@ -410,6 +498,7 @@ img {border: 4px solid white !important;}
     letter-spacing: 1px;
 }
 
+/* ========== CLUES & ITEMS ========== */
 .clue-item {
     font-family: 'Source Sans Pro', sans-serif;
     font-size: 13px;
@@ -437,14 +526,13 @@ img {border: 4px solid white !important;}
     background: var(--bg-panel);
 }
 
-/* Checkmarks for suspects and locations */
 .suspect-check,
 .location-check {
     color: var(--accent-green) !important;
     font-weight: 700;
 }
 
-/* Suspect item styling - collapsible (progressive disclosure) */
+/* ========== SUSPECT ITEMS ========== */
 .suspect-item {
     font-family: 'Source Sans Pro', sans-serif;
     font-size: 14px;
@@ -465,9 +553,7 @@ img {border: 4px solid white !important;}
     align-items: flex-start;
 }
 
-.suspect-item summary::-webkit-details-marker {
-    display: none;
-}
+.suspect-item summary::-webkit-details-marker { display: none; }
 
 .suspect-item summary::before {
     content: '▶';
@@ -479,29 +565,12 @@ img {border: 4px solid white !important;}
     transition: transform 0.2s ease;
 }
 
-.suspect-item[open] summary::before {
-    transform: rotate(90deg);
-}
+.suspect-item[open] summary::before { transform: rotate(90deg); }
+.suspect-item summary:hover { background: var(--bg-panel); }
+.suspect-item.searched { opacity: 0.7; background: var(--bg-panel); }
+.suspect-item.searched summary { color: var(--text-secondary); }
 
-.suspect-item summary:hover {
-    background: var(--bg-panel);
-}
-
-.suspect-item.searched {
-    opacity: 0.7;
-    background: var(--bg-panel);
-}
-
-.suspect-item.searched summary {
-    color: var(--text-secondary);
-}
-
-.suspect-header {
-    flex: 1;
-    line-height: 1.4;
-}
-
-
+.suspect-header { flex: 1; line-height: 1.4; }
 
 .suspect-role-preview {
     font-size: 0.85em;
@@ -522,6 +591,7 @@ img {border: 4px solid white !important;}
     line-height: 1.4;
 }
 
+/* ========== ACCUSATIONS ========== */
 .accusations-display {
     font-family: 'Source Sans Pro', sans-serif;
     font-size: 14px;
@@ -540,544 +610,9 @@ img {border: 4px solid white !important;}
     margin: 0 4px;
 }
 
-.accusations-pip.used {
-    background: var(--accent-red);
-}
+.accusations-pip.used { background: var(--accent-red); }
 
-/* Audio player styling - Hide audio controls, show only subtitles */
-/* Overlay at bottom of portrait image */
-.audio-player {
-    position: relative !important;
-    width: 100% !important;
-    max-width: 100% !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    opacity: 1 !important;
-    border: none !important;
-    border-radius: 0 !important;
-    /* Reduced height for subtitles only */
-    min-height: 60px !important;
-    max-height: 60px !important;
-    height: auto !important;
-    overflow: visible !important;
-    box-sizing: border-box !important;
-    z-index: 10 !important;
-    /* Only show background when there's actual content */
-    background: transparent !important;
-}
-
-/* Hide audio player when it's empty (no audio file loaded) */
-.audio-player:has(.empty),
-.audio-player .empty {
-    display: none !important;
-    visibility: hidden !important;
-    opacity: 0 !important;
-    height: 0 !important;
-    min-height: 0 !important;
-    overflow: hidden !important;
-}
-
-/* Hide audio player controls - play/pause, rewind, skip buttons */
-.audio-player .play-pause-wrapper,
-.audio-player .play-pause-button,
-.audio-player .rewind,
-.audio-player .skip,
-.audio-player button[aria-label*="Skip"],
-.audio-player button[aria-label*="Pause"],
-.audio-player button[aria-label*="Play"],
-.audio-player .svelte-72dh9g {
-    display: none !important;
-    visibility: hidden !important;
-    opacity: 0 !important;
-    height: 0 !important;
-    width: 0 !important;
-    overflow: hidden !important;
-}
-
-/* Hide the entire audio-player block when it only contains empty state */
-.block.audio-player:has(.empty:only-child),
-.block.audio-player:has(.empty) {
-    display: none !important;
-    visibility: hidden !important;
-    opacity: 0 !important;
-    height: 0 !important;
-    min-height: 0 !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    border: none !important;
-    overflow: hidden !important;
-}
-
-/* Hide audio-player block when it has no audio source and no subtitle content */
-.block.audio-player:not(:has(audio[src])):not(:has(.subtitle-display)):not(:has([data-testid="subtitle-display"])):not(:has([class*="subtitle"])) {
-    display: none !important;
-    visibility: hidden !important;
-    opacity: 0 !important;
-    height: 0 !important;
-    min-height: 0 !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    border: none !important;
-    overflow: hidden !important;
-}
-
-/* Hide the block container wrapper but keep subtitle-display visible */
-/* This removes the extra block that appears below subtitles */
-.block.audio-player {
-    border: 2px solid var(--border-dark) !important;
-    padding: 16px !important;
-    margin: 0 !important;
-    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.6) !important;
-    border-radius: 4px !important;
-}
-
-/* Keep dark background on main block, but make child elements transparent where needed */
-.block.audio-player > div:not(:has(.subtitle-display)):not(:has([data-testid="subtitle-display"])),
-.audio-player:not(:has(.subtitle-display)):not(:has([data-testid="subtitle-display"])),
-.audio-player audio,
-.audio-player > div:not(:has(.subtitle-display)):not(:has([data-testid="subtitle-display"])) {
-    background: transparent !important;
-    background-color: transparent !important;
-}
-
-/* Remove black backgrounds from child elements only - keep dark theme on main block */
-.block.audio-player *:not(.subtitle-display):not([data-testid="subtitle-display"]):not([class*="subtitle"]):not([data-testid*="subtitle"]) {
-    background: transparent !important;
-    background-color: transparent !important;
-}
-
-.icon-button-wrapper {
-    background-color: transparent !important;
-    --bg-color: transparent !important;
-}
-.icon-button {
-    background-color: #010101 !important;
-    --bg-color: #010101 !important;
-}
-.mic-select,
-.record-button,
-.stop-button {
-    background-color: transparent !important;
-    --bg-color: transparent !important;
-}
-
-/* Overlay subtitles on portrait image */
-/* Make the portrait image container relative for positioning context */
-.center-column > .gr-group > div:has(.portrait-image),
-.center-column > .gr-group > div:has(img.portrait-image) {
-    position: relative !important;
-}
-
-/* Position audio player to overlay the bottom of the portrait image */
-/* Gradio wraps components in .block divs, so we need to target those */
-.center-column > .gr-group:has(.portrait-image img[src]:not([src=""])) {
-    position: relative !important;
-}
-
-/* Make the portrait-image block a positioning context and remove bottom spacing */
-.center-column > .gr-group:has(.portrait-image img[src]:not([src=""])) .block.portrait-image {
-    position: relative !important;
-    margin-bottom: 0 !important;
-    padding-bottom: 0 !important;
-    z-index: 1 !important;
-    background: transparent !important;
-}
-
-/* Ensure portrait images are always visible */
-.center-column > .gr-group:has(.portrait-image img[src]:not([src=""])) .block.portrait-image img,
-.center-column > .gr-group:has(.portrait-image img[src]:not([src=""])) .portrait-image img {
-    display: block !important;
-    visibility: visible !important;
-    opacity: 1 !important;
-    background: transparent !important;
-    z-index: 2 !important;
-    position: relative !important;
-}
-
-/* Style audio player block when portrait image is present */
-.center-column > .gr-group:has(.portrait-image img[src]:not([src=""])) .block.audio-player {
-    /* Removed absolute positioning - let it flow naturally after portrait */
-    margin: 0 !important;
-    background: transparent !important;
-    border: none !important;
-    padding: 0 !important;
-}
-
-/* Style the audio player content - fully opaque */
-.center-column > .gr-group:has(.portrait-image img[src]:not([src=""])) .block.audio-player > div,
-.center-column > .gr-group:has(.portrait-image img[src]:not([src=""])) .block.audio-player .minimal-audio-player {
-    padding: 16px 20px !important;
-    # background: #00004d !important;
-    opacity: 1 !important;
-}
-
-/* Speaker name is positioned via .block:has(.speaker-name) rule above */
-/* Keep speaker name visible and styled when game is active */
-.center-column > .gr-group .speaker-name {
-    display: block !important;
-    visibility: visible !important;
-    opacity: 1 !important;
-}
-
-/* When there's no portrait image (e.g., start screen), don't overlay */
-.center-column > .gr-group:not(:has(.portrait-image img[src]:not([src=""]))) .audio-player {
-    position: relative !important;
-    background: var(--bg-panel) !important;
-    border: 1px solid var(--border-color) !important;
-    padding: 8px !important;
-}
-
-/* Hide ALL audio controls and buttons */
-.audio-player button,
-.audio-player [role="button"],
-.audio-player .controls,
-.audio-player .audio-controls,
-.audio-player [class*="button"],
-.audio-player [class*="control"] {
-    display: none !important;
-}
-
-/* Hide the entire controls wrapper with volume, playback speed, and subtitle toggle */
-/* Use very specific selectors with high priority */
-.audio-player .controls,
-.audio-player .controls.svelte-72dh9g,
-.audio-player [data-testid="waveform-controls"],
-.audio-player [data-testid="waveform-controls"].svelte-72dh9g,
-.audio-player div.controls,
-.audio-player div.controls.svelte-72dh9g,
-.audio-player div[data-testid="waveform-controls"],
-.audio-player div[data-testid="waveform-controls"].svelte-72dh9g,
-.audio-player .control-wrapper,
-.audio-player .control-wrapper.svelte-72dh9g,
-.audio-player .settings-wrapper,
-.audio-player .settings-wrapper.svelte-72dh9g,
-.audio-player .play-pause-wrapper,
-.audio-player .play-pause-wrapper.svelte-72dh9g,
-.audio-player .volume,
-.audio-player .playback,
-.audio-player [aria-label*="volume"],
-.audio-player [aria-label*="playback speed"],
-.audio-player [data-testid="subtitles-toggle"],
-.audio-player .cc-button,
-/* Target by svelte class as well */
-.audio-player .svelte-72dh9g.controls,
-.audio-player div.svelte-72dh9g[data-testid="waveform-controls"],
-/* Universal selector for any element with waveform-controls */
-[data-testid="waveform-controls"],
-div[data-testid="waveform-controls"],
-.controls[data-testid="waveform-controls"] {
-    display: none !important;
-    visibility: hidden !important;
-    opacity: 0 !important;
-    height: 0 !important;
-    width: 0 !important;
-    min-height: 0 !important;
-    min-width: 0 !important;
-    max-height: 0 !important;
-    max-width: 0 !important;
-    overflow: hidden !important;
-    pointer-events: none !important;
-    position: absolute !important;
-    left: -9999px !important;
-    margin: 0 !important;
-    padding: 0 !important;
-}
-
-/* Hide time element and timestamps */
-.audio-player time,
-.audio-player #time,
-.audio-player [id="time"],
-.audio-player [id="duration"],
-.audio-player [class*="time"],
-.audio-player .timestamps,
-.audio-player .timestamps.svelte-1ffmt2w {
-    display: none !important;
-    visibility: hidden !important;
-    height: 0 !important;
-    width: 0 !important;
-    overflow: hidden !important;
-}
-
-/* Hide waveform container and component wrapper - but NOT if it contains subtitle-display */
-/* Be very specific about what to hide */
-.audio-player .component-wrapper:not(:has(.subtitle-display)):not(:has([data-testid="subtitle-display"])),
-.audio-player .component-wrapper.svelte-1ffmt2w:not(:has(.subtitle-display)):not(:has([data-testid="subtitle-display"])),
-.audio-player [data-testid="waveform-Audio"]:not(:has(.subtitle-display)):not(:has([data-testid="subtitle-display"])),
-.audio-player .waveform-container,
-.audio-player .waveform-container.svelte-1ffmt2w,
-.audio-player #waveform,
-.audio-player #waveform.svelte-1ffmt2w,
-.audio-player div[data-testid="waveform-Audio"]:not(:has(.subtitle-display)):not(:has([data-testid="subtitle-display"])),
-/* Hide timestamps specifically */
-.audio-player .timestamps,
-.audio-player .timestamps.svelte-1ffmt2w {
-    display: none !important;
-    visibility: hidden !important;
-    opacity: 0 !important;
-    height: 0 !important;
-    width: 0 !important;
-    min-height: 0 !important;
-    min-width: 0 !important;
-    max-height: 0 !important;
-    max-width: 0 !important;
-    overflow: hidden !important;
-    pointer-events: none !important;
-    position: absolute !important;
-    left: -9999px !important;
-    margin: 0 !important;
-    padding: 0 !important;
-}
-
-/* Style component-wrapper when it contains subtitles */
-.audio-player .component-wrapper:has(.subtitle-display),
-.audio-player .component-wrapper:has([data-testid="subtitle-display"]),
-.audio-player .component-wrapper.svelte-1ffmt2w:has(.subtitle-display),
-.audio-player .component-wrapper.svelte-1ffmt2w:has([data-testid="subtitle-display"]) {
-    background: transparent !important;
-    border: none !important;
-    padding: 0 !important;
-    margin: 0 !important;
-    /* Removed absolute positioning */
-    display: flex !important;
-    flex-direction: column !important;
-    align-items: center !important;
-    justify-content: center !important;
-}
-
-/* Ensure subtitle-display inside component-wrapper is styled */
-.audio-player .component-wrapper .subtitle-display,
-.audio-player .component-wrapper [data-testid="subtitle-display"] {
-    /* Removed positioning overrides - let it flow naturally */
-    width: 100% !important;
-}
-
-/* CRITICAL: Ensure subtitle-display is ALWAYS visible - highest priority */
-/* Must come after any hiding rules and have maximum specificity */
-.audio-player .subtitle-display.svelte-1ffmt2w,
-.audio-player [data-testid="subtitle-display"].svelte-1ffmt2w,
-.audio-player .subtitle-display,
-.audio-player [data-testid="subtitle-display"],
-.audio-player .component-wrapper .subtitle-display,
-.audio-player .component-wrapper [data-testid="subtitle-display"],
-.audio-player .component-wrapper.svelte-1ffmt2w .subtitle-display,
-.audio-player .component-wrapper.svelte-1ffmt2w [data-testid="subtitle-display"] {
-    display: block !important;
-    visibility: visible !important;
-    opacity: 1 !important;
-    height: auto !important;
-    width: auto !important;
-    min-height: 40px !important;
-    /* Removed absolute positioning - let it flow naturally */
-    pointer-events: auto !important;
-    /* Removed z-index as it's no longer needed without absolute positioning */
-}
-
-/* Hide download/share buttons if present */
-.audio-player [class*="download"],
-.audio-player [class*="share"] {
-    display: none !important;
-}
-
-/* Hide the audio element itself (but keep it functional for autoplay) */
-.audio-player audio {
-    position: absolute !important;
-    width: 1px !important;
-    height: 1px !important;
-    opacity: 0 !important;
-    pointer-events: none !important;
-    overflow: hidden !important;
-    clip: rect(0, 0, 0, 0) !important;
-}
-
-/* Hide waveform/canvas */
-.audio-player canvas,
-.audio-player [class*="waveform"],
-.audio-player [class*="wave"],
-.audio-player svg:not([class*="subtitle"]):not([data-testid*="subtitle"]) {
-    display: none !important;
-    height: 0 !important;
-    width: 0 !important;
-    visibility: hidden !important;
-}
-
-/* Show ONLY subtitles - make them fully visible and prominent */
-/* Target all possible subtitle containers with very broad selectors */
-.audio-player [class*="subtitle"],
-.audio-player [class*="caption"],
-.audio-player [class*="text"],
-.audio-player [class*="transcript"],
-.audio-player div[role="region"],
-.audio-player > div > div:last-child,
-.audio-player > div:last-child,
-.audio-player [data-testid*="subtitle"],
-.audio-player [data-testid*="caption"],
-.audio-player div:has(span[data-timestamp]),
-.audio-player div:has([class*="word"]),
-.audio-player div:has([class*="highlight"]) {
-    /* Make subtitles fully visible and take up the full space */
-    display: block !important;
-    visibility: visible !important;
-    opacity: 1 !important;
-    height: auto !important;
-    max-height: none !important;
-    min-height: 30px !important;
-    overflow-y: visible !important;
-    overflow-x: hidden !important;
-    flex-shrink: 0 !important;
-    box-sizing: border-box !important;
-    /* Center the text */
-    text-align: center !important;
-    /* Ensure text wraps properly and is readable */
-    word-wrap: break-word !important;
-    line-height: 1.8 !important;
-    padding: 4px 0 !important;
-    margin: 0 !important;
-    font-size: 18px !important;
-    font-weight: 500 !important;
-    /* White text for contrast on dark blue background */
-    color: #FFFFFF !important;
-    width: 100% !important;
-    text-align: center !important;
-    font-weight: 500 !important;
-    # /* Ensure background is dark blue */
-    # background: #00004d !important;
-}
-
-/* More aggressive: target any div that contains text after the audio element */
-.audio-player audio ~ div,
-.audio-player audio + div,
-.audio-player > div > div:not(:first-child) {
-    overflow-y: visible !important;
-    max-height: 140px !important;
-}
-
-/* Force remove any inline styles that might be causing scrolling */
-.audio-player * {
-    /* Override any inline max-height that might be set */
-}
-
-/* Specifically target Gradio's subtitle rendering area */
-.audio-player [style*="max-height"],
-.audio-player [style*="overflow"] {
-    max-height: 140px !important;
-    overflow-y: visible !important;
-    overflow: visible !important;
-}
-
-/* Ensure the audio component wrapper shows only subtitles with dark blue background */
-/* Only apply background when there are actually subtitles */
-.audio-player > div:has([class*="subtitle"]),
-.audio-player > div:has([class*="caption"]),
-.audio-player > div:has([role="region"]),
-.audio-player > div:has([data-testid*="subtitle"]),
-.audio-player > div:has([data-testid*="caption"]) {
-    height: auto !important;
-    min-height: 60px !important;
-    max-height: 150px !important;
-    display: flex !important;
-    # background: #00004d !important;
-    flex-direction: column !important;
-    box-sizing: border-box !important;
-    overflow: visible !important;
-    gap: 0 !important;
-    align-items: center !important;
-    justify-content: center !important;
-}
-
-/* Default state - no background if no subtitles */
-.audio-player > div {
-    height: auto !important;
-    min-height: 60px !important;
-    max-height: 150px !important;
-    display: flex !important;
-    background: transparent !important;
-    flex-direction: column !important;
-    box-sizing: border-box !important;
-    overflow: visible !important;
-    gap: 0 !important;
-    align-items: center !important;
-    justify-content: center !important;
-}
-
-/* Target Gradio's internal structure - hide audio player UI, show subtitles */
-.audio-player .minimal-audio-player,
-.audio-player .minimal-audio-player > div {
-    height: auto !important;
-    max-height: none !important;
-    overflow: visible !important;
-}
-
-/* Hide any audio player UI elements that aren't subtitles - but be careful not to hide subtitle containers */
-.audio-player > div > div:first-child:not([class*="subtitle"]):not([class*="caption"]):not([role="region"]):not([data-testid*="subtitle"]):not([data-testid*="caption"]) {
-    /* Only hide if it doesn't contain subtitle-related elements */
-    display: none !important;
-    height: 0 !important;
-    overflow: hidden !important;
-}
-
-/* Ensure subtitle containers are always visible with dark blue background - fully opaque */
-.audio-player [class*="subtitle"],
-.audio-player [class*="caption"],
-.audio-player [role="region"],
-.audio-player [data-testid*="subtitle"],
-.audio-player [data-testid*="caption"] {
-    display: block !important;
-    visibility: visible !important;
-    opacity: 1 !important;
-    text-align: center !important;
-    # background: #00004d !important;
-    color: #FFFFFF !important;
-}
-
-/* CRITICAL: Preserve and style subtitle-display element - must not be removed */
-/* This ensures the specific subtitle-display element is always visible and styled */
-.audio-player .subtitle-display,
-.audio-player [data-testid="subtitle-display"],
-.audio-player .subtitle-display.svelte-1ffmt2w,
-.audio-player [data-testid="subtitle-display"].svelte-1ffmt2w {
-    display: block !important;
-    visibility: visible !important;
-    opacity: 1 !important;
-    color: #2d2418 !important;
-    text-align: center !important;
-    font-size: 20px !important;
-    font-family: 'Courier New', monospace !important;
-    
-    font-weight: 600 !important;
-    margin: 0 !important;
-    height: auto !important;
-    min-height: 0px !important;
-    z-index: 100 !important;
-    position: absolute !important;
-    bottom: 10px !important;
-}
-
-# /* Center all text elements within subtitle containers and ensure good contrast */
-# .audio-player [class*="subtitle"] *,
-# .audio-player [class*="caption"] *,
-# .audio-player [role="region"] *,
-# .audio-player [data-testid*="subtitle"] *,
-# .audio-player [data-testid*="caption"] *,
-# .audio-player div:has(span[data-timestamp]) *,
-# .audio-player div:has([class*="word"]) *,
-# .audio-player div:has([class*="highlight"]) *,
-# .audio-player > div > div:last-child *,
-# .audio-player > div:last-child * {
-#     /* White text for contrast on dark blue background */
-#     color: #FFFFFF !important;
-#     text-align: center !important;
-#     display: inline-block !important;
-# }
-
-# /* Ensure subtitle spans and words are centered */
-# .audio-player span[data-timestamp],
-# .audio-player [class*="word"],
-# .audio-player [class*="highlight"] {
-#     text-align: center !important;
-#     display: inline-block !important;
-# }
-
-/* Transcript panel */
+/* ========== TRANSCRIPT PANEL ========== */
 .transcript-panel {
     max-height: 300px;
     overflow-y: auto;
@@ -1086,23 +621,21 @@ div[data-testid="waveform-controls"],
     line-height: 1.5;
 }
 
-/* Suspects list - fully visible without scrolling */
+/* Suspects list - fully visible */
 .suspects-list,
-.suspects-panel .transcript-panel,
-.side-panel.suspects-panel .transcript-panel {
+.suspects-panel .transcript-panel {
     max-height: none !important;
     overflow-y: visible !important;
-    overflow: visible !important;
     height: auto !important;
 }
 
-/* Suspects panel - allow it to grow to fit content */
-.suspects-panel,
-.side-panel.suspects-panel {
+.suspects-panel {
     height: auto !important;
     max-height: none !important;
     overflow: visible !important;
 }
+
+/* ========== START BUTTON ========== */
 .start-button {
     font-family: 'Source Sans Pro', sans-serif !important;
     font-size: 16px !important;
@@ -1119,6 +652,18 @@ div[data-testid="waveform-controls"],
     animation: button-pulse 1s ease-in-out 5 !important;
 }
 
+.download-link {
+    display: none !important;
+}
+
+.share-link {
+    display: none !important;
+}
+
+.fullscreen-link {
+    display: none !important;
+}
+
 .start-button:hover {
     background: var(--accent-blue) !important;
     color: #000033 !important;
@@ -1127,7 +672,6 @@ div[data-testid="waveform-controls"],
     text-shadow: none !important;
 }
 
-/* Start button container */
 .start-button-container {
     display: flex;
     flex-direction: column;
@@ -1135,168 +679,66 @@ div[data-testid="waveform-controls"],
     gap: 12px;
 }
 
-/* Hide the container when the button inside is hidden */
 .start-button-container:has(.start-button.hidden) {
     display: none !important;
     height: 0 !important;
     min-height: 0 !important;
-    padding: 0 !important;
-    margin: 0 !important;
-    overflow: hidden !important;
 }
 
-/* DISABLED - was hiding speaker name
-.prose.gradio-style:empty {
-    display: none !important;
-}
-*/
-
-/* Gradio overrides */
-.gradio-container {
-    background: var(--bg-primary) !important;
-    max-width: 100% !important;
-    color: var(--text-primary) !important;
+.loading-message {
+    font-size: 20px !important;
+    color: var(--accent-blue) !important;
 }
 
-
-/* Override Gradio's default light backgrounds */
-.gr-box,
-.gr-form,
-.gr-block,
-.gr-group,
-.block,
-.group,
-[class*="block"],
-[class*="group"] {
-    background: var(--bg-card) !important;
-    background-color: var(--bg-card) !important;
-    border-color: var(--border-dark) !important;
-    color: var(--text-primary) !important;
+.image-container {
+    padding-bottom: 2px;
+    border-radius: 6px;
 }
 
-/* Specifically target Gradio group elements (used for cards) */
-.gr-group,
-.group,
-[class*="group"] {
-    background: var(--bg-card) !important;
-    background-color: var(--bg-card) !important;
-}
-
-.gr-button {
-    font-family: 'Source Sans Pro', sans-serif !important;
-}
-
-.gr-box {
-    background: var(--bg-card) !important;
-    border-color: var(--border-dark) !important;
-    border-radius: 4px !important;
-    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.6) !important;
-}
-
-footer {
-    display: none !important;
-}
-
-/* ==========================================================================
-   STATUS TRACKER - Fixed Position Loading Indicator
-   Shows elapsed time during processing without causing layout shifts
-   ========================================================================== */
-
-/* Hide certain status trackers that cause layout shifts */
-[data-testid="status-tracker"].wrap.center.translucent,
-[data-testid="status-tracker"].wrap.default.full.hide,
-.input-bar [data-testid="status-tracker"] {
-    display: none !important;
-    visibility: hidden !important;
-    opacity: 0 !important;
-    pointer-events: none !important;
-}
-
-/* Hide duplicate status trackers - only show the first visible one */
-/* Target status trackers inside audio-player blocks specifically */
-.audio-player [data-testid="status-tracker"]:not(.hide) {
-    display: none !important;
-    visibility: hidden !important;
-}
-
-/* Main status tracker - FIXED position at viewport center */
+/* ========== STATUS TRACKER ========== */
 [data-testid="status-tracker"]:not(.translucent):not(.wrap.center):not(.hide) {
-    /* Fixed positioning - centered both horizontally and vertically */
     position: fixed !important;
     top: 50% !important;
     left: 50% !important;
     transform: translate(-50%, -50%) !important;
     z-index: 9999 !important;
-    
-    /* Consistent sizing */
     min-width: 200px !important;
     max-width: 400px !important;
-    width: auto !important;
-    height: auto !important;
     min-height: 124px !important;
     max-height: 180px !important;
-    
-    /* Solid dark background - no transparency */
     background: #000033 !important;
-    
-    /* Retro double-border: outer turquoise, inner grey/teal */
-    border: 3px solid var(--border-color) !important;  /* #00FFFF turquoise outer */
+    border: 3px solid var(--border-color) !important;
     border-radius: 4px !important;
     padding: 16px 28px !important;
-    
-    /* Outer grey border using outline - no gap */
-    outline: 3px solid var(--border-dark) !important;  /* #006666 grey outer frame */
+    outline: 3px solid var(--border-dark) !important;
     outline-offset: 0px !important;
-    
-    /* Inner inset border for depth - solid colors, no transparency gaps */
     box-shadow: 
         inset 0 0 0 2px var(--border-dark),
         inset 0 0 0 4px #000033,
         inset 0 0 0 5px var(--border-color),
         inset 0 2px 8px rgba(0, 0, 0, 0.8) !important;
-    
-    /* Visual effects */
     animation: statusPulse 2s ease-in-out infinite !important;
 }
 
-/* Corner decorations for retro look */
 [data-testid="status-tracker"]:not(.translucent):not(.wrap.center):not(.hide)::before,
 [data-testid="status-tracker"]:not(.translucent):not(.wrap.center):not(.hide)::after {
-    content: "◆" !important;
-    position: absolute !important;
-    color: var(--border-color) !important;
-    font-size: 12px !important;
+    content: "◆";
+    position: absolute;
+    color: var(--border-color);
+    font-size: 12px;
+    left: 50%;
+    transform: translateX(-50%);
 }
 
-[data-testid="status-tracker"]:not(.translucent):not(.wrap.center):not(.hide)::before {
-    top: -8px !important;
-    left: 50% !important;
-    transform: translateX(-50%) !important;
-}
+[data-testid="status-tracker"]:not(.translucent):not(.wrap.center):not(.hide)::before { top: -8px; }
+[data-testid="status-tracker"]:not(.translucent):not(.wrap.center):not(.hide)::after { bottom: -8px; }
 
-[data-testid="status-tracker"]:not(.translucent):not(.wrap.center):not(.hide)::after {
-    bottom: -8px !important;
-    left: 50% !important;
-    transform: translateX(-50%) !important;
-}
-
-/* Pulse animation for the status tracker */
-@keyframes statusPulse {
-    0%, 100% {
-        border-color: var(--border-color);  /* #00FFFF turquoise */
-    }
-    50% {
-        border-color: var(--border-dark);   /* #006666 darker teal */
-    }
-}
-
-/* Status tracker text styling - prominent message */
 [data-testid="status-tracker"]:not(.translucent):not(.wrap.center):not(.hide) .progress-text,
 [data-testid="status-tracker"]:not(.translucent):not(.wrap.center):not(.hide) .meta-text,
 [data-testid="status-tracker"]:not(.translucent):not(.wrap.center):not(.hide) .meta-text-center,
 [data-testid="status-tracker"]:not(.translucent):not(.wrap.center):not(.hide) .eta,
 [data-testid="status-tracker"]:not(.translucent):not(.wrap.center):not(.hide) span {
-    color: var(--accent-blue) !important;  /* Bright cyan text */
+    color: var(--accent-blue) !important;
     font-family: 'Courier New', monospace !important;
     font-weight: 700 !important;
     font-size: 18px !important;
@@ -1305,7 +747,6 @@ footer {
     background: transparent !important;
 }
 
-/* Spinner styling - make it smaller and subtle */
 [data-testid="status-tracker"]:not(.translucent):not(.wrap.center):not(.hide) svg {
     color: var(--border-color) !important;
     width: 24px !important;
@@ -1314,22 +755,13 @@ footer {
     opacity: 0.7 !important;
 }
 
-/* Remove any background from spinner wrapper */
-[data-testid="status-tracker"]:not(.translucent):not(.wrap.center):not(.hide) .svelte-1vhirvf,
-[data-testid="status-tracker"]:not(.translucent):not(.wrap.center):not(.hide) .svelte-1vhirvf.margin {
-    background: transparent !important;
-}
-
-/* Hide status tracker when it has .hide class or is empty */
 [data-testid="status-tracker"].hide,
 [data-testid="status-tracker"]:empty {
     display: none !important;
     opacity: 0 !important;
     visibility: hidden !important;
-    pointer-events: none !important;
 }
 
-/* Smooth fade in/out transition */
 [data-testid="status-tracker"] {
     transition: opacity 0.3s ease, transform 0.3s ease !important;
 }
