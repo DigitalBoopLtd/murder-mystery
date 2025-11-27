@@ -377,30 +377,11 @@ RETRO_CSS = """
     line-height: 1.4;
 }
 
-/* Status bar */
-.status-bar {
-    background: var(--bg-secondary);
-    border-top: 2px solid var(--accent-blue);
-    padding: 12px 24px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.5);
-}
-
 .accusations-display {
     font-family: 'Source Sans Pro', sans-serif;
     font-size: 14px;
     font-weight: 500;
     color: var(--text-primary);
-}
-
-.accusations-title-bar {
-    margin-left: auto;
-    text-align: right;
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
 }
 
 .accusations-pip {
