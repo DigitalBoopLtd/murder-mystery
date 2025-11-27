@@ -155,10 +155,10 @@ No text, no words, no letters, no writing, no labels, no captions, no name tags.
                 "nameplate, placard, signboard, billboard, poster text, label text, "
                 "badge text, tag text, watermark text, copyright text, signature text"
             )
-            
-            # Use a single fast SDXL model via fal-ai
+
+            # Prefer Qwen-Image (previous default), optionally extend with fallbacks later if needed
             models_to_try = [
-                "ByteDance/SDXL-Lightning",   # fast, low-step SDXL via fal-ai
+                "Qwen/Qwen-Image",
             ]
             
             image = None
@@ -254,10 +254,9 @@ No text, no words, no letters, no writing, no labels, no captions, no name tags.
                 "watermark text, copyright text, signature text, store signs, "
                 "building signs, door signs, window signs, neon signs with text"
             )
-            
-            # Use a single fast SDXL model via fal-ai
+            # Prefer Qwen-Image (previous default), optionally extend with fallbacks later if needed
             models_to_try = [
-                "ByteDance/SDXL-Lightning",   # fast, low-step SDXL via fal-ai
+                "Qwen/Qwen-Image",
             ]
             
             image = None
@@ -336,10 +335,9 @@ Atmospheric scene only, no text overlay.
                 "badge text, tag text, watermark text, copyright text, signature text, "
                 "title overlay, title card overlay, game title overlay, movie title overlay"
             )
-            
-            # Use a single fast SDXL model via fal-ai
+            # Prefer Qwen-Image (previous default), optionally extend with fallbacks later if needed
             models_to_try = [
-                "ByteDance/SDXL-Lightning",   # fast, low-step SDXL via fal-ai
+                "Qwen/Qwen-Image",
             ]
             
             image = None

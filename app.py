@@ -130,78 +130,124 @@ def create_favicon() -> str:
 
 
 def create_placeholder_image() -> str:
-    """Create a placeholder image with an emoji/icon for the portrait display.
+    """Create an engaging splash screen for the murder mystery game.
 
     Returns:
         Path to the placeholder image file
     """
     # Create a 500x500 image with dark theme background
-    img = Image.new("RGB", (500, 500), color="#0d0d26")  # --bg-card color
+    img = Image.new("RGB", (500, 500), color="#0d0d26")
     draw = ImageDraw.Draw(img)
 
-    # Draw a subtle magnifying glass icon (centered and smaller)
-    # Draw a circle for the glass - smaller and more subtle
-    glass_center_x, glass_center_y = 250, 200
-    glass_radius = 35
-    # Single circle (subtle)
-    draw.ellipse(
-        [
-            glass_center_x - glass_radius,
-            glass_center_y - glass_radius,
-            glass_center_x + glass_radius,
-            glass_center_y + glass_radius,
-        ],
-        outline="#006666",  # Darker cyan for subtlety
-        width=2,
-    )
-    
-    # Draw the handle (smaller and more subtle)
-    handle_start_x = glass_center_x + glass_radius - 8
-    handle_start_y = glass_center_y + glass_radius - 8
-    handle_end_x = handle_start_x + 30
-    handle_end_y = handle_start_y + 30
-    draw.line(
-        [(handle_start_x, handle_start_y), (handle_end_x, handle_end_y)],
-        fill="#006666",  # Darker cyan for subtlety
-        width=3,
-    )
+    # Colors matching the retro theme
+    cyan = "#00FFFF"
+    dark_cyan = "#006666"
+    gold = "#D4AF37"
+    white = "#FFFFFF"
+    muted = "#888888"
+    red = "#CC3333"
 
-    # Add instructions text below the emoji
-    try:
-        # Use a smaller font for instructions
-        instruction_font_size = 24
-        try:
-            instruction_font = ImageFont.truetype(
-                "/System/Library/Fonts/Supplemental/Arial.ttf", instruction_font_size
-            )
-        except:
+    # Load fonts with fallbacks
+    def load_font(size, bold=False):
+        font_paths = [
+            f"/System/Library/Fonts/Supplemental/Arial{'Bold' if bold else ''}.ttf",
+            "/System/Library/Fonts/Supplemental/Arial.ttf",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf" if bold else "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        ]
+        for path in font_paths:
             try:
-                instruction_font = ImageFont.truetype(
-                    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", instruction_font_size
-                )
+                return ImageFont.truetype(path, size)
             except:
-                instruction_font = ImageFont.load_default()
-    except:
-        instruction_font = ImageFont.load_default()
+                continue
+        return ImageFont.load_default()
 
-    # Instructions text
-    instructions = [
-        "Click 'START NEW MYSTERY' to begin",
-        "your investigation!"
+    title_font = load_font(22, bold=True)
+    feature_font = load_font(16)
+    small_font = load_font(14)
+    cta_font = load_font(18, bold=True)
+
+    # Draw decorative corner brackets (top-left)
+    draw.line([(30, 25), (30, 50)], fill=cyan, width=2)
+    draw.line([(30, 25), (55, 25)], fill=cyan, width=2)
+    # Top-right
+    draw.line([(470, 25), (470, 50)], fill=cyan, width=2)
+    draw.line([(445, 25), (470, 25)], fill=cyan, width=2)
+
+    # Main tagline - Voice-Powered AI Mystery
+    tagline = "~ VOICE-POWERED AI MYSTERY ~"
+    tagline_bbox = draw.textbbox((0, 0), tagline, font=title_font)
+    tagline_width = tagline_bbox[2] - tagline_bbox[0]
+    draw.text(((500 - tagline_width) // 2, 45), tagline, fill=cyan, font=title_font)
+
+    # Decorative line under title
+    draw.line([(100, 80), (400, 80)], fill=dark_cyan, width=1)
+
+    # Atmospheric intro with symbols
+    intro_lines = [
+        ("*", "A body has been discovered...", red),
+        ("?", "Four suspects. One killer.", white),
     ]
     
-    # Draw each line of instructions
-    line_height = 35
-    start_y = glass_center_y + glass_radius + 50
+    intro_y = 100
+    for i, (symbol, text, color) in enumerate(intro_lines):
+        full_text = f"[ {symbol} ]  {text}"
+        bbox = draw.textbbox((0, 0), full_text, font=feature_font)
+        width = bbox[2] - bbox[0]
+        draw.text(((500 - width) // 2, intro_y + (i * 32)), full_text, fill=color, font=feature_font)
+
+    # Decorative divider with diamond
+    draw.line([(60, 175), (220, 175)], fill=dark_cyan, width=1)
+    diamond = "<>"
+    d_bbox = draw.textbbox((0, 0), diamond, font=small_font)
+    d_width = d_bbox[2] - d_bbox[0]
+    draw.text(((500 - d_width) // 2, 168), diamond, fill=cyan, font=small_font)
+    draw.line([(280, 175), (440, 175)], fill=dark_cyan, width=1)
+
+    # Feature list - what makes this game special (using ASCII symbols)
+    features = [
+        (">", "Speak to interrogate suspects"),
+        (">", "Search locations for clues"),
+        (">", "Hear AI-voiced suspect responses"),
+        (">", "Every mystery is unique"),
+        (">", "Make your accusation!"),
+    ]
     
-    for i, line in enumerate(instructions):
-        line_bbox = draw.textbbox((0, 0), line, font=instruction_font)
-        line_width = line_bbox[2] - line_bbox[0]
-        line_x = (500 - line_width) // 2
-        line_y = start_y + (i * line_height)
-        
-        # Draw text in light color (white/light gray) for contrast
-        draw.text((line_x, line_y), line, fill="#FFFFFF", font=instruction_font)
+    features_y = 195
+    line_height = 34
+    
+    for i, (bullet, text) in enumerate(features):
+        full_line = f"  {bullet}  {text}"
+        bbox = draw.textbbox((0, 0), full_line, font=feature_font)
+        width = bbox[2] - bbox[0]
+        x = (500 - width) // 2
+        # Draw bullet in cyan, text in white
+        draw.text((x, features_y + (i * line_height)), f"  {bullet}", fill=cyan, font=feature_font)
+        text_x = x + draw.textbbox((0, 0), f"  {bullet}  ", font=feature_font)[2]
+        draw.text((text_x, features_y + (i * line_height)), text, fill=white, font=feature_font)
+
+    # Decorative divider
+    draw.line([(60, 375), (220, 375)], fill=dark_cyan, width=1)
+    draw.text(((500 - d_width) // 2, 368), diamond, fill=cyan, font=small_font)
+    draw.line([(280, 375), (440, 375)], fill=dark_cyan, width=1)
+
+    # Pro tip
+    tip = "[ TIP: Use your microphone to play! ]"
+    tip_bbox = draw.textbbox((0, 0), tip, font=small_font)
+    tip_width = tip_bbox[2] - tip_bbox[0]
+    draw.text(((500 - tip_width) // 2, 395), tip, fill=muted, font=small_font)
+
+    # Call to action with arrows
+    cta = ">>> START NEW MYSTERY <<<"
+    cta_bbox = draw.textbbox((0, 0), cta, font=cta_font)
+    cta_width = cta_bbox[2] - cta_bbox[0]
+    draw.text(((500 - cta_width) // 2, 430), cta, fill=gold, font=cta_font)
+
+    # Draw decorative corner brackets (bottom-left)
+    draw.line([(30, 450), (30, 475)], fill=cyan, width=2)
+    draw.line([(30, 475), (55, 475)], fill=cyan, width=2)
+    # Bottom-right
+    draw.line([(470, 450), (470, 475)], fill=cyan, width=2)
+    draw.line([(445, 475), (470, 475)], fill=cyan, width=2)
 
     # Save to a temporary file
     placeholder_path = os.path.join(
@@ -373,8 +419,25 @@ def create_app():
 
         # ====== EVENT HANDLERS ======
 
+        def _normalize_session_id(sess_id) -> str:
+            """Ensure we always use a stable string session id.
+
+            Gradio's State can pass a callable (e.g. lambda) as the stored value;
+            we standardize everything to a concrete string so all handlers
+            share the same keys for game state and image caches.
+            """
+            if callable(sess_id):
+                try:
+                    sess_id = sess_id()
+                except TypeError:
+                    sess_id = str(sess_id)
+            if not isinstance(sess_id, str):
+                sess_id = str(sess_id)
+            return sess_id
+
         def on_start_game(sess_id, progress=gr.Progress()):
             """Handle game start with status updates."""
+            sess_id = _normalize_session_id(sess_id)
             # Use Gradio's built-in progress tracker instead of custom HTML
             progress(0.0, desc="Preparing your mystery...")
             yield [
@@ -547,6 +610,7 @@ def create_app():
 
         def check_mystery_ready(sess_id: str):
             """Timer callback to check if full mystery is ready and update UI."""
+            sess_id = _normalize_session_id(sess_id)
             state = get_or_create_state(sess_id)
             
             if state.mystery is not None:
@@ -569,6 +633,7 @@ def create_app():
 
         def on_custom_message(message: str, sess_id: str):
             """Handle free-form text input."""
+            sess_id = _normalize_session_id(sess_id)
             if not message.strip():
                 return [gr.update()] * 8
 
@@ -608,8 +673,16 @@ def create_app():
             newly_searched_location = current_locations - previous_locations
             newly_talked_suspect = current_suspects - previous_suspects
 
-            # Priority 1: Check if a suspect was just talked to (highest priority)
-            if newly_talked_suspect:
+            # Priority 0: If speaker is a suspect name, show their portrait directly
+            # This is the most reliable method since state comparison can fail
+            if speaker and speaker != "Game Master":
+                suspect_portrait = images.get(speaker, None)
+                if suspect_portrait:
+                    logger.info(f"✓ Found portrait for speaker {speaker}: {suspect_portrait}")
+                    display_portrait = suspect_portrait
+
+            # Priority 1: Check if a suspect was just talked to
+            if not display_portrait and newly_talked_suspect:
                 suspect_name = list(newly_talked_suspect)[0]
                 logger.info(f"Looking for portrait for suspect: {suspect_name}")
                 portrait = images.get(suspect_name, None)
@@ -667,12 +740,9 @@ def create_app():
             if not audio_path:
                 return [gr.update()] * 8
 
-            # Ensure sess_id is a string (handle case where State passes lambda)
-            if callable(sess_id):
-                sess_id = sess_id()
-            if not isinstance(sess_id, str):
-                sess_id = str(sess_id)
-            
+            # Normalize session id so it matches what on_start_game used
+            sess_id = _normalize_session_id(sess_id)
+
             # Check if game has been started
             state_before = get_or_create_state(sess_id)
             if not state_before.mystery and not getattr(state_before, 'premise_setting', None):
@@ -680,16 +750,18 @@ def create_app():
                 return [gr.update()] * 8
 
             # Store previous state to detect what changed
+            # IMPORTANT: Make copies of the lists since state is mutated in place
             previous_locations = (
-                set(state_before.searched_locations)
+                set(list(state_before.searched_locations))
                 if state_before.searched_locations
                 else set()
             )
             previous_suspects = (
-                set(state_before.suspects_talked_to)
+                set(list(state_before.suspects_talked_to))
                 if state_before.suspects_talked_to
                 else set()
             )
+            logger.info(f"[APP] Before processing - suspects talked to: {previous_suspects}")
 
             # Transcribe
             text = transcribe_audio(audio_path)
@@ -719,8 +791,16 @@ def create_app():
             newly_searched_location = current_locations - previous_locations
             newly_talked_suspect = current_suspects - previous_suspects
 
-            # Priority 1: Check if a suspect was just talked to (highest priority)
-            if newly_talked_suspect:
+            # Priority 0: If speaker is a suspect name, show their portrait directly
+            # This is the most reliable method since state comparison can fail
+            if speaker and speaker != "Game Master":
+                suspect_portrait = images.get(speaker, None)
+                if suspect_portrait:
+                    logger.info(f"✓ Found portrait for speaker {speaker}: {suspect_portrait}")
+                    display_portrait = suspect_portrait
+
+            # Priority 1: Check if a suspect was just talked to
+            if not display_portrait and newly_talked_suspect:
                 suspect_name = list(newly_talked_suspect)[0]
                 logger.info(f"Looking for portrait for suspect: {suspect_name}")
                 portrait = images.get(suspect_name, None)

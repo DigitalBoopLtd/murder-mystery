@@ -72,13 +72,18 @@ RETRO_CSS = """
 /* The Stage - main viewing area */
 .stage-container {
     background: var(--bg-card);
-    border: 2px solid var(--border-color);
+    /* Match retro cyan/teal border styling used by status tracker */
+    border: 3px solid var(--border-color);
     border-radius: 4px;
     margin: 16px;
     padding: 24px;
     min-height: 350px;
     position: relative !important;
-    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.6);
+    /* Inner dark outline for double-border effect */
+    outline: 2px solid var(--border-dark);
+    outline-offset: 0;
+    /* Subtle inset border, no heavy drop shadow */
+    box-shadow: inset 0 0 0 2px var(--border-dark);
 }
 
 /* Make portrait image container relative for absolute positioning of subtitles overlay */
@@ -180,15 +185,42 @@ img, .image-frame { border-radius: 4px !important; }
     box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.5);
 }
 
-/* Side panel */
+/* Side panel cards (case details, suspects, locations, etc.) */
 .side-panel {
     background: var(--bg-card) !important;
-    border: 2px solid var(--border-dark) !important;
+    /* Let the outer block wrapper carry the visible border */
+    border: none !important;
     border-radius: 4px;
     padding: 20px 24px !important;
     height: fit-content;
     margin-bottom: 12px;
-    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.6);
+}
+
+/* Apply retro cyan/teal border styling to the OUTER card wrappers
+   Gradio renders cards as:
+   <div class="gr-group ...">           (optional side-panel class)
+     <div class="styler">...</div>
+     <div class="block">title</div>
+     <div class="block transcript-panel">content</div>
+   We match groups that contain a .panel-title to style all side cards,
+   regardless of whether the side-panel class is actually present. */
+.gr-group:has(.panel-title) {
+    border: 3px solid var(--border-color) !important;   /* outer cyan */
+    border-radius: 4px !important;
+    background: var(--bg-card) !important;
+    margin-bottom: 12px !important;
+    padding: 8px 0 10px 0 !important;
+
+    /* Inner dark outline for double-border effect */
+    outline: 2px solid var(--border-dark) !important;   /* inner teal */
+    outline-offset: 0;
+    /* Subtle inset border instead of heavy shadow */
+    box-shadow: inset 0 0 0 2px var(--border-dark);
+}
+
+/* Remove any inner borders from the title/content blocks inside cards */
+.gr-group:has(.panel-title) .block {
+    border: none !important;
 }
 
 /* Force dark background on all Gradio elements within side panels */
@@ -259,7 +291,6 @@ img, .image-frame { border-radius: 4px !important; }
     font-size: 16px;
     font-weight: 700;
     color: var(--accent-blue);
-    border-bottom: 2px solid var(--accent-blue);
     padding: 8px;
     margin-bottom: 16px;
     margin-top: 0;
@@ -1116,13 +1147,13 @@ footer {
     pointer-events: none !important;
 }
 
-/* Main status tracker - FIXED position at bottom center */
+/* Main status tracker - FIXED position at viewport center */
 [data-testid="status-tracker"]:not(.translucent):not(.wrap.center):not(.hide) {
-    /* Fixed positioning - won't affect layout */
+    /* Fixed positioning - centered both horizontally and vertically */
     position: fixed !important;
-    bottom: 24px !important;
+    top: 50% !important;
     left: 50% !important;
-    transform: translateX(-50%) !important;
+    transform: translate(-50%, -50%) !important;
     z-index: 9999 !important;
     
     /* Consistent sizing */
@@ -1130,26 +1161,61 @@ footer {
     max-width: 400px !important;
     width: auto !important;
     height: auto !important;
-    min-height: 48px !important;
+    min-height: 124px !important;
+    max-height: 180px !important;
     
-    /* Styling */
-    background: linear-gradient(135deg, rgba(0, 0, 51, 0.98) 0%, rgba(20, 20, 80, 0.98) 100%) !important;
-    border: 2px solid var(--accent-gold) !important;
-    backdrop-filter: blur(8px) !important;
-    border-radius: 8px !important;
-    padding: 12px 24px !important;
+    /* Solid dark background - no transparency */
+    background: #000033 !important;
+    
+    /* Retro double-border: outer turquoise, inner grey/teal */
+    border: 3px solid var(--border-color) !important;  /* #00FFFF turquoise outer */
+    border-radius: 4px !important;
+    padding: 16px 28px !important;
+    
+    /* Outer grey border using outline - no gap */
+    outline: 3px solid var(--border-dark) !important;  /* #006666 grey outer frame */
+    outline-offset: 0px !important;
+    
+    /* Inner inset border for depth - solid colors, no transparency gaps */
+    box-shadow: 
+        inset 0 0 0 2px var(--border-dark),
+        inset 0 0 0 4px #000033,
+        inset 0 0 0 5px var(--border-color),
+        inset 0 2px 8px rgba(0, 0, 0, 0.8) !important;
     
     /* Visual effects */
     animation: statusPulse 2s ease-in-out infinite !important;
 }
 
+/* Corner decorations for retro look */
+[data-testid="status-tracker"]:not(.translucent):not(.wrap.center):not(.hide)::before,
+[data-testid="status-tracker"]:not(.translucent):not(.wrap.center):not(.hide)::after {
+    content: "◆" !important;
+    position: absolute !important;
+    color: var(--border-color) !important;
+    font-size: 12px !important;
+    text-shadow: 0 0 8px var(--border-color) !important;
+}
+
+[data-testid="status-tracker"]:not(.translucent):not(.wrap.center):not(.hide)::before {
+    top: -8px !important;
+    left: 50% !important;
+    transform: translateX(-50%) !important;
+}
+
+[data-testid="status-tracker"]:not(.translucent):not(.wrap.center):not(.hide)::after {
+    bottom: -8px !important;
+    left: 50% !important;
+    transform: translateX(-50%) !important;
+}
+
 /* Pulse animation for the status tracker */
 @keyframes statusPulse {
     0%, 100% {
-        border-color: var(--accent-gold);
+        border-color: var(--border-color);  /* #00FFFF turquoise */
     }
     50% {
-        border-color: var(--accent-blue);
+        border-color: var(--border-dark);   /* #006666 darker teal */
     }
 }
 
@@ -1158,7 +1224,7 @@ footer {
 [data-testid="status-tracker"]:not(.translucent):not(.wrap.center):not(.hide) .meta-text,
 [data-testid="status-tracker"]:not(.translucent):not(.wrap.center):not(.hide) .meta-text-center,
 [data-testid="status-tracker"]:not(.translucent):not(.wrap.center):not(.hide) span {
-    color: var(--accent-gold) !important;
+    color: var(--border-color) !important;  /* Turquoise text to match border */
     font-family: var(--font-mono) !important;
     font-weight: 700 !important;
     font-size: 14px !important;
@@ -1170,9 +1236,9 @@ footer {
 
 /* Spinner styling */
 [data-testid="status-tracker"]:not(.translucent):not(.wrap.center):not(.hide) svg {
-    color: var(--accent-gold) !important;
-    width: 20px !important;
-    height: 20px !important;
+    color: var(--border-color) !important;  /* Turquoise spinner */
+    width: 48px !important;
+    height: 48px !important;
     margin-right: 8px !important;
 }
 

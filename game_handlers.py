@@ -256,6 +256,19 @@ def process_player_action(
         thread_id=session_id,
     )
 
+    # Handle empty or placeholder responses from the LLM
+    empty_responses = ["", "Empty", "I'm processing your request", "No content"]
+    if not response or response.strip() in empty_responses:
+        logger.warning(f"[GAME] LLM returned empty/placeholder response, generating fallback")
+        # Generate a contextual fallback based on what the player asked
+        message_lower = message.lower()
+        if "search" in message_lower:
+            response = "You carefully examine the area, taking in every detail. The atmosphere is thick with tension as you search for clues."
+        elif "talk" in message_lower or "speak" in message_lower:
+            response = "You approach to have a conversation."
+        else:
+            response = "You consider your next move carefully."
+
     # Parse game actions to detect location searches, etc.
     actions = parse_game_actions(message, response, state)
 
