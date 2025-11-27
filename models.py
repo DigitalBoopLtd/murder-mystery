@@ -52,6 +52,21 @@ class Clue(BaseModel):
     significance: str
 
 
+class MysteryPremise(BaseModel):
+    """Lightweight premise used for fast startup."""
+
+    setting: str = Field(
+        description="Brief evocative description of the location and occasion"
+    )
+    victim_name: str = Field(description="Victim's full name")
+    victim_background: str = Field(
+        description=(
+            "1-2 sentence background about who they are and why someone "
+            "might want them dead"
+        )
+    )
+
+
 class Mystery(BaseModel):
     """Complete murder mystery scenario."""
 

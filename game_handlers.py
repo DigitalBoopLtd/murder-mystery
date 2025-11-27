@@ -11,7 +11,13 @@ from image_service import (
     generate_portrait_on_demand,
     get_image_service,
 )
-from mystery_generator import generate_mystery, prepare_game_prompt, assign_voice_to_suspect
+from mystery_generator import (
+    generate_mystery,
+    generate_mystery_premise,
+    prepare_game_prompt,
+    assign_voice_to_suspect,
+)
+import threading
 from agent import create_game_master_agent, process_message
 from game_parser import parse_game_actions
 from tts_service import text_to_speech
@@ -50,18 +56,41 @@ def get_suspect_voice_id(suspect_name: str, state: GameState) -> Optional[str]:
 
 
 def start_new_game(session_id: str):
-    """Start a new mystery game with parallelized image generation."""
+    """Start a new mystery game with fast premise + background case generation."""
     state = get_or_create_state(session_id)
     state.reset_game()
 
-    # Generate mystery
-    logger.info("Generating new mystery...")
+    # ========== STAGE 1: FAST PREMISE ==========
+    logger.info("Generating mystery premise...")
     t0 = time.perf_counter()
-    mystery = generate_mystery()
+    premise = generate_mystery_premise()
     t1 = time.perf_counter()
-    logger.info(f"[PERF] Mystery generation took {t1 - t0:.2f}s")
-    state.mystery = mystery
-    state.system_prompt = prepare_game_prompt(mystery)
+    logger.info("[PERF] Mystery premise generation took %.2fs", t1 - t0)
+
+    # Store premise on state for later use
+    state.premise_setting = premise.setting
+    state.premise_victim_name = premise.victim_name
+    state.premise_victim_background = premise.victim_background
+
+    # Build a lightweight system prompt for the intro, based only on the premise.
+    state.system_prompt = f"""You are the Game Master for a murder mystery game.
+
+## THE CASE (PREMISE ONLY)
+{premise.setting}
+
+## VICTIM
+{premise.victim_name}: {premise.victim_background}
+
+The full case file with suspects and clues is still being compiled off-screen.
+
+## RESPONSE LENGTH
+Keep ALL responses SHORT for voice narration (10-20 seconds of speech).
+- Welcome: 2-3 atmospheric sentences (max 40-50 words total)
+- Then ask what the player would like to do first.
+- NEVER write more than 50 words in a single response.
+
+Do NOT mention that the case file is still generating or anything about the
+system or background tasks. Stay purely in-world."""
 
     # Initialize with agent and narration (images generated on-demand)
     logger.info("Starting game initialization (images will be generated on-demand)...")
@@ -73,7 +102,7 @@ def start_new_game(session_id: str):
     t2 = time.perf_counter()
     response, speaker = process_message(
         start_new_game.agent,
-        "The player has just arrived. Welcome them to the mystery with atmosphere.",
+        "The player has just arrived. Welcome them briefly (2-3 sentences, max 50 words) with atmosphere, then ask what they'd like to do.",
         state.system_prompt,
         session_id,
         thread_id=session_id,
@@ -120,6 +149,32 @@ def start_new_game(session_id: str):
         {"role": "assistant", "content": response, "speaker": "Game Master"}
     )
 
+    # ========== STAGE 2: FULL CASE IN BACKGROUND ==========
+
+    def _background_generate_full_case(sess_id: str, premise_obj):
+        bg_state = get_or_create_state(sess_id)
+        try:
+            logger.info("[BG] Starting full mystery generation in background...")
+            t_full_0 = time.perf_counter()
+            full_mystery = generate_mystery(premise=premise_obj)
+            t_full_1 = time.perf_counter()
+            logger.info(
+                "[PERF] Full mystery generation (background) took %.2fs",
+                t_full_1 - t_full_0,
+            )
+            bg_state.mystery = full_mystery
+            bg_state.system_prompt = prepare_game_prompt(full_mystery)
+            bg_state.mystery_ready = True
+            logger.info("[BG] Full mystery is ready for session %s", sess_id)
+        except Exception as e:
+            logger.error("[BG] Error generating full mystery in background: %s", e)
+
+    threading.Thread(
+        target=_background_generate_full_case,
+        args=(session_id, premise),
+        daemon=True,
+    ).start()
+
     return state, response, audio_path, "Game Master", alignment_data
 
 
@@ -139,8 +194,18 @@ def process_player_action(
     """
     state = get_or_create_state(session_id)
 
-    if not state.mystery:
-        return "Please start a new game first.", None, "Game Master", state
+    # If the full mystery is not ready yet, keep the player in the intro
+    # phase. This prevents interrogations/searches before the case file
+    # has been fully generated.
+    if not getattr(state, "mystery_ready", False):
+        return (
+            "Your full case file is still being prepared. "
+            "Give me just a moment, then try again.",
+            None,
+            "Game Master",
+            state,
+            None,
+        )
 
     # Build the message based on action type
     if action_type == "talk" and target:

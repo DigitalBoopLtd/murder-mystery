@@ -435,10 +435,24 @@ def create_app():
             # player sees a proper background instead of just the placeholder.
             if not portrait:
                 from image_service import generate_title_card_on_demand
+                from types import SimpleNamespace
                 state = get_or_create_state(sess_id)
+                
+                # Build a mystery-like object from either full mystery or premise
+                mystery_like = None
                 if state.mystery:
+                    mystery_like = state.mystery
+                elif getattr(state, "premise_setting", None) and getattr(state, "premise_victim_name", None):
+                    # Use premise data to build a minimal mystery-like object
+                    victim_stub = SimpleNamespace(name=state.premise_victim_name)
+                    mystery_like = SimpleNamespace(
+                        victim=victim_stub,
+                        setting=state.premise_setting,
+                    )
+                
+                if mystery_like:
                     logger.info("Generating opening scene image for new mystery...")
-                    portrait = generate_title_card_on_demand(state.mystery)
+                    portrait = generate_title_card_on_demand(mystery_like)
                     if portrait:
                         images["_opening_scene"] = portrait
                         mystery_images[sess_id] = images
@@ -472,6 +486,28 @@ def create_app():
                     autoplay=True  # Autoplay after user interaction
                 )
 
+            # Build victim/case HTML based on what we have (full mystery or premise)
+            if state.mystery:
+                victim_html = format_victim_scene_html(state.mystery)
+            elif (
+                getattr(state, "premise_victim_name", None)
+                and getattr(state, "premise_setting", None)
+            ):
+                # Use the fast premise if full mystery isn't ready yet
+                victim_html = f"""
+                <div style="margin-bottom: 12px;">
+                    <div style="font-weight: 700; margin-bottom: 8px; font-size: 1.1em; border-bottom: 1px solid var(--border-color); padding-bottom: 8px;">
+                        The Murder of {state.premise_victim_name}
+                    </div>
+                    <div style="font-weight: 600; color: var(--accent-blue); margin-bottom: 8px;">Victim:</div>
+                    <div style="color: var(--text-primary); margin-bottom: 12px;">{state.premise_victim_name}</div>
+                    <div style="font-weight: 600; color: var(--accent-blue); margin-bottom: 8px;">Scene:</div>
+                    <div style="color: var(--text-primary);">{state.premise_setting}</div>
+                </div>
+                """
+            else:
+                victim_html = format_victim_scene_html(None)
+
             # Return final results
             progress(1.0, desc="Mystery ready")
             yield [
@@ -484,8 +520,8 @@ def create_app():
                 # Show game UI
                 gr.update(visible=True),  # input_row
                 gr.update(visible=False),  # start_btn
-                # Side panels
-                format_victim_scene_html(state.mystery),
+                # Side panels - use premise-based victim_html, others show "loading" state
+                victim_html,
                 format_suspects_list_html(state.mystery, state.suspects_talked_to),
                 format_locations_html(state.mystery, state.searched_locations),
                 format_clues_html(state.clues_found),

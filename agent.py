@@ -30,7 +30,8 @@ class AgentState(TypedDict):
 
 def create_game_master_agent():
     """Create a game master agent with tools."""
-    llm = ChatOpenAI(model="gpt-5.1", api_key=os.getenv("OPENAI_API_KEY"))
+    # max_tokens=80 keeps responses to ~50-60 words → 10-20 seconds of speech
+    llm = ChatOpenAI(model="gpt-5.1", max_tokens=80, api_key=os.getenv("OPENAI_API_KEY"))
 
     # Bind tools to the LLM
     tools = [interrogate_suspect]

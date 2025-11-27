@@ -9,7 +9,7 @@ from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import PydanticOutputParser
 from langchain_core.runnables import RunnableLambda
-from models import Mystery
+from models import Mystery, MysteryPremise
 from voice_service import get_voice_service
 
 logger = logging.getLogger(__name__)
@@ -46,23 +46,110 @@ def strip_markdown_json(message) -> str:
     return text.strip()
 
 
-def generate_mystery() -> Mystery:
-    """Generate a unique murder mystery scenario."""
+def generate_mystery_premise() -> MysteryPremise:
+    """Generate a lightweight premise for fast startup."""
 
     llm = ChatOpenAI(
-        model="gpt-4o", 
+        model="gpt-4o",
+        temperature=0.8,
+        api_key=os.getenv("OPENAI_API_KEY"),
+    )
+
+    parser = PydanticOutputParser(pydantic_object=MysteryPremise)
+
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            (
+                "system",
+                """You are a creative murder mystery writer.
+
+Generate a short premise for a murder mystery game as STRICT JSON only
+matching this schema:
+{format_instructions}
+
+Constraints:
+- setting: 1-2 sentences, vivid but concise
+- victim_name: single full name
+- victim_background: 1-2 sentences about who they are and why someone
+  might want them dead
+
+CRITICAL: Return ONLY valid JSON. Do NOT wrap it in markdown code blocks.
+Do NOT include any text before or after the JSON. Start with {{ and end with }}.""",
+            ),
+            ("human", "Generate a concise murder mystery premise."),
+        ]
+    )
+
+    strip_markdown = RunnableLambda(strip_markdown_json)
+
+    def validate_and_parse_premise(text: str):
+        """Validate JSON for the premise and parse it."""
+        try:
+            json.loads(text)
+            return text
+        except json.JSONDecodeError as e:
+            start_idx = text.find("{")
+            end_idx = text.rfind("}")
+            if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
+                json_text = text[start_idx : end_idx + 1]
+                try:
+                    json.loads(json_text)
+                    return json_text
+                except json.JSONDecodeError:
+                    pass
+            raise ValueError(
+                f"Invalid JSON for premise from LLM: {str(e)}\n\nReceived text:\n{text[:500]}"
+            )
+
+    validate_json = RunnableLambda(validate_and_parse_premise)
+    chain = prompt | llm | strip_markdown | validate_json | parser
+
+    logger.info("Generating mystery premise...")
+    premise = chain.invoke({"format_instructions": parser.get_format_instructions()})
+    logger.info(
+        "Generated mystery premise: setting=%s, victim=%s",
+        premise.setting,
+        premise.victim_name,
+    )
+    return premise
+
+
+def generate_mystery(premise: Optional[MysteryPremise] = None) -> Mystery:
+    """Generate a complete murder mystery scenario.
+
+    If a premise is provided, the model MUST keep the setting and victim
+    consistent with that premise.
+    """
+
+    llm = ChatOpenAI(
+        model="gpt-4o",
         temperature=0.9,
-        api_key=os.getenv("OPENAI_API_KEY")
+        api_key=os.getenv("OPENAI_API_KEY"),
     )
 
     parser = PydanticOutputParser(pydantic_object=Mystery)
+
+    # Premise block used to anchor the full mystery to a previously
+    # generated setting and victim, while still using the same Pydantic
+    # schema for the final output.
+    premise_block = ""
+    if premise:
+        premise_block = f"""
+Use this fixed setting and victim (do NOT change names or key details):
+
+Setting: {premise.setting}
+
+Victim name: {premise.victim_name}
+Victim background: {premise.victim_background}
+"""
 
     prompt = ChatPromptTemplate.from_messages(
         [
             (
                 "system",
                 """You are a creative murder mystery writer. Generate a unique murder mystery scenario.
-        
+
+{premise_block}
 {format_instructions}
 
 Be creative with the setting - could be a mansion, cruise ship, theater, space station, casino, hotel etc.
@@ -116,19 +203,21 @@ CRITICAL: Return ONLY valid JSON. Do NOT wrap it in markdown code blocks. Do NOT
     attempts = 3
     for attempt in range(1, attempts + 1):
         try:
-            logger.info("Generating mystery (attempt %s/%s)...", attempt, attempts)
+            logger.info("Generating full mystery (attempt %s/%s)...", attempt, attempts)
             mystery = chain.invoke(
-                {"format_instructions": parser.get_format_instructions()}
+                {
+                    "format_instructions": parser.get_format_instructions(),
+                    "premise_block": premise_block,
+                }
             )
-            logger.info("Successfully generated mystery on attempt %s", attempt)
+            logger.info("Successfully generated full mystery on attempt %s", attempt)
             break
         except Exception as e:
-            last_error = e
-            logger.error("Error generating mystery on attempt %s: %s", attempt, e)
+            logger.error("Error generating full mystery on attempt %s: %s", attempt, e)
             if attempt == attempts:
-                logger.error("All mystery generation attempts failed")
+                logger.error("All full mystery generation attempts failed")
                 raise
-            logger.info("Retrying mystery generation...")
+            logger.info("Retrying full mystery generation...")
 
     # Voices will be assigned on-demand when suspects are first talked to
     # This avoids the API call delay during game startup

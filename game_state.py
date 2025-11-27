@@ -18,6 +18,11 @@ class GameState:
         self.wrong_accusations: int = 0
         self.game_over: bool = False
         self.won: bool = False
+        # Fast-start fields
+        self.mystery_ready: bool = False
+        self.premise_setting: Optional[str] = None
+        self.premise_victim_name: Optional[str] = None
+        self.premise_victim_background: Optional[str] = None
 
     def is_new_game(self, message: str) -> bool:
         """Check if the message indicates a new game."""
@@ -37,6 +42,10 @@ class GameState:
         self.wrong_accusations = 0
         self.game_over = False
         self.won = False
+        self.mystery_ready = False
+        self.premise_setting = None
+        self.premise_victim_name = None
+        self.premise_victim_background = None
 
     def add_clue(self, clue_id: str, clue_description: str):
         """Add a discovered clue."""
