@@ -286,11 +286,6 @@ img { border: 4px solid white !important; }
     border: 0 !important;
 }
 
-/* Override for the main container to have proper width */
-.portrait-image {
-    width: 100% !important;
-}
-
 /* Make sure img elements have proper sizing */
 .portrait-image img {
     width: 100% !important;
@@ -652,14 +647,8 @@ img { border: 4px solid white !important; }
     animation: button-pulse 1s ease-in-out 5 !important;
 }
 
-.download-link {
-    display: none !important;
-}
-
-.share-link {
-    display: none !important;
-}
-
+.download-link,
+.share-link,
 .fullscreen-link {
     display: none !important;
 }
