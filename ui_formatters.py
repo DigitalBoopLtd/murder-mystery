@@ -10,7 +10,7 @@ def format_victim_scene_html(mystery) -> str:
     
     return f"""
     <div style="margin-bottom: 12px;">
-        <div style="font-weight: 700; margin-bottom: 8px; font-size: 1.1em; border-bottom: 1px solid var(--border-color); padding-bottom: 8px;">
+        <div style="font-weight: 700; margin-bottom: 8px; font-size: 1.1em; padding-bottom: 8px;">
             The Murder of {mystery.victim.name}
         </div>
         <div style="font-weight: 600; color: var(--accent-blue); margin-bottom: 8px;">Victim:</div>

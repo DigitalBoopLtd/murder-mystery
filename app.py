@@ -477,7 +477,7 @@ def create_app():
                 ):
                     accusations_html = gr.HTML(
                         '<div class="accusations-display">Accusations: '
-                        '<span class="accusations-label">'
+                        '<span>'
                         '<span class="accusations-pip"></span>'
                         '<span class="accusations-pip"></span>'
                         '<span class="accusations-pip"></span>'
@@ -648,7 +648,7 @@ def create_app():
                 # Use the fast premise if full mystery isn't ready yet
                 victim_html = f"""
                 <div style="margin-bottom: 12px;">
-                    <div style="font-weight: 700; margin-bottom: 8px; font-size: 1.1em; border-bottom: 1px solid var(--border-color); padding-bottom: 8px;">
+                    <div style="font-weight: 700; margin-bottom: 8px; font-size: 1.1em; border-bottom: 1px solid var(--border-color); padding-bottom: 8px; color: var(--accent-gold) !important">
                         The Murder of {state.premise_victim_name}
                     </div>
                     <div style="font-weight: 600; color: var(--accent-blue); margin-bottom: 8px;">Victim:</div>
@@ -666,7 +666,7 @@ def create_app():
 
             yield [
                 # Speaker - show when game starts
-                f'<div class="speaker-name" style="padding: 16px 0 !important;">🗣️ {speaker}</div>',
+                f'<div class="speaker-name" style="padding: 16px 0 !important;">🗣️ {speaker} SPEAKING...</div>',
                 # Audio with subtitles - will autoplay after user interaction (Start button click)
                 audio_update,
                 # Portrait - return path directly, or placeholder if not available
@@ -690,7 +690,7 @@ def create_app():
             for i in range(3):
                 cls = "accusations-pip used" if i < wrong else "accusations-pip"
                 pips += f'<span class="{cls}"></span>'
-            return f'<div class="accusations-display">Accusations: {pips}</div>'
+            return f'<div class="accusations-display">Accusations:<span>{pips}</span></div>'
 
         def check_mystery_ready(sess_id: str):
             """Timer callback to check if full mystery is ready and update UI."""
@@ -821,7 +821,7 @@ def create_app():
             subtitles = convert_alignment_to_subtitles(alignment_data)
 
             return [
-                f'<div class="speaker-name" style="padding: 16px 0 !important;">🗣️ {speaker}</div>',
+                f'<div class="speaker-name" style="padding: 16px 0 !important;">🗣️ {speaker} SPEAKING...</div>',
                 (
                     gr.update(value=audio_path, subtitles=subtitles)
                     if audio_path
@@ -956,7 +956,7 @@ def create_app():
             subtitles = convert_alignment_to_subtitles(alignment_data)
 
             return [
-                f'<div class="speaker-name" style="padding: 16px 0 !important;">🗣️ {speaker}</div>',
+                f'<div class="speaker-name" style="padding: 16px 0 !important;">🗣️ {speaker} SPEAKING...</div>',
                 (
                     gr.update(value=audio_resp, subtitles=subtitles)
                     if audio_resp

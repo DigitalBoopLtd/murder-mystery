@@ -210,6 +210,10 @@ img, .image-frame { border-radius: 4px !important; }
     background: var(--bg-secondary);
     border-top: 2px solid var(--accent-blue);
     box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.5);
+    flex-shrink: 0 !important;
+    flex-grow: 0 !important;
+    height: auto !important;
+    max-height: fit-content !important;
 }
 
 /* Side panel cards (case details, suspects, locations, etc.) */
@@ -781,7 +785,7 @@ div[data-testid="waveform-controls"],
     opacity: 1 !important;
     height: auto !important;
     width: auto !important;
-    min-height: 50px !important;
+    min-height: 40px !important;
     /* Removed absolute positioning - let it flow naturally */
     pointer-events: auto !important;
     /* Removed z-index as it's no longer needed without absolute positioning */
@@ -955,9 +959,11 @@ div[data-testid="waveform-controls"],
     display: block !important;
     visibility: visible !important;
     opacity: 1 !important;
-    color: #FFFFFF !important;
+    color: var(--accent-gold) !important;
     text-align: center !important;
-    font-size: 20px !important;
+    font-size: 16px !important;
+    font-family: 'Courier New', monospace !important;
+    
     font-weight: 600 !important;
     text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8) !important;
     margin: 0 !important;
@@ -1055,6 +1061,16 @@ div[data-testid="waveform-controls"],
     flex-direction: column;
     align-items: center;
     gap: 12px;
+}
+
+/* Hide the container when the button inside is hidden */
+.start-button-container:has(.start-button.hidden) {
+    display: none !important;
+    height: 0 !important;
+    min-height: 0 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    overflow: hidden !important;
 }
 
 /* Hide prose containers that are empty */
