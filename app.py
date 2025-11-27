@@ -329,28 +329,26 @@ def create_app():
             gr.HTML('<div class="game-title"><span class="detective-avatar">🕵️‍♀️</span> MURDER MYSTERY</div>')
 
         # ====== MAIN LAYOUT ======
-        with gr.Row():
+        with gr.Row(elem_classes="main-layout-row"):
 
             # === LEFT: SIDE PANEL ===
-            with gr.Column(scale=1, min_width=200):
-                # Victim and Scene - first card
-                with gr.Group(elem_classes="side-panel"):
-                    gr.HTML('<div class="panel-title">🧳 Case Details</div>')
+            with gr.Column(scale=1, min_width=200, elem_classes="side-column side-column-left"):
+                # Victim and Scene - first card (open by default)
+                with gr.Accordion("🧳 CASE DETAILS", open=True, elem_classes="side-panel"):
                     victim_scene_html = gr.HTML(
                         "<em>Start a game to see case details...</em>",
                         elem_classes="transcript-panel",
                     )
 
-                # Suspects list - show who can be questioned
-                with gr.Group(elem_classes="side-panel suspects-panel"):
-                    gr.HTML('<div class="panel-title">🎭 Suspects</div>')
+                # Suspects list - show who can be questioned (open by default)
+                with gr.Accordion("🎭 SUSPECTS", open=True, elem_classes="side-panel suspects-panel"):
                     suspects_list_html = gr.HTML(
                         "<em>Start a game to see suspects...</em>",
                         elem_classes="transcript-panel suspects-list",
                     )
 
             # === CENTER: MAIN STAGE ===
-            with gr.Column(scale=3):
+            with gr.Column(scale=3, elem_classes="center-column"):
 
                 # Stage container
                 with gr.Group(elem_classes="stage-container"):
@@ -396,22 +394,19 @@ def create_app():
                     )
 
             # === RIGHT: SIDE PANEL ===
-            with gr.Column(scale=1, min_width=200):
-                # Locations card
-                with gr.Group(elem_classes="side-panel"):
-                    gr.HTML('<div class="panel-title">📍 Locations</div>')
+            with gr.Column(scale=1, min_width=200, elem_classes="side-column side-column-right"):
+                # Locations card (open by default)
+                with gr.Accordion("📍 LOCATIONS", open=True, elem_classes="side-panel"):
                     locations_html = gr.HTML("<em>Start a game...</em>")
 
-                # Clues card
-                with gr.Group(elem_classes="side-panel"):
-                    gr.HTML('<div class="panel-title">🔎 Clues Found</div>')
+                # Clues card (open by default)
+                with gr.Accordion("🔎 CLUES FOUND", open=True, elem_classes="side-panel"):
                     clues_html = gr.HTML("<em>No clues yet...</em>")
 
-                # Accusations card
-                with gr.Group(elem_classes="side-panel"):
-                    gr.HTML('<div class="panel-title">⚖️ Accusations</div>')
+                # Accusations card (open by default)
+                with gr.Accordion("⚖️ ACCUSATIONS", open=True, elem_classes="side-panel"):
                     accusations_html = gr.HTML(
-                        '<div class="accusations-display">Accusations: <span class="accusations-pip"></span><span class="accusations-pip"></span><span class="accusations-pip"></span></div>'
+                        '<div class="accusations-display">Accusations: <span class="accusations-label"><span class="accusations-pip"></span><span class="accusations-pip"></span><span class="accusations-pip"></span></span></div>'
                     )
 
         # Hidden timer for checking mystery completion (inactive by default)

@@ -69,6 +69,33 @@ RETRO_CSS = """
     flex-shrink: 0;
 }
 
+/* Main layout row and responsive column ordering */
+.main-layout-row {
+    align-items: stretch !important;
+}
+
+/* On smaller screens, stack columns with the center stage at the top */
+@media (max-width: 900px) {
+    .main-layout-row {
+        flex-direction: column !important;
+    }
+
+    .main-layout-row .center-column {
+        order: 1 !important;
+        width: 100% !important;
+    }
+
+    .main-layout-row .side-column-left {
+        order: 2 !important;
+        width: 100% !important;
+    }
+
+    .main-layout-row .side-column-right {
+        order: 3 !important;
+        width: 100% !important;
+    }
+}
+
 /* The Stage - main viewing area */
 .stage-container {
     background: var(--bg-card);
@@ -191,7 +218,6 @@ img, .image-frame { border-radius: 4px !important; }
     /* Let the outer block wrapper carry the visible border */
     border: none !important;
     border-radius: 4px;
-    padding: 20px 24px !important;
     height: fit-content;
     margin-bottom: 12px;
 }
@@ -253,21 +279,6 @@ img, .image-frame { border-radius: 4px !important; }
 .side-panel .prose,
 .side-panel [class*="svelte"] {
     padding: 0 !important;
-}
-
-.side-panel .html-container {
-    padding: 8px !important;
-}
-/* Ensure the actual content container has padding */
-
-.side-panel .prose.gradio-style,
-.side-panel .prose {
-    padding: 20px 24px !important;
-}
-
-/* Also target the block container directly */
-.side-panel > .block {
-    padding: 20px 24px !important;
 }
 
 /* Ensure panel title and content have proper spacing */
@@ -415,6 +426,8 @@ img, .image-frame { border-radius: 4px !important; }
     font-size: 14px;
     font-weight: 500;
     color: var(--text-primary);
+    display: flex;
+    flex-direction: column;
 }
 
 .accusations-pip {
@@ -985,9 +998,6 @@ div[data-testid="waveform-controls"],
     padding: 8px !important;
 }
 
-.block.transcript-panel {
-    padding: 8px !important;
-}
 /* Transcript panel */
 .transcript-panel {
     max-height: 300px;
