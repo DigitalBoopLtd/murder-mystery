@@ -707,6 +707,12 @@ img { border: 4px solid white !important; }
         inset 0 0 0 5px var(--border-color),
         inset 0 2px 8px rgba(0, 0, 0, 0.8) !important;
     animation: statusPulse 2s ease-in-out infinite !important;
+    /* Center content */
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    text-align: center !important;
 }
 
 [data-testid="status-tracker"]:not(.translucent):not(.wrap.center):not(.hide)::before,
@@ -725,7 +731,6 @@ img { border: 4px solid white !important; }
 [data-testid="status-tracker"]:not(.translucent):not(.wrap.center):not(.hide) .progress-text,
 [data-testid="status-tracker"]:not(.translucent):not(.wrap.center):not(.hide) .meta-text,
 [data-testid="status-tracker"]:not(.translucent):not(.wrap.center):not(.hide) .meta-text-center,
-[data-testid="status-tracker"]:not(.translucent):not(.wrap.center):not(.hide) .eta,
 [data-testid="status-tracker"]:not(.translucent):not(.wrap.center):not(.hide) span {
     color: var(--accent-blue) !important;
     font-family: 'Courier New', monospace !important;
@@ -734,7 +739,9 @@ img { border: 4px solid white !important; }
     text-transform: uppercase !important;
     letter-spacing: 2px !important;
     background: transparent !important;
+    text-align: center !important;
 }
+
 
 [data-testid="status-tracker"]:not(.translucent):not(.wrap.center):not(.hide) svg {
     color: var(--border-color) !important;
