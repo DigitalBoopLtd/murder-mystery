@@ -1,8 +1,13 @@
 """Parse game actions from user messages and AI responses."""
 
 import logging
+import os
 import re
 from typing import Optional, Tuple, List
+
+from langchain_openai import ChatOpenAI
+from langchain_core.prompts import ChatPromptTemplate
+
 from game_state import GameState
 
 logger = logging.getLogger(__name__)
@@ -217,6 +222,7 @@ def find_location_in_message(message_lower: str, state: GameState) -> Optional[s
 
     locations = state.get_available_locations()
 
+    # ---------- FAST HEURISTIC MATCHING ----------
     for location in locations:
         location_lower = location.lower()
 
@@ -236,6 +242,79 @@ def find_location_in_message(message_lower: str, state: GameState) -> Optional[s
                 pattern = rf"\b{re.escape(word)}\b"
                 if re.search(pattern, message_lower):
                     return location
+
+    # ---------- HYBRID FALLBACK: SMALL LLM RESOLVER ----------
+    if not locations:
+        return None
+
+    try:
+        llm = ChatOpenAI(
+            model=os.getenv("LOCATION_RESOLVER_MODEL", "gpt-4o-mini"),
+            temperature=0,
+            api_key=os.getenv("OPENAI_API_KEY"),
+        )
+
+        locations_summary = "\n".join(f"- {loc}" for loc in locations)
+
+        prompt = ChatPromptTemplate.from_messages(
+            [
+                (
+                    "system",
+                    (
+                        "You map a player's message to ONE location from a list.\n"
+                        "You MUST answer with exactly one location name from the list, "
+                        "or the word NONE if no location clearly matches.\n"
+                        "Do not add any explanation."
+                    ),
+                ),
+                (
+                    "human",
+                    (
+                        "Locations:\n"
+                        "{location_list}\n\n"
+                        "Player message:\n"
+                        "{player_message}\n\n"
+                        "Answer with exactly one location name from the list above, "
+                        "or NONE if you are not sure."
+                    ),
+                ),
+            ]
+        )
+
+        chain = prompt | llm
+        result = chain.invoke(
+            {
+                "location_list": locations_summary,
+                "player_message": message_lower,
+            }
+        )
+        choice = (getattr(result, "content", "") or "").strip()
+        first_line = choice.splitlines()[0].strip()
+        # Strip bullets or quotes if present
+        first_line = first_line.lstrip("-• ").strip().strip('"').strip("'")
+
+        if first_line and first_line.upper() != "NONE":
+            for loc in locations:
+                if loc.lower() == first_line.lower():
+                    logger.info(
+                        "AI-resolved location mention: %s (from '%s')",
+                        loc,
+                        message_lower,
+                    )
+                    return loc
+
+            logger.info(
+                "AI location resolver returned '%s', which did not match any known location",
+                first_line,
+            )
+        else:
+            logger.info(
+                "AI location resolver chose NONE for message: %s", message_lower
+            )
+    except Exception:
+        logger.exception(
+            "Error resolving location via AI; falling back to heuristics only"
+        )
 
     return None
 
