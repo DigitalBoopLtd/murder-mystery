@@ -9,6 +9,7 @@ import uuid
 import base64
 import logging
 import tempfile
+import time
 from typing import Dict, Optional, List
 from PIL import Image, ImageDraw, ImageFont
 import gradio as gr
@@ -508,35 +509,20 @@ def create_app():
         def on_start_game(sess_id, progress=gr.Progress()):
             """Handle game start with status updates."""
             sess_id = _normalize_session_id(sess_id)
-            # Use Gradio's built-in progress tracker instead of custom HTML
-            progress(0.0, desc="Preparing your mystery...")
+            
+            # Show loading message using Gradio progress
+            progress(0, desc="🔍 Generating your mystery...")
             yield [
                 gr.update(),  # speaker_html
                 gr.update(),  # audio_output
                 gr.update(),  # portrait_image
                 gr.update(),  # input_row
-                gr.update(),  # start_btn
+                gr.update(visible=False),  # start_btn - hide button
                 gr.update(),  # victim_scene_html
                 gr.update(),  # suspects_list_html
                 gr.update(),  # locations_html
                 gr.update(),  # clues_html
                 gr.update(),  # accusations_html
-                gr.update(),  # mystery_check_timer
-            ]
-
-            # Step 2: while generating the mystery (longest step)
-            progress(0.5, desc="Creating your case file...")
-            yield [
-                gr.update(),
-                gr.update(),
-                gr.update(),
-                gr.update(),
-                gr.update(),
-                gr.update(),
-                gr.update(),
-                gr.update(),
-                gr.update(),
-                gr.update(),
                 gr.update(),  # mystery_check_timer
             ]
 
@@ -836,10 +822,11 @@ def create_app():
                 "",  # Clear text input
             ]
 
-        def on_voice_input(audio_path: str, sess_id):
-            """Handle voice input."""
+        def on_voice_input(audio_path: str, sess_id, progress=gr.Progress()):
+            """Handle voice input with progress indicator."""
             if not audio_path:
-                return [gr.update()] * 8
+                yield [gr.update()] * 8
+                return
 
             # Normalize session id so it matches what on_start_game used
             sess_id = _normalize_session_id(sess_id)
@@ -850,7 +837,12 @@ def create_app():
                 state_before, "premise_setting", None
             ):
                 logger.warning("[APP] Voice input received but no game started yet")
-                return [gr.update()] * 8
+                yield [gr.update()] * 8
+                return
+
+            # Show progress indicator while processing
+            progress(0, desc="🗣️ Processing your message...")
+            yield [gr.update()] * 8
 
             # Store previous state to detect what changed
             # IMPORTANT: Make copies of the lists since state is mutated in place
@@ -871,7 +863,8 @@ def create_app():
             # Transcribe
             text = transcribe_audio(audio_path)
             if not text.strip():
-                return [gr.update()] * 8
+                yield [gr.update()] * 8
+                return
 
             _response, audio_resp, speaker, state, alignment_data = (
                 process_player_action("custom", "", text, sess_id)
@@ -955,7 +948,7 @@ def create_app():
             # Use alignment data directly - it represents what was actually spoken
             subtitles = convert_alignment_to_subtitles(alignment_data)
 
-            return [
+            yield [
                 f'<div class="speaker-name" style="padding: 16px 0 !important;">🗣️ {speaker} SPEAKING...</div>',
                 (
                     gr.update(value=audio_resp, subtitles=subtitles)

@@ -111,6 +111,9 @@ def parse_game_actions(user_message: str, response: str, state: GameState) -> di
     # === DETECT ACCUSATIONS ===
     accusation_keywords = [
         "i accuse ",
+        "accuse ",
+        "accused ",
+        "accusing ",
         "the murderer is ",
         "the killer is ",
         "it was ",
@@ -120,6 +123,9 @@ def parse_game_actions(user_message: str, response: str, state: GameState) -> di
         "is the murderer",
         "is the killer",
         "killed ",
+        "of the murder",
+        "is guilty",
+        "did it",
     ]
 
     if any(kw in message_lower for kw in accusation_keywords):

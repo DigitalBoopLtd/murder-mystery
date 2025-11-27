@@ -30,26 +30,13 @@ RETRO_CSS = """
 
 /* ========== ANIMATIONS ========== */
 
-/* Title flicker effect - dramatic neon sign flicker */
-@keyframes title-flicker {
-    0%, 100% { 
-        opacity: 1; 
-        text-shadow: 2px 2px 0px rgba(0, 0, 0, 0.8), 0 0 20px rgba(0, 255, 255, 0.8), 0 0 40px rgba(0, 255, 255, 0.5), 0 0 60px rgba(0, 255, 255, 0.3);
-        filter: brightness(1);
-    }
-    18% { opacity: 1; filter: brightness(1); }
-    19% { opacity: 0.6; filter: brightness(0.7); text-shadow: 2px 2px 0px rgba(0, 0, 0, 0.8), 0 0 5px rgba(0, 255, 255, 0.3); }
-    20% { opacity: 1; filter: brightness(1.1); }
-    21% { opacity: 0.7; filter: brightness(0.8); }
-    22% { opacity: 1; filter: brightness(1); }
-    55% { opacity: 1; filter: brightness(1); }
-    56% { opacity: 0.5; filter: brightness(0.6); text-shadow: 2px 2px 0px rgba(0, 0, 0, 0.8), 0 0 3px rgba(0, 255, 255, 0.2); }
-    57% { opacity: 0.8; filter: brightness(0.9); }
-    58% { opacity: 1; filter: brightness(1.15); text-shadow: 2px 2px 0px rgba(0, 0, 0, 0.8), 0 0 25px rgba(0, 255, 255, 1), 0 0 50px rgba(0, 255, 255, 0.7); }
-    60% { opacity: 1; filter: brightness(1); }
-    85% { opacity: 1; filter: brightness(1); }
-    86% { opacity: 0.65; filter: brightness(0.75); text-shadow: 2px 2px 0px rgba(0, 0, 0, 0.8); }
-    87% { opacity: 1; filter: brightness(1); }
+
+
+
+
+.loading-message {
+    font-size: 20px !important;
+    color: var(--accent-blue) !important;
 }
 
 /* Button pulse glow effect - dramatic breathing glow */
@@ -161,8 +148,8 @@ RETRO_CSS = """
     padding: 24px !important;
     min-height: 350px !important;
     position: relative !important;
-    overflow: hidden !important;
-    isolation: isolate !important;  /* Contains pseudo-elements within this stacking context */
+    overflow: visible !important;
+    isolation: isolate !important;
     
     /* CRT screen curvature effect */
     border-radius: 16px / 12px !important;
@@ -180,16 +167,9 @@ RETRO_CSS = """
     border-radius: 6px;
 }
 
-/* Center content inside the CRT stage */
-.center-column > .gr-group > .styler,
-.center-column .gr-group > .styler {
-    display: flex !important;
-    flex-direction: column !important;
-    align-items: center !important;
-    width: 100% !important;
-}
+/* Let Gradio handle the styler layout naturally */
 
-/* Scanlines overlay */
+/* Scanlines overlay - behind content */
 .center-column > .gr-group::before,
 .center-column .gr-group::before {
     content: '' !important;
@@ -206,11 +186,11 @@ RETRO_CSS = """
         rgba(0, 0, 0, 0.3) 2px
     ) !important;
     pointer-events: none !important;
-    z-index: 5 !important;
+    z-index: 100 !important;
     border-radius: inherit !important;
 }
 
-/* Screen vignette */
+/* Screen vignette - on top with scanlines */
 .center-column > .gr-group::after,
 .center-column .gr-group::after {
     content: '' !important;
@@ -226,7 +206,7 @@ RETRO_CSS = """
         rgba(0, 0, 0, 0.4) 100%
     ) !important;
     pointer-events: none !important;
-    z-index: 4 !important;
+    z-index: 101 !important;
     border-radius: inherit !important;
 }
 
@@ -248,25 +228,25 @@ RETRO_CSS = """
     z-index: 1 !important;
 }
 
-/* Speaker indicator */
+/* Speaker indicator - styled as a retro name badge */
 .speaker-name {
-    font-family: 'Source Sans Pro', sans-serif;
-    font-size: 24px;
-    font-weight: 700;
-    color: #FFFFFF !important;
-    text-align: center;
-    margin-bottom: 16px;
-    background: #000033 !important;
-    border: 2px solid var(--accent-blue) !important;
-    padding: 12px 20px !important;
-    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.5) !important;
-    opacity: 1 !important;
-    text-transform: uppercase;
-    letter-spacing: 1px;
+    font-family: 'Courier New', monospace !important;
+    font-size: 16px !important;
+    font-weight: 700 !important;
+    color: var(--accent-blue) !important;
+    text-align: center !important;
+    text-transform: uppercase !important;
+    letter-spacing: 2px !important;
+    padding: 10px 20px !important;
+    margin: 0 auto 12px auto !important;
+    display: block !important;
+    width: fit-content !important;
+    min-width: 200px !important;
 }
 
 img, .image-frame { border-radius: 4px !important; }
 
+img {border: 4px solid white !important;}
 
 .portrait-image {
     width: 100% !important;
@@ -731,28 +711,12 @@ img, .image-frame { border-radius: 4px !important; }
     opacity: 1 !important;
 }
 
-/* Position speaker name above subtitles in the overlay */
-.center-column > .gr-group:has(.portrait-image img[src]:not([src=""])) .speaker-name {
-    position: absolute !important;
-    /* Position above the subtitle overlay (which is at bottom: 24px) */
-    /* Subtitle area is ~60px tall, so position speaker above it */
-    bottom: 100px !important; /* 24px (subtitle bottom) + ~60px (subtitle height) + 16px (spacing) */
-    left: 24px !important;
-    right: 24px !important;
-    width: calc(100% - 48px) !important;
-    /* Dark blue background matching subtitle overlay - fully opaque */
-    background: #00004d !important;
-    z-index: 11 !important;
-    color: #FFFFFF !important;
-    font-size: 18px !important;
-    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8) !important;
-    font-weight: 600 !important;
-    text-align: center !important;
+/* Speaker name is positioned via .block:has(.speaker-name) rule above */
+/* Keep speaker name visible and styled when game is active */
+.center-column > .gr-group .speaker-name {
     display: block !important;
     visibility: visible !important;
     opacity: 1 !important;
-    margin: 0 !important;
-    margin-top: -200px !important; /* Match the audio player's negative margin */
 }
 
 /* When there's no portrait image (e.g., start screen), don't overlay */
@@ -972,7 +936,6 @@ div[data-testid="waveform-controls"],
     font-weight: 500 !important;
     /* White text for contrast on dark blue background */
     color: #FFFFFF !important;
-    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8) !important;
     width: 100% !important;
     text-align: center !important;
     font-weight: 500 !important;
@@ -1064,7 +1027,6 @@ div[data-testid="waveform-controls"],
     text-align: center !important;
     # background: #00004d !important;
     color: #FFFFFF !important;
-    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7) !important;
 }
 
 /* CRITICAL: Preserve and style subtitle-display element - must not be removed */
@@ -1076,50 +1038,44 @@ div[data-testid="waveform-controls"],
     display: block !important;
     visibility: visible !important;
     opacity: 1 !important;
-    color: var(--accent-gold) !important;
+    color: #2d2418 !important;
     text-align: center !important;
-    font-size: 16px !important;
+    font-size: 20px !important;
     font-family: 'Courier New', monospace !important;
     
     font-weight: 600 !important;
-    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8) !important;
     margin: 0 !important;
     height: auto !important;
     min-height: 0px !important;
     z-index: 100 !important;
     position: absolute !important;
-    bottom: 5px !important;
+    bottom: 10px !important;
 }
 
-/* Center all text elements within subtitle containers and ensure good contrast */
-.audio-player [class*="subtitle"] *,
-.audio-player [class*="caption"] *,
-.audio-player [role="region"] *,
-.audio-player [data-testid*="subtitle"] *,
-.audio-player [data-testid*="caption"] *,
-.audio-player div:has(span[data-timestamp]) *,
-.audio-player div:has([class*="word"]) *,
-.audio-player div:has([class*="highlight"]) *,
-.audio-player > div > div:last-child *,
-.audio-player > div:last-child * {
-    /* White text for contrast on dark blue background */
-    color: #FFFFFF !important;
-    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7) !important;
-    text-align: center !important;
-    display: inline-block !important;
-}
+# /* Center all text elements within subtitle containers and ensure good contrast */
+# .audio-player [class*="subtitle"] *,
+# .audio-player [class*="caption"] *,
+# .audio-player [role="region"] *,
+# .audio-player [data-testid*="subtitle"] *,
+# .audio-player [data-testid*="caption"] *,
+# .audio-player div:has(span[data-timestamp]) *,
+# .audio-player div:has([class*="word"]) *,
+# .audio-player div:has([class*="highlight"]) *,
+# .audio-player > div > div:last-child *,
+# .audio-player > div:last-child * {
+#     /* White text for contrast on dark blue background */
+#     color: #FFFFFF !important;
+#     text-align: center !important;
+#     display: inline-block !important;
+# }
 
-/* Ensure subtitle spans and words are centered */
-.audio-player span[data-timestamp],
-.audio-player [class*="word"],
-.audio-player [class*="highlight"] {
-    text-align: center !important;
-    display: inline-block !important;
-}
-
-.html-container > div {
-    padding: 8px !important;
-}
+# /* Ensure subtitle spans and words are centered */
+# .audio-player span[data-timestamp],
+# .audio-player [class*="word"],
+# .audio-player [class*="highlight"] {
+#     text-align: center !important;
+#     display: inline-block !important;
+# }
 
 /* Transcript panel */
 .transcript-panel {
@@ -1147,7 +1103,6 @@ div[data-testid="waveform-controls"],
     max-height: none !important;
     overflow: visible !important;
 }
-
 .start-button {
     font-family: 'Source Sans Pro', sans-serif !important;
     font-size: 16px !important;
@@ -1190,39 +1145,11 @@ div[data-testid="waveform-controls"],
     overflow: hidden !important;
 }
 
-/* Hide prose containers that are empty */
+/* DISABLED - was hiding speaker name
 .prose.gradio-style:empty {
     display: none !important;
-    visibility: hidden !important;
-    height: 0 !important;
-    min-height: 0 !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    overflow: hidden !important;
 }
-
-/* Hide prose containers that only contain a hidden speaker-name */
-.prose.gradio-style:has(.speaker-name[style*="display: none"]):not(:has(*:not(.speaker-name[style*="display: none"]))) {
-    display: none !important;
-    visibility: hidden !important;
-    height: 0 !important;
-    min-height: 0 !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    overflow: hidden !important;
-}
-
-/* Also hide the html-container parent when it only contains empty prose or hidden speaker-name */
-.html-container:has(.prose.gradio-style:empty),
-.html-container:has(.prose.gradio-style:has(.speaker-name[style*="display: none"]):not(:has(*:not(.speaker-name[style*="display: none"])))) {
-    display: none !important;
-    visibility: hidden !important;
-    height: 0 !important;
-    min-height: 0 !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    overflow: hidden !important;
-}
+*/
 
 /* Gradio overrides */
 .gradio-container {
@@ -1275,19 +1202,21 @@ footer {
    Shows elapsed time during processing without causing layout shifts
    ========================================================================== */
 
-/* Hide ALL inline status trackers that would cause layout shifts */
+/* Hide certain status trackers that cause layout shifts */
 [data-testid="status-tracker"].wrap.center.translucent,
-[data-testid="status-tracker"].wrap.center.full.translucent,
-.center-column > .gr-group [data-testid="status-tracker"].wrap.default.full.generating,
 [data-testid="status-tracker"].wrap.default.full.hide,
 .input-bar [data-testid="status-tracker"] {
     display: none !important;
     visibility: hidden !important;
     opacity: 0 !important;
-    height: 0 !important;
-    width: 0 !important;
-    overflow: hidden !important;
     pointer-events: none !important;
+}
+
+/* Hide duplicate status trackers - only show the first visible one */
+/* Target status trackers inside audio-player blocks specifically */
+.audio-player [data-testid="status-tracker"]:not(.hide) {
+    display: none !important;
+    visibility: hidden !important;
 }
 
 /* Main status tracker - FIXED position at viewport center */
@@ -1337,7 +1266,6 @@ footer {
     position: absolute !important;
     color: var(--border-color) !important;
     font-size: 12px !important;
-    text-shadow: 0 0 8px var(--border-color) !important;
 }
 
 [data-testid="status-tracker"]:not(.translucent):not(.wrap.center):not(.hide)::before {
@@ -1362,27 +1290,28 @@ footer {
     }
 }
 
-/* Status tracker text styling */
+/* Status tracker text styling - prominent message */
 [data-testid="status-tracker"]:not(.translucent):not(.wrap.center):not(.hide) .progress-text,
 [data-testid="status-tracker"]:not(.translucent):not(.wrap.center):not(.hide) .meta-text,
 [data-testid="status-tracker"]:not(.translucent):not(.wrap.center):not(.hide) .meta-text-center,
+[data-testid="status-tracker"]:not(.translucent):not(.wrap.center):not(.hide) .eta,
 [data-testid="status-tracker"]:not(.translucent):not(.wrap.center):not(.hide) span {
-    color: var(--border-color) !important;  /* Turquoise text to match border */
-    font-family: var(--font-mono) !important;
+    color: var(--accent-blue) !important;  /* Bright cyan text */
+    font-family: 'Courier New', monospace !important;
     font-weight: 700 !important;
-    font-size: 14px !important;
-    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8) !important;
+    font-size: 18px !important;
     text-transform: uppercase !important;
-    letter-spacing: 1.5px !important;
+    letter-spacing: 2px !important;
     background: transparent !important;
 }
 
-/* Spinner styling */
+/* Spinner styling - make it smaller and subtle */
 [data-testid="status-tracker"]:not(.translucent):not(.wrap.center):not(.hide) svg {
-    color: var(--border-color) !important;  /* Turquoise spinner */
-    width: 48px !important;
-    height: 48px !important;
-    margin-right: 8px !important;
+    color: var(--border-color) !important;
+    width: 24px !important;
+    height: 24px !important;
+    margin-right: 12px !important;
+    opacity: 0.7 !important;
 }
 
 /* Remove any background from spinner wrapper */
