@@ -226,24 +226,143 @@ def process_player_action(
     # Store player message
     state.messages.append({"role": "user", "content": message, "speaker": "You"})
 
-    # If talking to a suspect, assign voice on-demand before processing
+    # Assign voice on-demand before processing if talking to a suspect
     # This ensures the system prompt includes the voice_id for the tool
+    suspect_to_assign = None
+    
     if action_type == "talk" and target:
-        suspect = None
+        # Direct talk action - target is the suspect name
         for s in state.mystery.suspects:
             if s.name == target:
-                suspect = s
+                suspect_to_assign = s
+                break
+    elif action_type == "custom" and custom_message:
+        # Custom message - first try heuristic suspect matching (fast, offline)
+        message_lower = custom_message.lower()
+        message_words = set(message_lower.split())
+
+        for s in state.mystery.suspects:
+            name_parts = s.name.lower().split()
+
+            # Check if full name is in message
+            if s.name.lower() in message_lower:
+                suspect_to_assign = s
+                logger.info("Detected suspect mention (full name): %s", s.name)
                 break
 
-        if suspect and not suspect.voice_id:
-            logger.info("Assigning voice on-demand for suspect: %s", target)
-            # Get list of already-used voice IDs to avoid duplicates
-            used_voice_ids = [
-                s.voice_id
-                for s in state.mystery.suspects
-                if s.voice_id and s.name != target
-            ]
-            assign_voice_to_suspect(suspect, used_voice_ids)
+            # Check if 2+ consecutive name parts appear
+            for i in range(len(name_parts) - 1):
+                partial_name = f"{name_parts[i]} {name_parts[i+1]}"
+                if partial_name in message_lower:
+                    suspect_to_assign = s
+                    logger.info("Detected suspect mention (partial name): %s", s.name)
+                    break
+            if suspect_to_assign:
+                break
+
+            # Check if any significant name part (3+ chars) matches a word in the message
+            # This handles cases like "Ada" matching "Ada Syntax"
+            for part in name_parts:
+                if len(part) >= 3:  # Only match meaningful name parts
+                    # Check exact word match
+                    if part in message_words:
+                        suspect_to_assign = s
+                        logger.info(
+                            "Detected suspect mention (name part '%s'): %s",
+                            part,
+                            s.name,
+                        )
+                        break
+            if suspect_to_assign:
+                break
+
+        # Hybrid fallback: if heuristics failed, ask a small LLM to resolve
+        if not suspect_to_assign and state.mystery:
+            try:
+                from langchain_openai import ChatOpenAI
+                from langchain_core.prompts import ChatPromptTemplate
+
+                suspects = state.mystery.suspects
+                suspects_summary = "\n".join(
+                    f"- {s.name} ({s.role})" for s in suspects
+                )
+
+                llm = ChatOpenAI(
+                    model=os.getenv("SUSPECT_RESOLVER_MODEL", "gpt-4o-mini"),
+                    temperature=0,
+                    api_key=os.getenv("OPENAI_API_KEY"),
+                )
+
+                prompt = ChatPromptTemplate.from_messages(
+                    [
+                        (
+                            "system",
+                            (
+                                "You map a player's message to ONE suspect from a list.\n"
+                                "You MUST answer with exactly one suspect name from the list, "
+                                "or the word NONE if no suspect clearly matches.\n"
+                                "Do not add any explanation."
+                            ),
+                        ),
+                        (
+                            "human",
+                            (
+                                "Suspects:\n"
+                                "{suspect_list}\n\n"
+                                "Player message:\n"
+                                "{player_message}\n\n"
+                                "Answer with exactly one suspect name from the list above, "
+                                "or NONE if you are not sure."
+                            ),
+                        ),
+                    ]
+                )
+
+                chain = prompt | llm
+                result = chain.invoke(
+                    {
+                        "suspect_list": suspects_summary,
+                        "player_message": custom_message,
+                    }
+                )
+                choice = (result.content or "").strip()
+                first_line = choice.splitlines()[0].strip()
+                # Strip bullets or quotes if present
+                first_line = first_line.lstrip("-• ").strip().strip('"').strip("'")
+
+                if first_line and first_line.upper() != "NONE":
+                    for s in suspects:
+                        if s.name.lower() == first_line.lower():
+                            suspect_to_assign = s
+                            logger.info(
+                                "AI-resolved suspect mention: %s (from '%s')",
+                                s.name,
+                                custom_message,
+                            )
+                            break
+                    else:
+                        logger.info(
+                            "AI suspect resolver returned '%s', which did not match any known suspect",
+                            first_line,
+                        )
+                else:
+                    logger.info(
+                        "AI suspect resolver chose NONE for message: %s", custom_message
+                    )
+            except Exception:
+                logger.exception(
+                    "Error resolving suspect name via AI; falling back to heuristics only"
+                )
+    
+    if suspect_to_assign and not suspect_to_assign.voice_id:
+        logger.info("Assigning voice on-demand for suspect: %s", suspect_to_assign.name)
+        # Get list of already-used voice IDs to avoid duplicates
+        used_voice_ids = [
+            s.voice_id
+            for s in state.mystery.suspects
+            if s.voice_id and s.name != suspect_to_assign.name
+        ]
+        assign_voice_to_suspect(suspect_to_assign, used_voice_ids)
 
     # Get or create agent
     if not hasattr(process_player_action, "agent"):
