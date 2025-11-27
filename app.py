@@ -38,7 +38,7 @@ from ui_formatters import (
 )
 from game_handlers import (
     init_game_handlers,
-    start_new_game,
+    start_new_game_staged,
     process_player_action,
     run_action_logic,
     generate_turn_media,
@@ -509,11 +509,15 @@ def create_app():
             return sess_id
 
         def on_start_game(sess_id, progress=gr.Progress()):
-            """Handle game start with status updates."""
+            """Handle game start with staged progress updates.
+            
+            Fast path (~6s): premise → welcome → TTS → image
+            Background: full mystery generation (~15s, timer updates panels when ready)
+            """
             sess_id = _normalize_session_id(sess_id)
             
-            # Show loading message using Gradio progress
-            progress(0, desc="🔍 Generating your mystery...")
+            # Initial yield to hide start button immediately
+            progress(0, desc="🔍 Starting mystery generation...")
             yield [
                 gr.update(),  # speaker_html
                 gr.update(),  # audio_output
@@ -528,9 +532,32 @@ def create_app():
                 gr.update(),  # mystery_check_timer
             ]
 
-            state, response, audio_path, speaker, alignment_data = start_new_game(
-                sess_id
-            )
+            # Stage descriptions for progress bar
+            stage_descriptions = {
+                "premise": "🎭 Creating murder scenario...",
+                "welcome": "🎙️ Preparing Game Master...",
+                "tts": "🔊 Generating voice narration...",
+                "complete": "✅ Ready to play!",
+            }
+
+            # Run the staged generator (fast path only, mystery generates in background)
+            state = None
+            response = None
+            audio_path = None
+            speaker = None
+            alignment_data = None
+            
+            for stage_name, stage_progress, stage_data in start_new_game_staged(sess_id):
+                desc = stage_descriptions.get(stage_name, f"Processing {stage_name}...")
+                progress(stage_progress, desc=desc)
+                logger.info("[APP] Game start stage: %s (%.0f%%)", stage_name, stage_progress * 100)
+                
+                if stage_name == "complete" and stage_data:
+                    state = stage_data["state"]
+                    response = stage_data["response"]
+                    audio_path = stage_data["audio_path"]
+                    speaker = stage_data["speaker"]
+                    alignment_data = stage_data["alignment_data"]
 
             # Log what we got back
             logger.info("[APP] on_start_game received:")
@@ -564,32 +591,23 @@ def create_app():
             logger.info("Retrieving images for session %s", sess_id)
             logger.info("Available image keys: %s", list(images.keys()))
 
-            # Try to get cached opening scene image (if it was generated earlier)
+            # Generate opening scene image using premise data
+            progress(0.9, desc="🎨 Creating scene image...")
+            
             portrait = images.get("_opening_scene", None)
-
-            # Generate opening scene synchronously on first game start so the
-            # player sees a proper background instead of just the placeholder.
             if not portrait:
                 from image_service import generate_title_card_on_demand
                 from types import SimpleNamespace
 
-                state = get_or_create_state(sess_id)
-
-                # Build a mystery-like object from either full mystery or premise
-                mystery_like = None
-                if state.mystery:
-                    mystery_like = state.mystery
-                elif getattr(state, "premise_setting", None) and getattr(
+                # Use premise data (always available) to generate scene
+                if getattr(state, "premise_setting", None) and getattr(
                     state, "premise_victim_name", None
                 ):
-                    # Use premise data to build a minimal mystery-like object
                     victim_stub = SimpleNamespace(name=state.premise_victim_name)
                     mystery_like = SimpleNamespace(
                         victim=victim_stub,
                         setting=state.premise_setting,
                     )
-
-                if mystery_like:
                     logger.info("Generating opening scene image for new mystery...")
                     portrait = generate_title_card_on_demand(mystery_like)
                     if portrait:
@@ -614,63 +632,52 @@ def create_app():
             display_portrait = portrait if portrait else placeholder_img
 
             # Convert alignment_data to Gradio subtitles format
-            # Use alignment data directly - it represents what was actually spoken
             subtitles = convert_alignment_to_subtitles(alignment_data)
 
             # Update audio component with game audio and subtitles
-            # Autoplay is allowed after user interaction (Start button click)
             audio_update = None
             if audio_path:
                 audio_update = gr.update(
                     value=audio_path,
                     subtitles=subtitles,
-                    autoplay=True,  # Autoplay after user interaction
+                    autoplay=True,
                 )
 
-            # Build victim/case HTML based on what we have (full mystery or premise)
-            if state.mystery:
-                victim_html = format_victim_scene_html(state.mystery)
-            elif getattr(state, "premise_victim_name", None) and getattr(
-                state, "premise_setting", None
-            ):
-                # Use the fast premise if full mystery isn't ready yet
-                victim_html = f"""
-                <div style="margin-bottom: 12px;">
-                    <div style="font-weight: 700; margin-bottom: 8px; font-size: 1.1em; border-bottom: 1px solid var(--border-color); padding-bottom: 8px; color: var(--accent-gold) !important">
-                        The Murder of {state.premise_victim_name}
-                    </div>
-                    <div style="font-weight: 600; color: var(--accent-blue); margin-bottom: 8px;">Victim:</div>
-                    <div style="color: var(--text-primary); margin-bottom: 12px;">{state.premise_victim_name}</div>
-                    <div style="font-weight: 600; color: var(--accent-blue); margin-bottom: 8px;">Scene:</div>
-                    <div style="color: var(--text-primary);">{state.premise_setting}</div>
+            # Build victim/case HTML from premise (full mystery still loading)
+            victim_html = f"""
+            <div style="margin-bottom: 12px;">
+                <div style="font-weight: 700; margin-bottom: 8px; font-size: 1.1em; padding-bottom: 8px;">
+                    The Murder of {state.premise_victim_name}
                 </div>
-                """
-            else:
-                victim_html = format_victim_scene_html(None)
+                <div style="font-weight: 600; color: var(--accent-blue); margin-bottom: 8px;">Victim:</div>
+                <div style="color: var(--text-primary); margin-bottom: 12px;">{state.premise_victim_name}</div>
+                <div style="font-weight: 600; color: var(--accent-blue); margin-bottom: 8px;">Scene:</div>
+                <div style="color: var(--text-primary);">{state.premise_setting}</div>
+            </div>
+            """
 
-            # Return initial results (mystery still loading in background)
-            # The gr.Timer will handle updating the UI when mystery is ready
-            progress(1.0, desc="Mystery started!")
+            # Final progress
+            progress(1.0, desc="🎮 Let's play!")
 
             yield [
                 # Speaker - show when game starts
                 f'<div class="speaker-name" style="padding: 16px 0 !important;">🗣️ {speaker} SPEAKING...</div>',
-                # Audio with subtitles - will autoplay after user interaction (Start button click)
+                # Audio with subtitles
                 audio_update,
-                # Portrait - return path directly, or placeholder if not available
+                # Portrait
                 display_portrait,
                 # Show game UI
                 gr.update(visible=True),  # input_row
                 gr.update(visible=False),  # start_btn
-                # Side panels - use premise-based victim_html, others show "loading" state
+                # Side panels - show "loading" state, timer will update when ready
                 victim_html,
                 format_suspects_list_html(None, state.suspects_talked_to, loading=True),
                 format_locations_html(None, state.searched_locations, loading=True),
                 format_clues_html(state.clues_found),
                 # Accusations
                 _format_accusations_html(state.wrong_accusations),
-                # Activate the mystery check timer
-                gr.Timer(active=True),
+                # Activate timer to check when mystery is ready
+                gr.update(active=True),
             ]
 
         def _format_accusations_html(wrong: int):
@@ -684,6 +691,9 @@ def create_app():
             """Timer callback to check if full mystery is ready and update UI."""
             sess_id = _normalize_session_id(sess_id)
             state = get_or_create_state(sess_id)
+            logger.info("[APP] Timer tick - session: %s, mystery_ready: %s", 
+                        sess_id[:8] if sess_id else "None", 
+                        state.mystery is not None)
 
             if state.mystery is not None:
                 # Mystery is ready - update UI and stop timer
@@ -696,7 +706,7 @@ def create_app():
                     format_locations_html(
                         state.mystery, state.searched_locations, loading=False
                     ),
-                    gr.Timer(active=False),  # Stop the timer
+                    gr.update(active=False),  # Stop the timer
                 ]
             else:
                 # Mystery still loading - keep timer active, no UI changes
@@ -704,7 +714,7 @@ def create_app():
                     gr.update(),  # victim_scene_html - no change
                     gr.update(),  # suspects_list_html - no change
                     gr.update(),  # locations_html - no change
-                    gr.Timer(active=True),  # Keep timer running
+                    gr.update(active=True),  # Keep timer running
                 ]
 
         def _on_custom_message(message: str, sess_id: str):
@@ -952,9 +962,11 @@ def create_app():
             ]
 
             # ========== STAGE 2: SLOW - Generate audio + images ==========
+            # Use background_images=False so portrait is ready before we yield
             t4 = time.perf_counter()
             audio_resp, alignment_data = generate_turn_media(
-                clean_response, speaker, state, actions, audio_path_from_tool, sess_id
+                clean_response, speaker, state, actions, audio_path_from_tool, sess_id,
+                background_images=False  # Wait for portrait so it's ready in Stage 2
             )
             t5 = time.perf_counter()
             logger.info("[PERF] Media generation took %.2fs", t5 - t4)

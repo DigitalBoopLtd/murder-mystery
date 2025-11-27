@@ -55,19 +55,32 @@ def get_suspect_voice_id(suspect_name: str, state: GameState) -> Optional[str]:
     return None
 
 
-def start_new_game(session_id: str):
-    """Start a new mystery game with fast premise + background case generation."""
+def start_new_game_staged(session_id: str):
+    """Generator that yields progress stages during game initialization.
+    
+    Fast path: premise → welcome → TTS (~6s total)
+    Background: full mystery generation (~15s, non-blocking)
+    
+    Yields tuples of (stage_name, stage_progress, stage_data) where:
+    - stage_name: str describing current stage
+    - stage_progress: float 0.0-1.0
+    - stage_data: dict with any data from that stage (or None)
+    
+    Final yield has stage_name="complete" with all game data.
+    """
     state = get_or_create_state(session_id)
     state.reset_game()
 
-    # ========== STAGE 1: FAST PREMISE ==========
+    # ========== STAGE 1: PREMISE (20%) ==========
+    yield ("premise", 0.2, None)
+    
     logger.info("Generating mystery premise...")
     t0 = time.perf_counter()
     premise = generate_mystery_premise()
     t1 = time.perf_counter()
     logger.info("[PERF] Mystery premise generation took %.2fs", t1 - t0)
 
-    # Store premise on state for later use
+    # Store premise on state
     state.premise_setting = premise.setting
     state.premise_victim_name = premise.victim_name
     state.premise_victim_background = premise.victim_background
@@ -92,16 +105,43 @@ Keep ALL responses SHORT for voice narration (10-20 seconds of speech).
 Do NOT mention that the case file is still generating or anything about the
 system or background tasks. Stay purely in-world."""
 
-    # Initialize with agent and narration (images generated on-demand)
-    logger.info("Starting game initialization (images will be generated on-demand)...")
+    # ========== START BACKGROUND MYSTERY GENERATION ==========
+    def _background_generate_full_case(sess_id: str, premise_obj):
+        bg_state = get_or_create_state(sess_id)
+        try:
+            logger.info("[BG] Starting full mystery generation in background...")
+            t_full_0 = time.perf_counter()
+            full_mystery = generate_mystery(premise=premise_obj)
+            t_full_1 = time.perf_counter()
+            logger.info(
+                "[PERF] Full mystery generation (background) took %.2fs",
+                t_full_1 - t_full_0,
+            )
+            bg_state.mystery = full_mystery
+            bg_state.system_prompt = prepare_game_prompt(full_mystery)
+            bg_state.mystery_ready = True
+            logger.info("[BG] Full mystery is ready for session %s", sess_id)
+        except Exception as e:
+            logger.error("[BG] Error generating full mystery in background: %s", e)
 
-    # Create or reuse shared agent and get narration immediately (no waiting for images)
-    if not hasattr(start_new_game, "agent"):
-        start_new_game.agent = create_game_master_agent()
+    threading.Thread(
+        target=_background_generate_full_case,
+        args=(session_id, premise),
+        daemon=True,
+    ).start()
+
+    # ========== STAGE 2: WELCOME MESSAGE (50%) ==========
+    yield ("welcome", 0.5, {"premise": premise})
+    
+    logger.info("Generating welcome message...")
+    
+    # Create or reuse shared agent
+    if not hasattr(start_new_game_staged, "agent"):
+        start_new_game_staged.agent = create_game_master_agent()
 
     t2 = time.perf_counter()
     response, _speaker = process_message(
-        start_new_game.agent,
+        start_new_game_staged.agent,
         (
             "The player has just arrived. Welcome them briefly "
             "(2-3 sentences, max 50 words) with atmosphere, "
@@ -114,13 +154,17 @@ system or background tasks. Stay purely in-world."""
     t3 = time.perf_counter()
     logger.info("[PERF] First Game Master response took %.2fs", t3 - t2)
 
-    # Initialize empty images dict - images will be generated on-demand
+    # Initialize empty images dict
     mystery_images[session_id] = {}
 
-    # Optionally generate title card in background (non-blocking)
-    # For now, we'll generate it on-demand when first needed
+    # Store in messages
+    state.messages.append(
+        {"role": "assistant", "content": response, "speaker": "Game Master"}
+    )
 
-    # Generate audio (needs the response text)
+    # ========== STAGE 3: TTS (80%) ==========
+    yield ("tts", 0.8, {"response": response})
+    
     logger.info("[GAME] Calling TTS for welcome message (%d chars)", len(response))
     t4 = time.perf_counter()
     audio_path, alignment_data = text_to_speech(
@@ -148,38 +192,14 @@ system or background tasks. Stay purely in-world."""
     else:
         logger.warning("[GAME] ⚠️ No alignment data (captions will use estimation)")
 
-    # Store in messages
-    state.messages.append(
-        {"role": "assistant", "content": response, "speaker": "Game Master"}
-    )
-
-    # ========== STAGE 2: FULL CASE IN BACKGROUND ==========
-
-    def _background_generate_full_case(sess_id: str, premise_obj):
-        bg_state = get_or_create_state(sess_id)
-        try:
-            logger.info("[BG] Starting full mystery generation in background...")
-            t_full_0 = time.perf_counter()
-            full_mystery = generate_mystery(premise=premise_obj)
-            t_full_1 = time.perf_counter()
-            logger.info(
-                "[PERF] Full mystery generation (background) took %.2fs",
-                t_full_1 - t_full_0,
-            )
-            bg_state.mystery = full_mystery
-            bg_state.system_prompt = prepare_game_prompt(full_mystery)
-            bg_state.mystery_ready = True
-            logger.info("[BG] Full mystery is ready for session %s", sess_id)
-        except Exception as e:
-            logger.error("[BG] Error generating full mystery in background: %s", e)
-
-    threading.Thread(
-        target=_background_generate_full_case,
-        args=(session_id, premise),
-        daemon=True,
-    ).start()
-
-    return state, response, audio_path, "Game Master", alignment_data
+    # ========== STAGE 4: COMPLETE (100%) ==========
+    yield ("complete", 1.0, {
+        "state": state,
+        "response": response,
+        "audio_path": audio_path,
+        "speaker": "Game Master",
+        "alignment_data": alignment_data,
+    })
 
 
 def run_action_logic(
