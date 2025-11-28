@@ -97,6 +97,10 @@ RETRO_CSS = """
     background: var(--bg-primary) !important;
     max-width: 100% !important;
     color: var(--text-primary) !important;
+    /* Ensure all generic surfaces & inputs use dark theme by default */
+    --background-fill-primary: var(--bg-card);
+    --input-background-fill: var(--bg-card);
+    --input-shadow: none;
 }
 
 .gr-box,
@@ -115,6 +119,8 @@ RETRO_CSS = """
 .settings-column {
     --input-background-fill: transparent;
     --input-shadow: none;
+    --input-background-fill-focus: transparent;
+    --input-shadow-focus: none;
     /* Use our dark card color for any generic primary fills (e.g. dropdown menus) */
     --background-fill-primary: var(--bg-card);
     --checkbox-label-background-fill: transparent;
@@ -124,6 +130,65 @@ RETRO_CSS = """
 .settings-column label {
     background: transparent !important;
     box-shadow: none !important;
+}
+
+/* Prevent settings inputs/blocks from flashing white on focus */
+.settings-column .block,
+.settings-column .block:focus-within {
+    background: transparent !important;
+    box-shadow: none !important;
+}
+
+/* Outer input wrapper (dropdown/inputs) - kill light focus-within background */
+.settings-column .wrap.svelte-1xfsv4t,
+.settings-column .wrap.svelte-1xfsv4t:focus-within {
+    background: transparent !important;
+    box-shadow: none !important;
+}
+
+.settings-column input,
+.settings-column input.svelte-1xfsv4t {
+    background: transparent !important;
+    color: var(--body-text-color) !important;
+}
+
+/* Inner label wrapper for radios / dropdown trigger text - keep dark on focus */
+.settings-column .wrap-inner.svelte-1xfsv4t,
+.settings-column .wrap-inner.svelte-1xfsv4t:focus,
+.settings-column .wrap-inner.svelte-1xfsv4t:focus-within {
+    background-color: transparent !important;
+    box-shadow: none !important;
+}
+
+/* Inner Gradio settings form wrapper (prevents large light-gray panel) */
+.settings-column div.svelte-ptprg1 {
+    background: transparent !important;
+    box-shadow: none !important;
+    border-color: var(--border-dark) !important;
+}
+
+/* Dropdown trigger & visible value area in Settings */
+.settings-column [role="combobox"],
+.settings-column select {
+    background-color: var(--bg-card) !important;
+    color: var(--body-text-color) !important;
+    box-shadow: none !important;
+}
+
+.settings-column [role="combobox"]:focus,
+.settings-column [role="combobox"]:focus-within,
+.settings-column select:focus {
+    background-color: var(--bg-card) !important;
+    color: var(--body-text-color) !important;
+}
+
+/* Global dropdown menus/options: keep dark theme even when portal is outside settings column */
+[role="listbox"],
+[role="listbox"] [role="option"],
+[role="option"],
+select option {
+    background-color: var(--bg-card) !important;
+    color: var(--body-text-color) !important;
 }
 
 /* Global fix for Svelte checkbox/radio-style labels (used by dropdown triggers, etc.)

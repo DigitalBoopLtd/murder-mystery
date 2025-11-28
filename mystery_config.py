@@ -77,7 +77,6 @@ TONE_OPTIONS = [
     "Classic Noir",
     "Cozy Mystery",
     "Darkly Comedic",
-    "Cheeky Adult Comedy",
     "Flirty Noir",
     "Gothic Romance",
     "Random",
