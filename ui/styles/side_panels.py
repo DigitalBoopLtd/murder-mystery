@@ -353,6 +353,42 @@ CSS_SIDE_PANELS = """/* ========== SIDE PANELS - BASE ========== */
     50% { opacity: 0.7; }
 }
 
+/* ========== SUSPECT RELATIONSHIP LABELS ========== */
+.suspect-relationships {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 8px 0;
+    padding: 6px 0;
+    border-top: 1px dashed var(--terminal-green-border-soft);
+}
+
+.rel-label {
+    display: inline-block;
+    font-size: 9px;
+    padding: 2px 6px;
+    font-family: var(--font-retro-mono);
+    border-radius: 0;
+}
+
+.rel-accused {
+    background: rgba(255, 68, 68, 0.15);
+    border: 1px solid rgba(255, 68, 68, 0.4);
+    color: #ff6666;
+}
+
+.rel-alibi {
+    background: rgba(51, 255, 51, 0.15);
+    border: 1px solid rgba(51, 255, 51, 0.4);
+    color: var(--terminal-green);
+}
+
+.rel-mentioned {
+    background: rgba(255, 204, 0, 0.15);
+    border: 1px solid rgba(255, 204, 0, 0.4);
+    color: #ffcc00;
+}
+
 /* ========== DETECTIVE NOTEBOOK ========== */
 .detective-notebook {
     position: relative;

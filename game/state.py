@@ -91,6 +91,140 @@ class GameState:
                 self.game_over = True
             return False
 
+    # =========================================================================
+    # Investigation Scoring & Multiple Endings
+    # =========================================================================
+
+    def calculate_investigation_score(self) -> dict:
+        """Calculate how thorough the investigation was.
+        
+        Returns a dict with:
+        - clues_found: fraction of clues discovered
+        - suspects_interviewed: fraction of suspects talked to
+        - contradictions_caught: total contradictions caught
+        - locations_searched: fraction of locations searched
+        - total_score: 0-100 overall investigation quality
+        """
+        if not self.mystery:
+            return {"total_score": 0}
+        
+        # Clue coverage
+        total_clues = len(self.mystery.clues)
+        found_clues = len(self.clue_ids_found)
+        clue_score = found_clues / total_clues if total_clues > 0 else 0
+        
+        # Suspect coverage
+        total_suspects = len(self.mystery.suspects)
+        talked_suspects = len(self.suspects_talked_to)
+        suspect_score = talked_suspects / total_suspects if total_suspects > 0 else 0
+        
+        # Location coverage
+        total_locations = len(self.get_available_locations())
+        searched_locs = len(self.searched_locations)
+        location_score = searched_locs / total_locations if total_locations > 0 else 0
+        
+        # Contradictions caught (bonus points)
+        total_contradictions = sum(
+            state.contradictions_caught 
+            for state in self.suspect_states.values()
+        )
+        
+        # Weighted total score
+        total_score = int(
+            (clue_score * 35) +  # Clues worth 35%
+            (suspect_score * 30) +  # Interviews worth 30%
+            (location_score * 20) +  # Locations worth 20%
+            min(total_contradictions * 5, 15)  # Up to 15% bonus for catching lies
+        )
+        
+        return {
+            "clues_found": f"{found_clues}/{total_clues}",
+            "clues_percent": int(clue_score * 100),
+            "suspects_interviewed": f"{talked_suspects}/{total_suspects}",
+            "suspects_percent": int(suspect_score * 100),
+            "locations_searched": f"{searched_locs}/{total_locations}",
+            "locations_percent": int(location_score * 100),
+            "contradictions_caught": total_contradictions,
+            "total_score": min(total_score, 100),
+        }
+
+    def get_ending_type(self) -> str:
+        """Determine the ending type based on game outcome and investigation quality.
+        
+        Returns one of:
+        - "perfect_detective": Won with excellent investigation (score >= 80)
+        - "solid_case": Won with good investigation (score >= 50)
+        - "lucky_guess": Won but with poor investigation (score < 50)
+        - "frame_job": Lost but built a case (had evidence against wrong person)
+        - "murderer_escapes": Lost with 3 wrong accusations
+        """
+        score = self.calculate_investigation_score()["total_score"]
+        
+        if self.won:
+            if score >= 80:
+                return "perfect_detective"
+            elif score >= 50:
+                return "solid_case"
+            else:
+                return "lucky_guess"
+        else:
+            # Lost the game
+            if self.wrong_accusations >= 3:
+                return "murderer_escapes"
+            else:
+                return "gave_up"
+
+    def get_ending_narrative(self) -> str:
+        """Get the narrative text for the current ending type."""
+        ending = self.get_ending_type()
+        score = self.calculate_investigation_score()
+        
+        narratives = {
+            "perfect_detective": (
+                "🏆 **PERFECT DETECTIVE**\n\n"
+                "Your investigation was masterful. Every clue examined, every witness questioned, "
+                "every contradiction exposed. The prosecution has an airtight case, and justice "
+                "will be served. The department is already talking about your promotion.\n\n"
+                f"Investigation Score: {score['total_score']}%"
+            ),
+            "solid_case": (
+                "✅ **CASE CLOSED**\n\n"
+                "You got your killer. The evidence is solid, and the case will hold up in court. "
+                "There might be a few loose ends, but the important thing is that the murderer "
+                "is behind bars. Well done, detective.\n\n"
+                f"Investigation Score: {score['total_score']}%"
+            ),
+            "lucky_guess": (
+                "🎲 **LUCKY BREAK**\n\n"
+                "Right person, wrong reasons. You accused the correct killer, but your case "
+                "is built on intuition more than evidence. The defense attorney is already "
+                "planning appeals. Let's hope your luck holds in court.\n\n"
+                f"Investigation Score: {score['total_score']}%"
+            ),
+            "frame_job": (
+                "⚠️ **WRONG PERSON**\n\n"
+                "An innocent person sits in a cell tonight. You built a convincing case against "
+                "the wrong suspect. Somewhere out there, the real killer is smiling. "
+                "This one will haunt you.\n\n"
+                f"Investigation Score: {score['total_score']}%"
+            ),
+            "murderer_escapes": (
+                "💀 **THE ONE THAT GOT AWAY**\n\n"
+                "Three strikes. The case goes cold. The killer watches from the crowd as you "
+                "pack up your notes, knowing they've won. This murder will remain unsolved, "
+                "and they'll always know they beat you.\n\n"
+                f"Investigation Score: {score['total_score']}%"
+            ),
+            "gave_up": (
+                "📁 **CASE ABANDONED**\n\n"
+                "The investigation ends without resolution. The file goes into a drawer, "
+                "the victim's family never gets closure, and the killer walks free.\n\n"
+                f"Investigation Score: {score['total_score']}%"
+            ),
+        }
+        
+        return narratives.get(ending, "The case has concluded.")
+
     def get_available_locations(self) -> List[str]:
         """Get list of locations from clues."""
         if not self.mystery:

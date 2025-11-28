@@ -400,6 +400,67 @@ def get_cross_references(
         return "Error finding cross-references. Please try again."
 
 
+@tool
+def get_investigation_hint(
+    current_situation: Annotated[str, "Brief description of where the player is stuck or what they're trying to figure out"],
+) -> str:
+    """Provide a hint to help the player progress in their investigation.
+    
+    Use this tool when:
+    - Player explicitly asks for a hint or help
+    - Player seems stuck and doesn't know what to do next
+    - Player asks "what should I do?" or similar
+    
+    The hint will be based on what hasn't been explored yet and what
+    evidence might be relevant.
+    """
+    logger.info("\n%s", "=" * 60)
+    logger.info("GET_INVESTIGATION_HINT TOOL CALLED")
+    logger.info("Situation: %s", current_situation)
+    logger.info("%s\n", "=" * 60)
+    
+    memory = get_game_memory()
+    
+    # Gather investigation status from memory
+    hints = []
+    
+    # Check what's been covered
+    total_docs = len(memory.documents) if memory.is_available else 0
+    conversations = [d for d in memory.documents if d.get("metadata", {}).get("type") == "conversation"] if memory.is_available else []
+    
+    suspects_talked = set()
+    for doc in conversations:
+        suspect = doc.get("metadata", {}).get("suspect")
+        if suspect:
+            suspects_talked.add(suspect)
+    
+    # Generate contextual hints
+    if total_docs == 0:
+        hints.append("The detective hasn't gathered any testimony yet. Consider talking to the suspects to learn about the victim and their relationships.")
+    elif len(suspects_talked) < 2:
+        hints.append(f"Only {len(suspects_talked)} suspect(s) have been interviewed. Talking to more suspects might reveal conflicting stories or new leads.")
+    
+    # If RAG is available, search for unresolved threads
+    if memory.is_available and total_docs > 0:
+        try:
+            # Look for mentions of unverified claims
+            unverified = memory.search("alibi claimed said they were", k=3, filter_type="conversation")
+            if unverified:
+                hints.append("Some alibis mentioned in testimony could be verified by questioning other suspects or searching locations.")
+            
+            # Look for relationship hints
+            relationships = memory.search("relationship secret affair argument fight", k=2, filter_type="conversation")
+            if relationships:
+                hints.append("There are hints about relationships between suspects that might be worth exploring further.")
+        except Exception as e:
+            logger.warning("[HINT] RAG search failed: %s", e)
+    
+    if not hints:
+        hints.append("Consider searching locations you haven't explored yet, or pressing suspects on inconsistencies in their stories.")
+    
+    return "INVESTIGATION HINTS:\n\n• " + "\n• ".join(hints)
+
+
 def get_all_tools() -> List:
     """Get all tools for the game master agent.
     
@@ -414,9 +475,12 @@ def get_all_tools() -> List:
             search_past_statements,
             find_contradictions,
             get_cross_references,
+            get_investigation_hint,
         ])
-        logger.info("[TOOLS] RAG tools enabled")
+        logger.info("[TOOLS] RAG tools enabled (including hint system)")
     else:
-        logger.info("[TOOLS] RAG tools disabled (memory not initialized)")
+        # Still add hint tool even without RAG - it provides basic guidance
+        tools.append(get_investigation_hint)
+        logger.info("[TOOLS] RAG tools disabled, basic hint system enabled")
     
     return tools

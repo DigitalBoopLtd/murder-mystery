@@ -1,7 +1,10 @@
 """UI formatting functions for displaying game information as HTML."""
 
-from typing import Dict, List, Optional
+import logging
+from typing import Dict, List, Optional, Tuple
 from game.models import SuspectState
+
+logger = logging.getLogger(__name__)
 
 
 def format_victim_scene_html(mystery) -> str:
@@ -28,6 +31,40 @@ def format_clues_html(clues: List[str]) -> str:
         return "<em>No clues discovered yet...</em>"
 
     return "".join(f'<div class="clue-item">• {clue}</div>' for clue in clues)
+
+
+def get_suspect_relationships(suspect_name: str) -> List[Tuple[str, str]]:
+    """Get relationship labels for a suspect from RAG cross-references.
+    
+    Returns list of (other_suspect, relationship_type) tuples.
+    Relationship types: "accused_by", "alibi_from", "mentioned_by"
+    """
+    try:
+        from services.game_memory import get_game_memory
+        memory = get_game_memory()
+        
+        if not memory.is_available:
+            return []
+        
+        cross_refs = memory.search_cross_references(suspect_name, k=3)
+        relationships = []
+        
+        for speaker, statement in cross_refs:
+            statement_lower = statement.lower()
+            
+            # Detect relationship type from statement content
+            if any(word in statement_lower for word in ["saw", "with", "together", "alibi"]):
+                relationships.append((speaker, "alibi"))
+            elif any(word in statement_lower for word in ["suspicious", "lying", "guilty", "killed", "murder"]):
+                relationships.append((speaker, "accused"))
+            else:
+                relationships.append((speaker, "mentioned"))
+        
+        return relationships[:2]  # Limit to 2 most relevant
+        
+    except Exception as e:
+        logger.debug("[FORMATTER] Could not get relationships: %s", e)
+        return []
 
 
 def format_suspects_list_html(
@@ -64,6 +101,8 @@ def format_suspects_list_html(
         # Build emotional state meters (only show if talked to)
         meters_html = ""
         contradiction_badge = ""
+        relationship_labels = ""
+        
         if suspect.name in talked_to and state:
             trust_pct = state.trust
             nervousness_pct = state.nervousness
@@ -98,6 +137,23 @@ def format_suspects_list_html(
                 <div class="contradiction-badge" title="Caught in {state.contradictions_caught} contradiction(s)">
                     ⚠️ {state.contradictions_caught} contradiction{"s" if state.contradictions_caught > 1 else ""}
                 </div>'''
+            
+            # Relationship labels from cross-references
+            relationships = get_suspect_relationships(suspect.name)
+            if relationships:
+                labels = []
+                for other, rel_type in relationships:
+                    if rel_type == "accused":
+                        labels.append(f'<span class="rel-label rel-accused" title="{other} accused them">🎯 {other}</span>')
+                    elif rel_type == "alibi":
+                        labels.append(f'<span class="rel-label rel-alibi" title="{other} provided alibi">🛡️ {other}</span>')
+                    else:
+                        labels.append(f'<span class="rel-label rel-mentioned" title="Mentioned by {other}">💬 {other}</span>')
+                
+                relationship_labels = f'''
+                <div class="suspect-relationships">
+                    {"".join(labels)}
+                </div>'''
         
         html_parts.append(
             f'<details class="{talked_class}">'
@@ -109,6 +165,7 @@ def format_suspects_list_html(
             f'</summary>'
             f'<div class="suspect-details">'
             f'{meters_html}'
+            f'{relationship_labels}'
             f'<div class="suspect-motive"><strong>Motive:</strong> <em>{suspect.secret}</em></div>'
             f'</div>'
             f'</details>'

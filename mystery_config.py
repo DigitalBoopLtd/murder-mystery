@@ -141,6 +141,33 @@ class MysteryConfig:
         }
         return modifiers.get(self.difficulty, modifiers["Normal"])
 
+    def get_rag_settings(self) -> dict:
+        """Get RAG (retrieval) settings based on difficulty.
+        
+        Controls how much help the AI provides when searching memories.
+        """
+        settings = {
+            "Easy": {
+                "search_k": 7,  # More results returned
+                "contradiction_threshold": 0.5,  # Easier to catch lies
+                "hint_detail": "detailed",  # Rich hints
+                "cross_ref_k": 5,  # More cross-references shown
+            },
+            "Normal": {
+                "search_k": 5,
+                "contradiction_threshold": 0.7,
+                "hint_detail": "moderate",
+                "cross_ref_k": 3,
+            },
+            "Hard": {
+                "search_k": 3,  # Fewer results - must be more specific
+                "contradiction_threshold": 0.85,  # Harder to auto-detect lies
+                "hint_detail": "minimal",  # Vague hints only
+                "cross_ref_k": 2,
+            },
+        }
+        return settings.get(self.difficulty, settings["Normal"])
+
     def get_tone_instruction(self) -> str:
         """Get tone instruction for the LLM prompt."""
         tones = {

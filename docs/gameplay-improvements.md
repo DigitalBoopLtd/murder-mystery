@@ -1,165 +1,84 @@
 # 🎮 Gameplay Improvement Ideas
 
-Let me also check the mystery generator and some service files to complete my understanding:
-
-Now I have a comprehensive view of your murder mystery game! It's a really well-architected voice-first detective game with LLM-powered suspect interrogations, dynamically generated mysteries, and a charming 90s point-and-click aesthetic. Let me share some gameplay improvement ideas organized by theme.
+This document tracks potential enhancements to the murder mystery game. Items are prioritized with mobile-responsive design in mind.
 
 ---
 
-## 🎮 **Gameplay Mechanics**
+## ✅ Completed
 
-### 1. Evidence Board / Deduction System
-Currently, clues are just collected and displayed. Consider adding a visual **"evidence board"** where players can:
-- Drag and drop clues to connect them
-- Link clues to suspects (e.g., "This bloody glove connects to the gardener")
-- Form explicit theories that the Game Master can validate or challenge
-- Get partial credit for correct deductions even before the final accusation
+### Interrogation Depth & Memory (AI Enhancements)
+- ✅ **Trust/nervousness meters** per suspect
+- ✅ **Contradictions tracking** – caught lies are recorded and displayed
+- ✅ **Emotional states** – suspects become defensive, nervous, or cooperative
+- ✅ **Cross-reference questioning** – RAG tools enable "But X said..."
+- ✅ **Conversation history** – per-suspect tracking in GameState
+- ✅ **Detective Notebook** – interrogation timeline with contradiction highlights
 
-### 2. Interrogation Depth & Memory
-Right now, suspects respond in-character but don't remember previous conversations deeply. Improvements:
-- **Trust/suspicion meters** per suspect – the more you talk, the more (or less) they trust you
-- **Contradictions tracking** – if you catch a suspect in a lie, it's recorded and can be referenced
-- **Emotional states** – suspects could become nervous, angry, or cooperative based on your approach
-- **Cross-reference questioning** – "But Eleanor said she saw you in the library at 9pm..."
-
-### 3. Time Pressure & Pacing (Optional Mode)
-Add an optional **"timed mystery"** mode:
-- Turn limits (e.g., 20 turns to solve)
-- Events that trigger mid-game ("The power goes out" / "A second body is discovered")
-- Urgency that affects suspect behavior (they become more guarded as time runs out)
-
-### 4. Difficulty Modifiers That Affect Gameplay
-Your current difficulty system modifies clue clarity and hints, but could go deeper:
-- **Easy**: Suspects more forthcoming, Game Master offers "You might want to check the conservatory" type hints
-- **Hard**: Red herrings are more convincing, suspects actively mislead, alibis are tighter
-- **Expert**: No clue highlighting in UI, must track everything yourself
-
-### 5. Discovery Quality Rewards
-Reward *how* players ask questions:
-- Clever phrasing could unlock bonus information ("clue_they_know" could be tiered)
-- A "detective intuition" score that tracks smart moves
-- Hidden achievements for excellent detective work
+### RAG-Powered Gameplay Features
+- ✅ **Hint system** – `get_investigation_hint` tool suggests next steps based on what's unexplored
+- ✅ **Suspect relationship labels** – Shows who accused/alibi'd whom (🎯 accused, 🛡️ alibi, 💬 mentioned)
+- ✅ **Difficulty modifiers for RAG** – Easy/Normal/Hard affects search results and hint detail
+- ✅ **Multiple endings** – Investigation scoring determines ending type:
+  - 🏆 Perfect Detective (score ≥80%, correct accusation)
+  - ✅ Solid Case (score ≥50%, correct accusation)
+  - 🎲 Lucky Guess (score <50%, correct accusation)
+  - ⚠️ Frame Job (wrong person convicted)
+  - 💀 Murderer Escapes (3 wrong accusations)
 
 ---
 
-## 🎭 **Narrative & Immersion**
+## 🎯 Prioritized Backlog
 
-### 1. Suspect Relationship Map
-Add a visual diagram showing how suspects relate to each other:
-- Family ties, business partnerships, secret affairs
-- Update dynamically as you learn new information
-- Could reveal hidden motives through connections
+### High Priority (Low effort, high impact)
 
-### 2. Environmental Storytelling
-When searching locations, go beyond just finding clues:
-- Describe ambient details that set the mood
-- Hidden details that reward multiple searches
-- Objects that aren't clues but tell stories about the victim's life
+| Feature | Mobile Notes |
+|---------|--------------|
+| **Save/Resume games** – localStorage | Essential for mobile sessions that get interrupted |
 
-### 3. Multiple Endings Beyond Win/Lose
-- **Perfect ending**: Solve with all clues, no wrong accusations
-- **Pyrrhic victory**: Correct accusation but you missed key evidence
-- **Frame job**: Accuse the wrong person with enough circumstantial evidence (bittersweet)
-- **The murderer escapes**: Ran out of accusations, murderer gloats
+### Medium Priority (Medium effort)
 
-### 4. Side Mysteries / Secrets
-Not every secret needs to connect to the murder:
-- Discover that an "innocent" suspect is embezzling
-- Uncover a secret romance between two suspects
-- Find a decades-old mystery that adds context
+| Feature | Mobile Notes |
+|---------|--------------|
+| **Ambient audio per location** | Zero UI footprint; enhances atmosphere |
+| **Time pressure mode** – optional turn limits | Could show turn counter in header |
 
-### 5. Player Detective Customization
-Let players create a detective persona:
-- Name and brief backstory
-- Specialty (forensics expert, psychological profiler, etc.)
-- Could give small gameplay bonuses or unique dialogue options
+### Lower Priority (Higher effort or desktop-oriented)
 
----
+| Feature | Mobile Notes |
+|---------|--------------|
+| **Evidence Board (drag-drop)** | ⚠️ Desktop-only or needs swipe-based mobile alternative |
+| **Suspect Relationship Map (diagram)** | ⚠️ Complex; relationship labels now show this data in simpler form |
+| **Animated character portraits** | Performance concerns on older mobile devices |
+| **Searchable transcript with filters** | Text-heavy; current notebook may suffice |
 
-## 🖥️ **UX & Quality of Life**
+### Future Vision (Post-MVP)
 
-### 1. Conversation Log / Transcript
-A scrollable history of all exchanges:
-- Searchable by keyword
-- Filter by suspect
-- Timestamps for piecing together timeline
-- Export option for external note-taking
-
-### 2. Built-in Detective Notebook
-A note-taking panel within the game:
-- Freeform notes
-- Quick-add from conversation ("Pin this statement")
-- Timeline builder
-- Theory templates ("Who, What, Where, When, Why")
-
-### 3. Hint System
-Context-sensitive hints for stuck players:
-- "You haven't talked to [suspect] yet"
-- "The [location] might be worth another look"
-- "Consider the timing of the victim's last phone call"
-- Could cost points or be unlimited on easy mode
-
-### 4. Save/Resume Games
-For longer sessions:
-- Save game state to localStorage or server
-- Share save links with friends
-- Mystery replay with different approaches
+- **Cooperative mode** – two players share a mystery
+- **Competitive mode** – race to solve
+- **Community mysteries** – share seeds/configs
+- **Detective customization** – name, backstory, specialty
 
 ---
 
-## 🤝 **Social & Multiplayer (Future Vision)**
+## 📱 Mobile-Responsive Guidelines
 
-### 1. Cooperative Detective Mode
-- Two players share a mystery
-- Split up interrogations ("I'll talk to the butler, you search the study")
-- Shared evidence board
-- Must agree on final accusation
+The current UI uses a 3-column layout (left sidebar, center stage, right sidebar). For mobile:
 
-### 2. Competitive Mode
-- Same mystery, race to solve first
-- Can't see each other's progress
-- Leaderboard by speed/accuracy
-
-### 3. Community Mysteries
-- Share mystery seeds/configs
-- Player-created scenarios (guided by templates)
-- Hall of fame for clever mysteries
+- **Breakpoint ~768px**: Sidebars should stack below center stage or become slide-out drawers
+- **Accordions**: Already mobile-friendly (collapse to save space)
+- **Voice input**: Primary interaction; works great on mobile
+- **Touch targets**: Buttons/accordions need adequate tap size (44px minimum)
+- **Portrait orientation**: Center stage (speaker + portrait) should remain visible; panels scroll below
 
 ---
 
-## 🎨 **Aesthetic & Polish**
+## 🎨 Aesthetic Polish (When time permits)
 
-### 1. Animated Character Portraits
-Instead of static images:
-- Subtle idle animations (blinking, breathing)
-- Emotion-reactive expressions (nervous twitching when caught in a lie)
-- Pixel art animation style to match the 90s aesthetic
-
-### 2. Ambient Audio
-- Location-specific soundscapes (crackling fireplace, rain on windows)
-- Tension music that escalates as you get closer to solving
-- Character themes
-
-### 3. Cinematic Moments
-- Animated "case solved" sequence
-- Dramatic reveal of the murderer with flashback narration
-- Opening "noir" narration with atmospheric visuals
+- Ambient audio (location-specific soundscapes)
+- Tension music that escalates near solution
+- Cinematic "case solved" sequence
+- Opening noir narration
 
 ---
 
-## 💡 **Quick Wins (Lower Effort, High Impact)**
-
-| Improvement | Why It Matters |
-|-------------|----------------|
-| Show conversation history | Players forget what suspects said |
-| Add "Ask Game Master for hint" button | Reduces frustration |
-| Suspect relationship labels in sidebar | Quick reference |
-| Track/display timeline of events | Helps deduce alibis |
-| "Pin" important statements | Built-in note-taking |
-
----
-
-Would you like me to dive deeper into any of these ideas, discuss implementation approaches, or prioritize them for a roadmap?
-
-
-
+*Last updated after completing AI Enhancement Phases 1-3*
