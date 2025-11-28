@@ -290,4 +290,216 @@ CSS_SIDE_PANELS = """/* ========== SIDE PANELS - BASE ========== */
 /* Right panel accordion buttons */
 /* (Right panel accordion buttons share base styles with left via unified selector above) */
 
+/* ========== SUSPECT EMOTIONAL STATE METERS ========== */
+.suspect-meters {
+    margin: 8px 0;
+    padding: 6px 0;
+    border-top: 1px dashed var(--terminal-green-border-soft);
+}
+
+.meter-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 4px;
+    font-size: 10px;
+}
+
+.meter-label {
+    width: 40px;
+    color: var(--terminal-green-muted);
+    font-family: var(--font-retro-mono);
+    font-size: 11px;
+    letter-spacing: 1px;
+}
+
+.meter-bar {
+    flex: 1;
+    height: 8px;
+    background: rgba(0, 20, 0, 0.6);
+    border: 1px solid var(--terminal-green-border-soft);
+    border-radius: 0;
+    overflow: hidden;
+}
+
+.meter-fill {
+    height: 100%;
+    transition: width 0.3s ease, background 0.3s ease;
+}
+
+.meter-value {
+    width: 32px;
+    text-align: right;
+    color: var(--terminal-green);
+    font-family: var(--font-retro-mono);
+    font-size: 10px;
+}
+
+/* ========== CONTRADICTION INDICATORS ========== */
+.contradiction-badge {
+    display: inline-block;
+    background: rgba(255, 68, 68, 0.2);
+    border: 1px solid #ff4444;
+    color: #ff6666;
+    font-size: 9px;
+    padding: 2px 6px;
+    margin-left: 8px;
+    font-family: var(--font-retro-mono);
+    animation: contradiction-pulse 2s ease-in-out infinite;
+}
+
+@keyframes contradiction-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+}
+
+/* ========== DETECTIVE NOTEBOOK ========== */
+.detective-notebook {
+    position: relative;
+    z-index: 20;
+}
+
+.notebook-empty {
+    text-align: center;
+    padding: 20px;
+    color: var(--terminal-green-muted);
+    font-family: var(--font-body);
+}
+
+.notebook-icon {
+    font-size: 32px;
+    margin-bottom: 8px;
+    opacity: 0.6;
+}
+
+.notebook-hint {
+    font-size: 11px;
+    margin-top: 8px;
+    opacity: 0.7;
+    font-style: italic;
+}
+
+.section-header {
+    font-family: var(--font-retro-mono);
+    font-size: 12px;
+    color: var(--terminal-green);
+    letter-spacing: 2px;
+    padding: 6px 8px;
+    margin-bottom: 8px;
+    border-bottom: 1px solid var(--terminal-green-border-soft);
+    text-shadow: 0 0 6px var(--terminal-green);
+}
+
+.contradictions-section {
+    margin-bottom: 16px;
+    background: rgba(255, 68, 68, 0.05);
+    border: 1px solid rgba(255, 68, 68, 0.3);
+    padding: 8px;
+}
+
+.contradictions-section .section-header {
+    color: #ff6666;
+    border-color: rgba(255, 68, 68, 0.3);
+    text-shadow: 0 0 6px rgba(255, 68, 68, 0.5);
+}
+
+.contradiction-item {
+    padding: 8px;
+    margin-bottom: 6px;
+    background: rgba(255, 68, 68, 0.1);
+    border-left: 2px solid #ff4444;
+}
+
+.contradiction-suspect {
+    font-family: var(--font-retro-mono);
+    font-size: 11px;
+    color: #ff6666;
+    margin-bottom: 4px;
+}
+
+.contradiction-detail {
+    font-size: 11px;
+    color: var(--terminal-green);
+    line-height: 1.4;
+}
+
+.timeline-section {
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.timeline-entries {
+    padding: 0 4px;
+}
+
+.notebook-entry {
+    padding: 8px;
+    margin-bottom: 6px;
+    background: rgba(0, 20, 0, 0.4);
+    border-left: 2px solid var(--terminal-green-muted);
+    font-size: 11px;
+}
+
+.notebook-entry.contradiction-entry {
+    border-left-color: #ff4444;
+    background: rgba(255, 68, 68, 0.08);
+}
+
+.entry-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+}
+
+.entry-turn {
+    font-family: var(--font-retro-mono);
+    font-size: 10px;
+    color: var(--terminal-green-muted);
+    background: rgba(0, 30, 0, 0.5);
+    padding: 2px 6px;
+}
+
+.entry-suspect {
+    font-family: var(--font-retro-mono);
+    font-size: 11px;
+    color: var(--terminal-green);
+    font-weight: 600;
+}
+
+.contradiction-icon {
+    margin-left: auto;
+    animation: contradiction-pulse 1.5s ease-in-out infinite;
+}
+
+.entry-question {
+    color: var(--terminal-green-accent);
+    margin-bottom: 4px;
+    font-style: italic;
+    line-height: 1.4;
+}
+
+.entry-answer {
+    color: var(--terminal-green);
+    line-height: 1.4;
+}
+
+/* Scrollbar styling for notebook */
+.timeline-section::-webkit-scrollbar {
+    width: 6px;
+}
+
+.timeline-section::-webkit-scrollbar-track {
+    background: rgba(0, 20, 0, 0.3);
+}
+
+.timeline-section::-webkit-scrollbar-thumb {
+    background: var(--terminal-green-muted);
+    border-radius: 0;
+}
+
+.timeline-section::-webkit-scrollbar-thumb:hover {
+    background: var(--terminal-green);
+}
+
 """

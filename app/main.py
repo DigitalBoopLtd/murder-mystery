@@ -88,6 +88,7 @@ def create_app():
         locations_html = components["locations_html"]
         clues_html = components["clues_html"]
         accusations_html = components["accusations_html"]
+        notebook_html = components["notebook_html"]
         era_dropdown = components["era_dropdown"]
         setting_dropdown = components["setting_dropdown"]
         difficulty_radio = components["difficulty_radio"]
@@ -109,6 +110,7 @@ def create_app():
             locations_html,
             clues_html,
             accusations_html,
+            notebook_html,
         ]
 
         # Settings tab - keep per-session config in GameState

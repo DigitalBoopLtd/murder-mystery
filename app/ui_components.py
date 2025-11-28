@@ -164,6 +164,20 @@ def create_ui_components() -> dict:
                             "</span></div>"
                         )
 
+                    # Detective Notebook - conversation timeline & contradictions
+                    with gr.Accordion(
+                        "📓 DETECTIVE NOTEBOOK",
+                        open=False,
+                        elem_classes="side-panel",
+                    ):
+                        notebook_html = gr.HTML(
+                            '''<div class="notebook-empty">
+                                <div class="notebook-icon">📓</div>
+                                <div>No interrogations recorded yet.</div>
+                                <div class="notebook-hint">Talk to suspects to fill your notebook.</div>
+                            </div>'''
+                        )
+
         # ----- SETTINGS TAB -----
         with gr.Tab("Settings"):
             with gr.Column(elem_classes="settings-column"):
@@ -230,6 +244,7 @@ def create_ui_components() -> dict:
         "locations_html": locations_html,
         "clues_html": clues_html,
         "accusations_html": accusations_html,
+        "notebook_html": notebook_html,
         "era_dropdown": era_dropdown,
         "setting_dropdown": setting_dropdown,
         "difficulty_radio": difficulty_radio,

@@ -78,34 +78,28 @@ Let players create a detective persona:
 
 ## 🖥️ **UX & Quality of Life**
 
-### 1. Text Input Option
-While voice-first is unique, some players may prefer typing. A simple text box alongside the microphone would be helpful for:
-- Quiet environments
-- Accessibility
-- Precise questioning
-
-### 2. Conversation Log / Transcript
+### 1. Conversation Log / Transcript
 A scrollable history of all exchanges:
 - Searchable by keyword
 - Filter by suspect
 - Timestamps for piecing together timeline
 - Export option for external note-taking
 
-### 3. Built-in Detective Notebook
+### 2. Built-in Detective Notebook
 A note-taking panel within the game:
 - Freeform notes
 - Quick-add from conversation ("Pin this statement")
 - Timeline builder
 - Theory templates ("Who, What, Where, When, Why")
 
-### 4. Hint System
+### 3. Hint System
 Context-sensitive hints for stuck players:
 - "You haven't talked to [suspect] yet"
 - "The [location] might be worth another look"
 - "Consider the timing of the victim's last phone call"
 - Could cost points or be unlimited on easy mode
 
-### 5. Save/Resume Games
+### 4. Save/Resume Games
 For longer sessions:
 - Save game state to localStorage or server
 - Share save links with friends
@@ -157,7 +151,6 @@ Instead of static images:
 
 | Improvement | Why It Matters |
 |-------------|----------------|
-| Add text input alongside voice | Accessibility & convenience |
 | Show conversation history | Players forget what suspects said |
 | Add "Ask Game Master for hint" button | Reduces frustration |
 | Suspect relationship labels in sidebar | Quick reference |

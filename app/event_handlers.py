@@ -16,6 +16,7 @@ from ui.formatters import (
     format_suspects_list_html,
     format_locations_html,
     format_clues_html,
+    format_detective_notebook_html,
 )
 from app.utils import convert_alignment_to_subtitles
 
@@ -311,7 +312,10 @@ def check_mystery_ready(sess_id: str):
         return [
             format_victim_scene_html(state.mystery),
             format_suspects_list_html(
-                state.mystery, state.suspects_talked_to, loading=False
+                state.mystery,
+                state.suspects_talked_to,
+                loading=False,
+                suspect_states=state.suspect_states
             ),
             format_locations_html(
                 state.mystery, state.searched_locations, loading=False
@@ -332,7 +336,7 @@ def on_custom_message(message: str, sess_id: str):
     """Handle free-form text input (currently unused - voice only)."""
     sess_id = normalize_session_id(sess_id)
     if not message.strip():
-        return [gr.update()] * 8
+        return [gr.update()] * 9
 
     # Store previous state to detect what changed
     state_before = get_or_create_state(sess_id)
@@ -442,10 +446,15 @@ def on_custom_message(message: str, sess_id: str):
         ),
         portrait_update,
         format_victim_scene_html(state.mystery),
-        format_suspects_list_html(state.mystery, state.suspects_talked_to),
+        format_suspects_list_html(
+            state.mystery,
+            state.suspects_talked_to,
+            suspect_states=state.suspect_states
+        ),
         format_locations_html(state.mystery, state.searched_locations),
         format_clues_html(state.clues_found),
         format_accusations_html(state.wrong_accusations),
+        format_detective_notebook_html(state.suspect_states),
         "",  # Clear text input
     ]
 
@@ -515,7 +524,7 @@ def on_voice_input(audio_path: str, sess_id, progress=gr.Progress()):
     Stage 2 (slow): Generate TTS audio + images, yield final update with audio
     """
     if not audio_path:
-        yield [gr.update()] * 8
+        yield [gr.update()] * 9
         return
 
     # Normalize session id so it matches what on_start_game used
@@ -527,12 +536,12 @@ def on_voice_input(audio_path: str, sess_id, progress=gr.Progress()):
         state_before, "premise_setting", None
     ):
         logger.warning("[APP] Voice input received but no game started yet")
-        yield [gr.update()] * 8
+        yield [gr.update()] * 9
         return
 
     # Show progress indicator while processing
     progress(0, desc="🗣️ Transcribing...")
-    yield [gr.update()] * 8
+    yield [gr.update()] * 9
 
     # Store previous state to detect what changed
     # IMPORTANT: Make copies of the lists since state is mutated in place
@@ -557,7 +566,7 @@ def on_voice_input(audio_path: str, sess_id, progress=gr.Progress()):
     logger.info("[PERF] Transcription took %.2fs", t1 - t0)
 
     if not text.strip():
-        yield [gr.update()] * 8
+        yield [gr.update()] * 9
         return
 
     # Infer high-level action type from the transcribed text
@@ -658,10 +667,15 @@ def on_voice_input(audio_path: str, sess_id, progress=gr.Progress()):
         gr.update(),  # Audio placeholder - will be filled in stage 2
         portrait_update,
         format_victim_scene_html(state.mystery),
-        format_suspects_list_html(state.mystery, state.suspects_talked_to),
+        format_suspects_list_html(
+            state.mystery,
+            state.suspects_talked_to,
+            suspect_states=state.suspect_states
+        ),
         format_locations_html(state.mystery, state.searched_locations),
         format_clues_html(state.clues_found),
         format_accusations_html(state.wrong_accusations),
+        format_detective_notebook_html(state.suspect_states),
     ]
 
     # ========== STAGE 2: SLOW - Generate audio + images ==========
@@ -759,10 +773,15 @@ def on_voice_input(audio_path: str, sess_id, progress=gr.Progress()):
         ),
         portrait_update,
         format_victim_scene_html(state.mystery),
-        format_suspects_list_html(state.mystery, state.suspects_talked_to),
+        format_suspects_list_html(
+            state.mystery,
+            state.suspects_talked_to,
+            suspect_states=state.suspect_states
+        ),
         format_locations_html(state.mystery, state.searched_locations),
         format_clues_html(state.clues_found),
         format_accusations_html(state.wrong_accusations),
+        format_detective_notebook_html(state.suspect_states),
     ]
 
 
