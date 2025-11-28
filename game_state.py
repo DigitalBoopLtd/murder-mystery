@@ -2,6 +2,7 @@
 
 from typing import Dict, Optional, List
 from models import Mystery
+from mystery_config import MysteryConfig, create_validated_config
 
 
 class GameState:
@@ -23,6 +24,10 @@ class GameState:
         self.premise_setting: Optional[str] = None
         self.premise_victim_name: Optional[str] = None
         self.premise_victim_background: Optional[str] = None
+        # Per-session configuration for mystery generation (era, setting, difficulty, tone)
+        self.config: MysteryConfig = create_validated_config()
+        # Optional tone instruction string injected into system prompts
+        self.tone_instruction: Optional[str] = None
 
     def is_new_game(self, message: str) -> bool:
         """Check if the message indicates a new game."""
@@ -46,6 +51,7 @@ class GameState:
         self.premise_setting = None
         self.premise_victim_name = None
         self.premise_victim_background = None
+        self.tone_instruction = None
 
     def add_clue(self, clue_id: str, clue_description: str):
         """Add a discovered clue."""
@@ -120,6 +126,14 @@ Murder details: Used {self.mystery.weapon} because {self.mystery.motive}''' if s
                 ]
             )
 
+            tone_block = ""
+            if self.tone_instruction:
+                tone_block = f"""
+
+## TONE
+{self.tone_instruction}
+"""
+
             return f"""You are the Game Master for an ongoing murder mystery game.
 
 ## THE CASE
@@ -148,6 +162,8 @@ CRITICAL: For ANY talk/interrogate request, you MUST use the interrogate_suspect
 - 3 wrong accusations = lose
 - Win = name murderer + provide evidence
 - Never reveal murderer until correct accusation
+
+{tone_block}
 
 ## SECRET (NEVER REVEAL)
 Murderer: {self.mystery.murderer}

@@ -15,6 +15,13 @@ from PIL import Image, ImageDraw, ImageFont
 import gradio as gr
 from dotenv import load_dotenv
 from openai import OpenAI
+from mystery_config import (
+    ERA_OPTIONS,
+    DIFFICULTY_LEVELS,
+    TONE_OPTIONS,
+    get_settings_for_era,
+    create_validated_config,
+)
 
 try:
     from elevenlabs import ElevenLabs
@@ -390,102 +397,157 @@ def create_app():
                 '<div class="game-title"><span class="detective-avatar">🕵️‍♀️</span> MURDER MYSTERY</div>'
             )
 
-        # ====== MAIN LAYOUT ======
-        with gr.Row(elem_classes="main-layout-row"):
-
-            # === LEFT: SIDE PANEL ===
-            with gr.Column(
-                scale=1, min_width=200, elem_classes="side-column side-column-left"
-            ):
-                # Victim and Scene - first card (open by default)
-                with gr.Accordion(
-                    "🧳 CASE DETAILS", open=True, elem_classes="side-panel"
-                ):
-                    victim_scene_html = gr.HTML(
-                        "<em>Start a game to see case details...</em>",
-                        elem_classes="transcript-panel",
+        # ====== MAIN LAYOUT & SETTINGS ======
+        with gr.Tabs(elem_classes="main-tabs"):
+            with gr.Tab("Settings"):
+                with gr.Column(elem_classes="settings-column"):
+                    gr.Markdown(
+                        "### Mystery settings\n\n"
+                        "Adjust these before starting a new game. "
+                        "Changes apply to the **next** mystery you start in this browser session."
+                    )
+                    era_dropdown = gr.Dropdown(
+                        label="Era / category",
+                        choices=ERA_OPTIONS,
+                        value="Any",
+                        interactive=True,
+                    )
+                    setting_dropdown = gr.Dropdown(
+                        label="Setting",
+                        choices=["Random"] + get_settings_for_era("Any"),
+                        value="Random",
+                        interactive=True,
+                    )
+                    difficulty_radio = gr.Radio(
+                        label="Difficulty",
+                        choices=DIFFICULTY_LEVELS,
+                        value="Normal",
+                        interactive=True,
+                    )
+                    tone_radio = gr.Radio(
+                        label="Tone",
+                        choices=TONE_OPTIONS,
+                        value="Random",
+                        interactive=True,
                     )
 
-                # Suspects list - show who can be questioned (open by default)
-                with gr.Accordion(
-                    "🎭 SUSPECTS", open=True, elem_classes="side-panel suspects-panel"
-                ):
-                    suspects_list_html = gr.HTML(
-                        "<em>Start a game to see suspects...</em>",
-                        elem_classes="transcript-panel suspects-list",
-                    )
+            with gr.Tab("Game"):
+                # ====== MAIN LAYOUT ======
+                with gr.Row(elem_classes="main-layout-row"):
 
-            # === CENTER: MAIN STAGE ===
-            with gr.Column(scale=3, elem_classes="center-column"):
+                    # === LEFT: SIDE PANEL ===
+                    with gr.Column(
+                        scale=1,
+                        min_width=200,
+                        elem_classes="side-column side-column-left",
+                    ):
+                        # Victim and Scene - first card (open by default)
+                        with gr.Accordion(
+                            "🧳 CASE DETAILS",
+                            open=True,
+                            elem_classes="side-panel",
+                        ):
+                            victim_scene_html = gr.HTML(
+                                "<em>Start a game to see case details...</em>",
+                                elem_classes="transcript-panel",
+                            )
 
-                # Stage container (styled via .center-column > .gr-group in CSS)
-                with gr.Group():
+                        # Suspects list - show who can be questioned (open by default)
+                        with gr.Accordion(
+                            "🎭 SUSPECTS",
+                            open=True,
+                            elem_classes="side-panel suspects-panel",
+                        ):
+                            suspects_list_html = gr.HTML(
+                                "<em>Start a game to see suspects...</em>",
+                                elem_classes="transcript-panel suspects-list",
+                            )
 
-                    # Speaker name - hidden initially, will show when game starts
-                    speaker_html = gr.HTML(
-                        '<div class="speaker-name" style="display: none;"></div>'
-                    )
+                    # === CENTER: MAIN STAGE ===
+                    with gr.Column(scale=3, elem_classes="center-column"):
 
-                    # Portrait display - larger size for better visibility
-                    # Start with placeholder image
-                    placeholder_img = create_placeholder_image()
-                    portrait_image = gr.Image(
-                        value=placeholder_img,
-                        show_label=False,
-                        elem_classes="portrait-image",
-                        visible=True,  # Visible by default, will show image when set
-                    )
+                        # Stage container (styled via .center-column > .gr-group in CSS)
+                        with gr.Group():
 
-                    # Audio player with built-in subtitles support (Gradio handles word highlighting)
-                    audio_output = gr.Audio(
-                        label=None,
-                        show_label=False,
-                        autoplay=False,  # Don't autoplay initially - no audio to play yet
-                        elem_classes="audio-player",
-                    )
+                            # Speaker name - hidden initially, will show when game starts
+                            speaker_html = gr.HTML(
+                                '<div class="speaker-name" style="display: none;"></div>'
+                            )
 
-                # Start game button (shown initially)
-                with gr.Column(elem_classes="start-button-container"):
-                    start_btn = gr.Button(
-                        "🚀 START NEW MYSTERY", elem_classes="start-button", size="lg"
-                    )
+                            # Portrait display - larger size for better visibility
+                            # Start with placeholder image
+                            placeholder_img = create_placeholder_image()
+                            portrait_image = gr.Image(
+                                value=placeholder_img,
+                                show_label=False,
+                                elem_classes="portrait-image",
+                                visible=True,  # Visible by default, will show image when set
+                            )
 
-                # Input bar - voice only
-                with gr.Column(elem_classes="input-bar", visible=False) as input_row:
-                    # Voice input - only input method
-                    voice_input = gr.Audio(
-                        sources=["microphone"],
-                        type="filepath",
-                        label=None,
-                        show_label=False,
-                    )
+                            # Audio player with built-in subtitles support (Gradio handles word highlighting)
+                            audio_output = gr.Audio(
+                                label=None,
+                                show_label=False,
+                                autoplay=False,  # Don't autoplay initially - no audio to play yet
+                                elem_classes="audio-player",
+                            )
 
-            # === RIGHT: SIDE PANEL ===
-            with gr.Column(
-                scale=1, min_width=200, elem_classes="side-column side-column-right"
-            ):
-                # Locations card (open by default)
-                with gr.Accordion("📍 LOCATIONS", open=True, elem_classes="side-panel"):
-                    locations_html = gr.HTML("<em>Start a game...</em>")
+                        # Start game button (shown initially)
+                        with gr.Column(elem_classes="start-button-container"):
+                            start_btn = gr.Button(
+                                "🚀 START NEW MYSTERY",
+                                elem_classes="start-button",
+                                size="lg",
+                            )
 
-                # Clues card (open by default)
-                with gr.Accordion(
-                    "🔎 CLUES FOUND", open=True, elem_classes="side-panel"
-                ):
-                    clues_html = gr.HTML("<em>No clues yet...</em>")
+                        # Input bar - voice only
+                        with gr.Column(
+                            elem_classes="input-bar", visible=False
+                        ) as input_row:
+                            # Voice input - only input method
+                            voice_input = gr.Audio(
+                                sources=["microphone"],
+                                type="filepath",
+                                label=None,
+                                show_label=False,
+                            )
 
-                # Accusations card (open by default)
-                with gr.Accordion(
-                    "⚖️ ACCUSATIONS", open=True, elem_classes="side-panel"
-                ):
-                    accusations_html = gr.HTML(
-                        '<div class="accusations-display">Accusations: '
-                        "<span>"
-                        '<span class="accusations-pip"></span>'
-                        '<span class="accusations-pip"></span>'
-                        '<span class="accusations-pip"></span>'
-                        "</span></div>"
-                    )
+                    # === RIGHT: SIDE PANEL ===
+                    with gr.Column(
+                        scale=1,
+                        min_width=200,
+                        elem_classes="side-column side-column-right",
+                    ):
+                        # Locations card (open by default)
+                        with gr.Accordion(
+                            "📍 LOCATIONS",
+                            open=True,
+                            elem_classes="side-panel",
+                        ):
+                            locations_html = gr.HTML("<em>Start a game...</em>")
+
+                        # Clues card (open by default)
+                        with gr.Accordion(
+                            "🔎 CLUES FOUND",
+                            open=True,
+                            elem_classes="side-panel",
+                        ):
+                            clues_html = gr.HTML("<em>No clues yet...</em>")
+
+                        # Accusations card (open by default)
+                        with gr.Accordion(
+                            "⚖️ ACCUSATIONS",
+                            open=True,
+                            elem_classes="side-panel",
+                        ):
+                            accusations_html = gr.HTML(
+                                '<div class="accusations-display">Accusations: '
+                                "<span>"
+                                '<span class="accusations-pip"></span>'
+                                '<span class="accusations-pip"></span>'
+                                '<span class="accusations-pip"></span>'
+                                "</span></div>"
+                            )
 
         # Hidden timer for checking mystery completion (inactive by default)
         mystery_check_timer = gr.Timer(value=1.0, active=False)
@@ -507,6 +569,64 @@ def create_app():
             if not isinstance(sess_id, str):
                 return str(sess_id)
             return sess_id
+
+        def _ensure_config(sess_id):
+            """Get or initialize the per-session mystery configuration."""
+            sess_id = _normalize_session_id(sess_id)
+            state = get_or_create_state(sess_id)
+            if not hasattr(state, "config") or state.config is None:
+                state.config = create_validated_config()
+            return state
+
+        def on_config_era_change(era, setting, difficulty, tone, sess_id):
+            """Update config when era changes and refresh setting options."""
+            state = _ensure_config(sess_id)
+
+            available_settings = get_settings_for_era(era)
+            # If current setting is not valid for the new era, reset to Random
+            if setting not in available_settings and setting != "Random":
+                setting = "Random"
+
+            try:
+                state.config = create_validated_config(
+                    setting=setting,
+                    era=era,
+                    difficulty=difficulty,
+                    tone=tone,
+                )
+            except ValueError as e:
+                logger.warning(
+                    "Invalid mystery config on era change for session %s: %s",
+                    sess_id,
+                    e,
+                )
+                state.config = create_validated_config()
+                era = state.config.era
+                available_settings = get_settings_for_era(era)
+                setting = "Random"
+
+            return gr.update(
+                choices=["Random"] + available_settings,
+                value=setting,
+            )
+
+        def on_config_generic_change(setting, era, difficulty, tone, sess_id):
+            """Update config for non-era fields (setting/difficulty/tone)."""
+            state = _ensure_config(sess_id)
+            try:
+                state.config = create_validated_config(
+                    setting=setting,
+                    era=era,
+                    difficulty=difficulty,
+                    tone=tone,
+                )
+            except ValueError as e:
+                logger.warning(
+                    "Invalid mystery config for session %s: %s",
+                    sess_id,
+                    e,
+                )
+                state.config = create_validated_config()
 
         def on_start_game(sess_id, progress=gr.Progress()):
             """Handle game start with staged progress updates.
@@ -1073,6 +1193,53 @@ def create_app():
             clues_html,
             accusations_html,
         ]
+
+        # Settings tab - keep per-session config in GameState
+        getattr(era_dropdown, "change")(
+            fn=on_config_era_change,
+            inputs=[
+                era_dropdown,
+                setting_dropdown,
+                difficulty_radio,
+                tone_radio,
+                session_id,
+            ],
+            outputs=[setting_dropdown],
+        )
+
+        getattr(setting_dropdown, "change")(
+            fn=on_config_generic_change,
+            inputs=[
+                setting_dropdown,
+                era_dropdown,
+                difficulty_radio,
+                tone_radio,
+                session_id,
+            ],
+            outputs=None,
+        )
+        getattr(difficulty_radio, "change")(
+            fn=on_config_generic_change,
+            inputs=[
+                setting_dropdown,
+                era_dropdown,
+                difficulty_radio,
+                tone_radio,
+                session_id,
+            ],
+            outputs=None,
+        )
+        getattr(tone_radio, "change")(
+            fn=on_config_generic_change,
+            inputs=[
+                setting_dropdown,
+                era_dropdown,
+                difficulty_radio,
+                tone_radio,
+                session_id,
+            ],
+            outputs=None,
+        )
 
         # Start game
         getattr(start_btn, "click")(

@@ -19,6 +19,7 @@ from mystery_generator import (
     prepare_game_prompt,
     assign_voice_to_suspect,
 )
+from mystery_config import create_validated_config
 from agent import create_game_master_agent, process_message
 from game_parser import parse_game_actions
 from tts_service import text_to_speech
@@ -37,6 +38,36 @@ def init_game_handlers(states_dict, images_dict, game_master_voice_id: str):
     game_states = states_dict
     mystery_images = images_dict
     GAME_MASTER_VOICE_ID = game_master_voice_id
+
+
+def _is_invalid_voice_id(voice_id: Optional[str]) -> bool:
+    """Heuristic check for placeholder/invalid voice IDs.
+
+    Some generated mysteries may include fake ElevenLabs IDs like
+    'elevenlabs-voice-id-john'. Treat these as invalid so we can
+    assign a real voice instead of triggering API errors.
+    """
+    if not voice_id:
+        return True
+    if isinstance(voice_id, str) and voice_id.startswith("elevenlabs-voice-id-"):
+        return True
+    return False
+
+
+def _get_scene_mood_for_state(state: GameState) -> str:
+    """Derive a scene mood string from the current config tone.
+
+    This is used to lightly steer scene images (e.g. more playful vs. brooding)
+    without changing the underlying mystery content.
+    """
+    tone = getattr(getattr(state, "config", None), "tone", None)
+    if tone == "Cheeky Adult Comedy":
+        return "playful, slightly silly, light-hearted"
+    if tone == "Flirty Noir":
+        return "moody, romantic, sultry but non-explicit"
+    if tone == "Gothic Romance":
+        return "brooding, romantic, gothic"
+    return "mysterious"
 
 
 def _background_generate_title_card_from_premise(session_id: str):
@@ -122,10 +153,20 @@ def start_new_game(session_id: str):
     state = get_or_create_state(session_id)
     state.reset_game()
 
+    # Ensure we have a configuration object for this session
+    if not hasattr(state, "config") or state.config is None:
+        state.config = create_validated_config()
+    config = state.config
+    # Cache tone instruction on state so it can be used in continue prompts
+    try:
+        state.tone_instruction = config.get_tone_instruction()
+    except Exception:  # noqa: BLE001
+        state.tone_instruction = None
+
     # ========== STAGE 1: FAST PREMISE ==========
     logger.info("Generating mystery premise...")
     t0 = time.perf_counter()
-    premise = generate_mystery_premise()
+    premise = generate_mystery_premise(config=config)
     t1 = time.perf_counter()
     logger.info("[PERF] Mystery premise generation took %.2fs", t1 - t0)
 
@@ -235,16 +276,28 @@ system or background tasks. Stay purely in-world."""
     def _background_generate_full_case(sess_id: str, premise_obj):
         bg_state = get_or_create_state(sess_id)
         try:
+            # Use the latest config for this session when generating the full case
+            if not hasattr(bg_state, "config") or bg_state.config is None:
+                bg_state.config = create_validated_config()
+            bg_config = bg_state.config
+            # Keep tone_instruction on state in sync with config
+            try:
+                bg_state.tone_instruction = bg_config.get_tone_instruction()
+            except Exception:  # noqa: BLE001
+                bg_state.tone_instruction = None
+
             logger.info("[BG] Starting full mystery generation in background...")
             t_full_0 = time.perf_counter()
-            full_mystery = generate_mystery(premise=premise_obj)
+            full_mystery = generate_mystery(premise=premise_obj, config=bg_config)
             t_full_1 = time.perf_counter()
             logger.info(
                 "[PERF] Full mystery generation (background) took %.2fs",
                 t_full_1 - t_full_0,
             )
             bg_state.mystery = full_mystery
-            bg_state.system_prompt = prepare_game_prompt(full_mystery)
+            bg_state.system_prompt = prepare_game_prompt(
+                full_mystery, bg_state.tone_instruction
+            )
             bg_state.mystery_ready = True
             logger.info("[BG] Full mystery is ready for session %s", sess_id)
 
@@ -493,7 +546,7 @@ def process_player_action(
                     "Error resolving suspect name via AI; falling back to heuristics only"
                 )
     
-    if suspect_to_assign and not suspect_to_assign.voice_id:
+    if suspect_to_assign and _is_invalid_voice_id(getattr(suspect_to_assign, "voice_id", None)):
         logger.info("Assigning voice on-demand for suspect: %s", suspect_to_assign.name)
         # Get list of already-used voice IDs to avoid duplicates
         used_voice_ids = [
@@ -567,7 +620,7 @@ def process_player_action(
         if suspect:
             # Assign voice on-demand if not already assigned
             # (May have been assigned earlier for "talk" action)
-            if not suspect.voice_id:
+            if _is_invalid_voice_id(getattr(suspect, "voice_id", None)):
                 logger.info("Assigning voice on-demand for suspect: %s", speaker)
                 # Get list of already-used voice IDs to avoid duplicates
                 used_voice_ids = [
@@ -614,10 +667,11 @@ def process_player_action(
                 # Use the response text as context for scene generation
                 # Clean the response to extract relevant descriptive content
                 context_text = clean_response[:500]  # Use first 500 chars as context
+                mood = _get_scene_mood_for_state(state)
                 scene_path = service.generate_scene(
                     location_name=location,
                     setting_description=state.mystery.setting if state.mystery else "",
-                    mood="mysterious",
+                    mood=mood,
                     context=context_text,
                 )
                 if scene_path:
@@ -637,6 +691,14 @@ def process_player_action(
     voice_id = None
     if speaker and speaker != "Game Master":
         voice_id = get_suspect_voice_id(speaker, state)
+        if _is_invalid_voice_id(voice_id):
+            logger.warning(
+                "[GAME] Ignoring invalid/placeholder voice_id '%s' for %s, "
+                "falling back to default assignment",
+                voice_id,
+                speaker,
+            )
+            voice_id = None
     voice_id = voice_id or GAME_MASTER_VOICE_ID
 
     # Generate audio
@@ -959,10 +1021,12 @@ def _generate_scene_background(
         logger.info("[BG] Generating scene for %s...", location)
         service = get_image_service()
         if service and service.is_available:
+            bg_state = get_or_create_state(session_id)
+            mood = _get_scene_mood_for_state(bg_state)
             scene_path = service.generate_scene(
                 location_name=location,
                 setting_description=mystery_setting,
-                mood="mysterious",
+                mood=mood,
                 context=context_text,
             )
             if scene_path:

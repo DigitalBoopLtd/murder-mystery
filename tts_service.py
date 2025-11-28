@@ -306,9 +306,19 @@ def text_to_speech(
         logger.info(f"[TTS] SUCCESS with timestamps: {audio_path}")
         return audio_path, timestamps
 
-    # Fallback to basic TTS (no timestamps but always works)
+    # Fallback to basic TTS (no timestamps but should be reliable)
     logger.info("[TTS] Falling back to basic convert()")
     audio_path = text_to_speech_basic(text, voice_id)
+
+    # If that failed AND we were using a non-default voice, retry once with the
+    # default Game Master voice to avoid total failure from a bad voice_id.
+    if not audio_path and voice_id and voice_id != GAME_MASTER_VOICE_ID:
+        logger.warning(
+            "[TTS] Basic convert() failed for voice_id '%s', retrying with "
+            "default Game Master voice",
+            voice_id,
+        )
+        audio_path = text_to_speech_basic(text, GAME_MASTER_VOICE_ID)
 
     if audio_path:
         logger.info(f"[TTS] SUCCESS with basic convert: {audio_path}")

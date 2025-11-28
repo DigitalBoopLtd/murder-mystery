@@ -12,6 +12,7 @@ from langchain_core.output_parsers import PydanticOutputParser
 from langchain_core.runnables import RunnableLambda
 from models import Mystery, MysteryPremise
 from voice_service import get_voice_service
+from mystery_config import MysteryConfig
 
 logger = logging.getLogger(__name__)
 
@@ -92,11 +93,25 @@ def strip_markdown_json(message) -> str:
     return text.strip()
 
 
-def generate_mystery_premise() -> MysteryPremise:
-    """Generate a lightweight premise for fast startup."""
+def generate_mystery_premise(config: Optional[MysteryConfig] = None) -> MysteryPremise:
+    """Generate a lightweight premise for fast startup.
 
-    # Pick a random setting type to force variety
-    setting_type = random.choice(SETTING_TYPES)
+    If a config is provided, use its setting/era preferences to choose the
+    setting type; otherwise, pick a random setting type to force variety.
+    """
+
+    tone_line = ""
+    if config:
+        setting_type = config.get_setting_for_generation()
+        tone_instruction = config.get_tone_instruction()
+        if tone_instruction:
+            tone_line = f"""
+
+TONE: {tone_instruction}
+"""
+    else:
+        # Pick a random setting type to force variety
+        setting_type = random.choice(SETTING_TYPES)
 
     llm = ChatOpenAI(
         model="gpt-4o",
@@ -120,6 +135,7 @@ IMPORTANT: The setting MUST be: {setting_type}
 Build the victim and scenario around this specific setting. Make it vivid, atmospheric, and engaging.
 
 Constraints:
+{tone_line}
 - setting: 1-2 sentences describing {setting_type}, vivid but concise. Include specific details that make it feel real.
 - victim_name: single full name appropriate for this setting
 - victim_background: 1-2 sentences about who they are and why someone
@@ -161,6 +177,7 @@ Do NOT include any text before or after the JSON. Start with {{ and end with }}.
         {
             "format_instructions": parser.get_format_instructions(),
             "setting_type": setting_type,
+            "tone_line": tone_line,
         }
     )
     logger.info(
@@ -171,7 +188,10 @@ Do NOT include any text before or after the JSON. Start with {{ and end with }}.
     return premise
 
 
-def generate_mystery(premise: Optional[MysteryPremise] = None) -> Mystery:
+def generate_mystery(
+    premise: Optional[MysteryPremise] = None,
+    config: Optional[MysteryConfig] = None,
+) -> Mystery:
     """Generate a complete murder mystery scenario.
 
     If a premise is provided, the model MUST keep the setting and victim
@@ -200,6 +220,31 @@ Victim name: {premise.victim_name}
 Victim background: {premise.victim_background}
 """
 
+    # Optional difficulty/tone guidance derived from configuration
+    difficulty_block = ""
+    tone_block = ""
+    if config is not None:
+        try:
+            difficulty = config.get_difficulty_modifier()
+        except Exception:
+            difficulty = None
+
+        if difficulty:
+            difficulty_block = f"""
+
+DIFFICULTY SETTINGS:
+- Clue clarity: {difficulty.get('clue_clarity')}
+- Red herrings: {difficulty.get('red_herrings')}
+- Alibi complexity: {difficulty.get('alibi_complexity')}
+- Hint level: {difficulty.get('hint_level')}"""
+
+        tone_instruction = config.get_tone_instruction()
+        if tone_instruction:
+            tone_block = f"""
+
+TONE OVERRIDE:
+{tone_instruction}"""
+
     prompt = ChatPromptTemplate.from_messages(
         [
             (
@@ -218,6 +263,8 @@ DIVERSITY REQUIREMENT: If no premise is provided, AVOID common tropes like Victo
 - Sci-fi/futuristic (space stations, cyberpunk clubs, smart homes, quantum labs)
 
 TONE: Your audience appreciates clever references, subtle tech humor, and well-crafted puzzles. Make the mystery engaging and intellectually satisfying.
+{tone_block}
+{difficulty_block}
 
 Create an interesting victim with enemies, 4 distinct suspects with secrets and motives, and 5 clues that lead to solving the case. One suspect is the murderer. Include one red herring clue.
 
@@ -273,6 +320,8 @@ CRITICAL: Return ONLY valid JSON. Do NOT wrap it in markdown code blocks. Do NOT
                 {
                     "format_instructions": parser.get_format_instructions(),
                     "premise_block": premise_block,
+                    "tone_block": tone_block,
+                    "difficulty_block": difficulty_block,
                 }
             )
             logger.info("Successfully generated full mystery on attempt %s", attempt)
@@ -398,7 +447,9 @@ def assign_voices_to_mystery(mystery: Mystery) -> Mystery:
         return mystery
 
 
-def prepare_game_prompt(mystery: Mystery) -> str:
+def prepare_game_prompt(
+    mystery: Mystery, tone_instruction: Optional[str] = None
+) -> str:
     """Prepare the system prompt for the game master."""
     suspect_list = "\n".join([f"- {s.name} ({s.role})" for s in mystery.suspects])
     clue_list = "\n".join(
@@ -420,6 +471,14 @@ Murder details: Used {mystery.weapon} because {mystery.motive}''' if s.isGuilty 
             for s in mystery.suspects
         ]
     )
+
+    tone_block = ""
+    if tone_instruction:
+        tone_block = f"""
+
+## TONE
+{tone_instruction}
+"""
 
     system_prompt = f"""You are the Game Master for a murder mystery game.
 
@@ -461,6 +520,8 @@ The player can already see suspects, locations, objectives, and found clues in s
 - Keep responses focused, atmospheric, and conversational
 - When welcoming: Set the MOOD briefly (2-3 sentences), then ask what they'd like to do first
 - Be concise - no walls of text or bullet-point lists of what's available
+
+{tone_block}
 
 Welcome the player with atmosphere and ask what they'd like to investigate!"""
 

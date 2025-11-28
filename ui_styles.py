@@ -110,6 +110,37 @@ RETRO_CSS = """
     color: var(--text-primary) !important;
 }
 
+/* Settings tab: make input containers & labels transparent (no white cards),
+   but keep dropdown menus on a solid dark background. */
+.settings-column {
+    --input-background-fill: transparent;
+    --input-shadow: none;
+    /* Use our dark card color for any generic primary fills (e.g. dropdown menus) */
+    --background-fill-primary: var(--bg-card);
+    --checkbox-label-background-fill: transparent;
+    --checkbox-label-shadow: none;
+}
+
+.settings-column label {
+    background: transparent !important;
+    box-shadow: none !important;
+}
+
+/* Global fix for Svelte checkbox/radio-style labels (used by dropdown triggers, etc.)
+   Ensure they never flash white, and match our retro dark card styling instead. */
+label.svelte-19qdtil {
+    background: var(--bg-card) !important;
+    border-color: var(--border-dark) !important;
+    box-shadow: none !important;
+    color: var(--text-primary) !important;
+}
+
+label.svelte-19qdtil:hover {
+    background: var(--bg-panel) !important;
+    color: var(--text-primary) !important;
+}
+
+
 /* Ensure portrait-image and ALL its children have transparent background */
 .block.portrait-image,
 .block.portrait-image *,
