@@ -54,10 +54,10 @@ def create_ui_components() -> dict:
                     min_width=200,
                     elem_classes="side-column side-column-left",
                 ):
-                    # Victim and Scene - first card (open by default)
+                    # Case Details
                     with gr.Accordion(
                         "🧳 CASE DETAILS",
-                        open=True,
+                        open=False,
                         elem_classes="side-panel",
                     ):
                         victim_scene_html = gr.HTML(
@@ -65,15 +65,30 @@ def create_ui_components() -> dict:
                             elem_classes="transcript-panel",
                         )
 
-                    # Suspects list - show who can be questioned (open by default)
+                    # Suspects list
                     with gr.Accordion(
                         "🎭 SUSPECTS",
-                        open=True,
+                        open=False,
                         elem_classes="side-panel suspects-panel",
                     ):
                         suspects_list_html = gr.HTML(
                             "<em>Start a game to see suspects...</em>",
                             elem_classes="transcript-panel suspects-list",
+                        )
+
+                    # Accusations card
+                    with gr.Accordion(
+                        "⚖️ ACCUSATIONS",
+                        open=False,
+                        elem_classes="side-panel",
+                    ):
+                        accusations_html = gr.HTML(
+                            '<div class="accusations-display">Accusations: '
+                            "<span>"
+                            '<span class="accusations-pip"></span>'
+                            '<span class="accusations-pip"></span>'
+                            '<span class="accusations-pip"></span>'
+                            "</span></div>"
                         )
 
                 # === CENTER: MAIN STAGE ===
@@ -126,6 +141,51 @@ def create_ui_components() -> dict:
                             label=None,
                             show_label=False,
                         )
+                    
+                    # Tab group with accordion content (always visible)
+                    with gr.Tabs(elem_classes="info-tabs"):
+                        # Case Details tab
+                        with gr.Tab("🧳 CASE DETAILS"):
+                            victim_scene_html_tab = gr.HTML(
+                                "<em>Start a game to see case details...</em>",
+                                elem_classes="transcript-panel",
+                            )
+                        
+                        # Suspects tab
+                        with gr.Tab("🎭 SUSPECTS"):
+                            suspects_list_html_tab = gr.HTML(
+                                "<em>Start a game to see suspects...</em>",
+                                elem_classes="transcript-panel suspects-list",
+                            )
+                        
+                        # Locations tab
+                        with gr.Tab("📍 LOCATIONS"):
+                            locations_html_tab = gr.HTML("<em>Start a game...</em>")
+                        
+                        # Clues Found tab
+                        with gr.Tab("🔎 CLUES FOUND"):
+                            clues_html_tab = gr.HTML("<em>No clues yet...</em>")
+                        
+                        # Accusations tab
+                        with gr.Tab("⚖️ ACCUSATIONS"):
+                            accusations_html_tab = gr.HTML(
+                                '<div class="accusations-display">Accusations: '
+                                "<span>"
+                                '<span class="accusations-pip"></span>'
+                                '<span class="accusations-pip"></span>'
+                                '<span class="accusations-pip"></span>'
+                                "</span></div>"
+                            )
+                        
+                        # Detective Notebook tab
+                        with gr.Tab("📓 DETECTIVE NOTEBOOK"):
+                            notebook_html_tab = gr.HTML(
+                                '''<div class="notebook-empty">
+                                    <div class="notebook-icon">📓</div>
+                                    <div>No interrogations recorded yet.</div>
+                                    <div class="notebook-hint">Talk to suspects to fill your notebook.</div>
+                                </div>'''
+                            )
 
                 # === RIGHT: SIDE PANEL ===
                 with gr.Column(
@@ -133,36 +193,21 @@ def create_ui_components() -> dict:
                     min_width=200,
                     elem_classes="side-column side-column-right",
                 ):
-                    # Locations card (open by default)
+                    # Locations card
                     with gr.Accordion(
                         "📍 LOCATIONS",
-                        open=True,
+                        open=False,
                         elem_classes="side-panel",
                     ):
                         locations_html = gr.HTML("<em>Start a game...</em>")
 
-                    # Clues card (open by default)
+                    # Clues card
                     with gr.Accordion(
                         "🔎 CLUES FOUND",
-                        open=True,
+                        open=False,
                         elem_classes="side-panel",
                     ):
                         clues_html = gr.HTML("<em>No clues yet...</em>")
-
-                    # Accusations card (open by default)
-                    with gr.Accordion(
-                        "⚖️ ACCUSATIONS",
-                        open=True,
-                        elem_classes="side-panel",
-                    ):
-                        accusations_html = gr.HTML(
-                            '<div class="accusations-display">Accusations: '
-                            "<span>"
-                            '<span class="accusations-pip"></span>'
-                            '<span class="accusations-pip"></span>'
-                            '<span class="accusations-pip"></span>'
-                            "</span></div>"
-                        )
 
                     # Detective Notebook - conversation timeline & contradictions
                     with gr.Accordion(
@@ -245,6 +290,12 @@ def create_ui_components() -> dict:
         "clues_html": clues_html,
         "accusations_html": accusations_html,
         "notebook_html": notebook_html,
+        "victim_scene_html_tab": victim_scene_html_tab,
+        "suspects_list_html_tab": suspects_list_html_tab,
+        "locations_html_tab": locations_html_tab,
+        "clues_html_tab": clues_html_tab,
+        "accusations_html_tab": accusations_html_tab,
+        "notebook_html_tab": notebook_html_tab,
         "era_dropdown": era_dropdown,
         "setting_dropdown": setting_dropdown,
         "difficulty_radio": difficulty_radio,

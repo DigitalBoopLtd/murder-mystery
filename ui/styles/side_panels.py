@@ -538,4 +538,80 @@ CSS_SIDE_PANELS = """/* ========== SIDE PANELS - BASE ========== */
     background: var(--terminal-green);
 }
 
+/* ========== VERTICAL TABS IN LEFT COLUMN ========== */
+.vertical-tabs-container {
+    display: flex !important;
+    flex-direction: row !important;
+    width: 100% !important;
+    height: 100% !important;
+    gap: 0 !important;
+}
+
+/* Left side: Vertical tab navigation buttons */
+.vertical-tabs-nav {
+    display: flex !important;
+    flex-direction: column !important;
+    width: 60px !important;
+    min-width: 60px !important;
+    max-width: 60px !important;
+    border-right: 2px solid var(--terminal-green-border-soft) !important;
+    background: rgba(0, 20, 0, 0.4) !important;
+    padding: 8px 4px !important;
+    gap: 4px !important;
+}
+
+/* Style vertical tab buttons */
+.vertical-tab-btn {
+    width: 100% !important;
+    padding: 12px 8px !important;
+    font-family: var(--font-retro-mono) !important;
+    font-size: 16px !important;
+    font-weight: 600 !important;
+    color: var(--terminal-green-muted) !important;
+    background: transparent !important;
+    border: 1px solid var(--terminal-green-border-soft) !important;
+    border-radius: 0 !important;
+    text-align: center !important;
+    cursor: pointer !important;
+    transition: all 0.2s ease !important;
+    min-height: 50px !important;
+}
+
+.vertical-tab-btn:hover {
+    background: var(--terminal-green-hover) !important;
+    color: var(--terminal-green) !important;
+    border-color: var(--terminal-green) !important;
+}
+
+.vertical-tab-btn:focus {
+    background: rgba(51, 255, 51, 0.2) !important;
+    color: var(--terminal-green) !important;
+    border-color: var(--terminal-green) !important;
+    text-shadow: 0 0 8px var(--terminal-green) !important;
+}
+
+/* Right side: Tab content area */
+.vertical-tabs-content {
+    flex: 1 !important;
+    padding: 16px !important;
+    background: rgba(0, 20, 0, 0.3) !important;
+    border: 1px solid var(--terminal-green-border-soft) !important;
+    min-height: 400px !important;
+    overflow-y: auto !important;
+}
+
+/* Vertical tab content styling */
+.vertical-tab-content {
+    font-family: var(--font-body) !important;
+    font-size: 14px !important;
+    color: var(--terminal-green) !important;
+    padding: 20px !important;
+    text-align: center !important;
+}
+
+.vertical-tab-panel {
+    width: 100% !important;
+    height: 100% !important;
+}
+
 """

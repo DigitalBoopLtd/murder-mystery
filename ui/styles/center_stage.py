@@ -36,6 +36,9 @@ CSS_CENTER_STAGE = """/* ========== MAIN LAYOUT ========== */
         inset 0 0 30px rgba(0, 255, 255, 0.05),
         0 0 40px rgba(0, 255, 255, 0.3),
         0 0 80px rgba(0, 255, 255, 0.1) !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
 }
 
 /* Hide unwanted elements that appear in center column during processing */
@@ -195,9 +198,9 @@ img { border: 4px solid white !important; }
 /* ========== SPEAKER NAME ========== */
 .speaker-name {
     font-family: var(--font-retro-mono) !important;
-    font-size: 16px !important;
+    font-size: 22px !important;
     font-weight: 700 !important;
-    color: var(--accent-blue) !important;
+    color: #2d2418 !important;
     text-align: center !important;
     text-transform: uppercase !important;
     letter-spacing: 2px !important;
@@ -220,6 +223,13 @@ img { border: 4px solid white !important; }
     box-shadow: none !important;
     padding: 0 !important;
     margin: 0 !important;
+}
+
+/* Make the styler wrapper stretch to full height */
+.center-column > .gr-group > .styler {
+    height: 100% !important;
+    display: flex !important;
+    flex-direction: column !important;
 }
 
 /* ========== AUDIO PLAYER & SUBTITLES ========== */

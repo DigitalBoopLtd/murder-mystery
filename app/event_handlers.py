@@ -131,6 +131,12 @@ def on_start_game(sess_id, progress=gr.Progress()):
         gr.update(),  # locations_html
         gr.update(),  # clues_html
         gr.update(),  # accusations_html
+        gr.update(),  # victim_scene_html_tab
+        gr.update(),  # suspects_list_html_tab
+        gr.update(),  # locations_html_tab
+        gr.update(),  # clues_html_tab
+        gr.update(),  # accusations_html_tab
+        gr.update(),  # notebook_html_tab
         gr.update(),  # mystery_check_timer
     ]
 
@@ -290,6 +296,13 @@ def on_start_game(sess_id, progress=gr.Progress()):
         format_clues_html(state.clues_found),
         # Accusations
         format_accusations_html(state.wrong_accusations),
+        # Tab components (replicated from accordions)
+        victim_html,
+        format_suspects_list_html(None, state.suspects_talked_to, loading=True),
+        format_locations_html(None, state.searched_locations, loading=True),
+        format_clues_html(state.clues_found),
+        format_accusations_html(state.wrong_accusations),
+        format_detective_notebook_html(state.suspect_states),
         # Activate timer to check when mystery is ready
         gr.update(active=True),
     ]
@@ -309,17 +322,24 @@ def check_mystery_ready(sess_id: str):
     if ready and state.mystery is not None:
         # Mystery is ready - update UI and stop timer
         logger.info("[APP] Timer: Full mystery ready, updating UI panels")
+        victim_html = format_victim_scene_html(state.mystery)
+        suspects_html = format_suspects_list_html(
+            state.mystery,
+            state.suspects_talked_to,
+            loading=False,
+            suspect_states=state.suspect_states
+        )
+        locations_html = format_locations_html(
+            state.mystery, state.searched_locations, loading=False
+        )
         return [
-            format_victim_scene_html(state.mystery),
-            format_suspects_list_html(
-                state.mystery,
-                state.suspects_talked_to,
-                loading=False,
-                suspect_states=state.suspect_states
-            ),
-            format_locations_html(
-                state.mystery, state.searched_locations, loading=False
-            ),
+            victim_html,
+            suspects_html,
+            locations_html,
+            # Tab components (replicated from accordions)
+            victim_html,
+            suspects_html,
+            locations_html,
             gr.update(active=False),  # Stop the timer
         ]
     else:
@@ -328,6 +348,10 @@ def check_mystery_ready(sess_id: str):
             gr.update(),  # victim_scene_html - no change
             gr.update(),  # suspects_list_html - no change
             gr.update(),  # locations_html - no change
+            # Tab components - no change
+            gr.update(),
+            gr.update(),
+            gr.update(),
             gr.update(active=True),  # Keep timer running
         ]
 
@@ -524,7 +548,7 @@ def on_voice_input(audio_path: str, sess_id, progress=gr.Progress()):
     Stage 2 (slow): Generate TTS audio + images, yield final update with audio
     """
     if not audio_path:
-        yield [gr.update()] * 9
+        yield [gr.update()] * 15
         return
 
     # Normalize session id so it matches what on_start_game used
@@ -536,12 +560,12 @@ def on_voice_input(audio_path: str, sess_id, progress=gr.Progress()):
         state_before, "premise_setting", None
     ):
         logger.warning("[APP] Voice input received but no game started yet")
-        yield [gr.update()] * 9
+        yield [gr.update()] * 15
         return
 
     # Show progress indicator while processing
     progress(0, desc="🗣️ Transcribing...")
-    yield [gr.update()] * 9
+    yield [gr.update()] * 15
 
     # Store previous state to detect what changed
     # IMPORTANT: Make copies of the lists since state is mutated in place
@@ -566,7 +590,7 @@ def on_voice_input(audio_path: str, sess_id, progress=gr.Progress()):
     logger.info("[PERF] Transcription took %.2fs", t1 - t0)
 
     if not text.strip():
-        yield [gr.update()] * 9
+        yield [gr.update()] * 15
         return
 
     # Infer high-level action type from the transcribed text
@@ -676,6 +700,17 @@ def on_voice_input(audio_path: str, sess_id, progress=gr.Progress()):
         format_clues_html(state.clues_found),
         format_accusations_html(state.wrong_accusations),
         format_detective_notebook_html(state.suspect_states),
+        # Tab components (replicated from accordions)
+        format_victim_scene_html(state.mystery),
+        format_suspects_list_html(
+            state.mystery,
+            state.suspects_talked_to,
+            suspect_states=state.suspect_states
+        ),
+        format_locations_html(state.mystery, state.searched_locations),
+        format_clues_html(state.clues_found),
+        format_accusations_html(state.wrong_accusations),
+        format_detective_notebook_html(state.suspect_states),
     ]
 
     # ========== STAGE 2: SLOW - Generate audio + images ==========
@@ -772,6 +807,17 @@ def on_voice_input(audio_path: str, sess_id, progress=gr.Progress()):
             else gr.update()
         ),
         portrait_update,
+        format_victim_scene_html(state.mystery),
+        format_suspects_list_html(
+            state.mystery,
+            state.suspects_talked_to,
+            suspect_states=state.suspect_states
+        ),
+        format_locations_html(state.mystery, state.searched_locations),
+        format_clues_html(state.clues_found),
+        format_accusations_html(state.wrong_accusations),
+        format_detective_notebook_html(state.suspect_states),
+        # Tab components (replicated from accordions)
         format_victim_scene_html(state.mystery),
         format_suspects_list_html(
             state.mystery,

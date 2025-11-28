@@ -89,6 +89,12 @@ def create_app():
         clues_html = components["clues_html"]
         accusations_html = components["accusations_html"]
         notebook_html = components["notebook_html"]
+        victim_scene_html_tab = components["victim_scene_html_tab"]
+        suspects_list_html_tab = components["suspects_list_html_tab"]
+        locations_html_tab = components["locations_html_tab"]
+        clues_html_tab = components["clues_html_tab"]
+        accusations_html_tab = components["accusations_html_tab"]
+        notebook_html_tab = components["notebook_html_tab"]
         era_dropdown = components["era_dropdown"]
         setting_dropdown = components["setting_dropdown"]
         difficulty_radio = components["difficulty_radio"]
@@ -111,6 +117,13 @@ def create_app():
             clues_html,
             accusations_html,
             notebook_html,
+            # Tab components (replicated from accordions)
+            victim_scene_html_tab,
+            suspects_list_html_tab,
+            locations_html_tab,
+            clues_html_tab,
+            accusations_html_tab,
+            notebook_html_tab,
         ]
 
         # Settings tab - keep per-session config in GameState
@@ -175,6 +188,12 @@ def create_app():
                 locations_html,
                 clues_html,
                 accusations_html,
+                victim_scene_html_tab,
+                suspects_list_html_tab,
+                locations_html_tab,
+                clues_html_tab,
+                accusations_html_tab,
+                notebook_html_tab,
                 mystery_check_timer,  # Timer activation
             ],
         )
@@ -187,6 +206,9 @@ def create_app():
                 victim_scene_html,
                 suspects_list_html,
                 locations_html,
+                victim_scene_html_tab,
+                suspects_list_html_tab,
+                locations_html_tab,
                 mystery_check_timer,
             ],
         )
