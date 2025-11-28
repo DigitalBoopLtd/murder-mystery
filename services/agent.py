@@ -14,7 +14,7 @@ from langchain_core.messages import (
 from langgraph.graph import StateGraph, END
 from langgraph.prebuilt import ToolNode
 from langgraph.checkpoint.memory import MemorySaver
-from game.tools import interrogate_suspect
+from game.tools import interrogate_suspect, get_all_tools
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -29,15 +29,23 @@ class AgentState(TypedDict):
 
 
 def create_game_master_agent():
-    """Create a game master agent with tools."""
+    """Create a game master agent with tools.
+    
+    Tools include:
+    - interrogate_suspect: Always available
+    - search_past_statements: Available if RAG memory is initialized
+    - find_contradictions: Available if RAG memory is initialized
+    - get_cross_references: Available if RAG memory is initialized
+    """
     # max_tokens=600 allows for richer narrative responses when searching locations
     # while still keeping responses reasonably short for voice narration
     llm = ChatOpenAI(
         model="gpt-5.1", max_tokens=600, api_key=os.getenv("OPENAI_API_KEY")
     )
 
-    # Bind tools to the LLM
-    tools = [interrogate_suspect]
+    # Bind tools to the LLM - use get_all_tools() to include RAG tools if available
+    tools = get_all_tools()
+    logger.info("Creating agent with %d tool(s): %s", len(tools), [t.name for t in tools])
     llm_with_tools = llm.bind_tools(tools)
 
     # Create tool node with logging wrapper

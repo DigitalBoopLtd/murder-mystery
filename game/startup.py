@@ -29,6 +29,7 @@ from game.state_manager import (
     get_or_create_state,
 )
 from game.media import _prewarm_suspect_portraits, _prewarm_scene_images
+from services.game_memory import initialize_game_memory, reset_game_memory
 
 logger = logging.getLogger(__name__)
 
@@ -98,6 +99,13 @@ def start_new_game(session_id: str):
     """Start a new mystery game with fast premise + background case generation."""
     state = get_or_create_state(session_id)
     state.reset_game()
+
+    # Initialize RAG memory for semantic search (Phase 2 AI Enhancement)
+    reset_game_memory()
+    if initialize_game_memory():
+        logger.info("[RAG] Game memory initialized successfully")
+    else:
+        logger.warning("[RAG] Game memory not available (FAISS may not be installed)")
 
     # Ensure we have a configuration object for this session
     if not hasattr(state, "config") or state.config is None:

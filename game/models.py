@@ -1,7 +1,23 @@
 """Data models for the murder mystery game."""
 
-from typing import List, Optional
+from typing import Dict, List, Optional
 from pydantic import BaseModel, Field
+
+
+class SuspectState(BaseModel):
+    """Tracked emotional state and conversation history for a suspect.
+    
+    This is owned by the Game Master (orchestrator) and passed to stateless
+    suspect agents as context. Suspects don't store their own state.
+    """
+    
+    trust: int = Field(default=50, ge=0, le=100, description="0=hostile, 100=confiding")
+    nervousness: int = Field(default=30, ge=0, le=100, description="Increases when pressed")
+    conversations: List[Dict[str, str]] = Field(
+        default_factory=list,
+        description="List of {question, answer, turn} exchanges"
+    )
+    contradictions_caught: int = Field(default=0, description="Times caught in a lie")
 
 
 class Victim(BaseModel):

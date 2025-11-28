@@ -10,7 +10,7 @@ import base64
 import logging
 import tempfile
 import time
-from typing import Dict, Optional, List
+from typing import Dict, Optional, List, Tuple
 from PIL import Image, ImageDraw
 import gradio as gr
 from dotenv import load_dotenv
@@ -74,6 +74,42 @@ GAME_MASTER_VOICE_ID = "JBFqnCBsd6RMkjVDRZzb"
 # Logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# In-memory log buffer for UI debug panel
+UI_LOG_BUFFER: List[str] = []
+MAX_UI_LOG_LINES = 500
+
+
+class UILogHandler(logging.Handler):
+    """Logging handler that keeps a rolling buffer of recent logs for the UI."""
+
+    def emit(self, record: logging.LogRecord) -> None:
+        try:
+            msg = self.format(record)
+        except Exception:  # noqa: BLE001
+            msg = record.getMessage()
+
+        UI_LOG_BUFFER.append(msg)
+        # Keep only the last N lines
+        if len(UI_LOG_BUFFER) > MAX_UI_LOG_LINES:
+            del UI_LOG_BUFFER[:-MAX_UI_LOG_LINES]
+
+
+# Attach UI log handler to root logger so we capture logs from all modules
+_ui_log_handler = UILogHandler()
+_ui_log_handler.setLevel(logging.INFO)
+_ui_log_handler.setFormatter(
+    logging.Formatter("%(levelname)s:%(name)s:%(message)s")
+)
+logging.getLogger().addHandler(_ui_log_handler)
+
+
+def get_ui_logs() -> str:
+    """Return recent log lines for display in the UI debug panel."""
+    if not UI_LOG_BUFFER:
+        return "No logs captured yet. Interact with the game to generate logs."
+    # Show the most recent logs first for convenience
+    return "\n".join(UI_LOG_BUFFER[-MAX_UI_LOG_LINES:])
 
 # Global state
 game_states: Dict[str, object] = {}
@@ -253,40 +289,9 @@ def create_app():
                 '<div class="game-title"><span class="detective-avatar">🕵️‍♀️</span> MURDER MYSTERY</div>'
             )
 
-        # ====== MAIN LAYOUT & SETTINGS ======
+        # ====== MAIN LAYOUT, SETTINGS, AND DEBUG ======
         with gr.Tabs(elem_classes="main-tabs"):
-            with gr.Tab("Settings"):
-                with gr.Column(elem_classes="settings-column"):
-                    gr.Markdown(
-                        "### Mystery settings\n\n"
-                        "Adjust these before starting a new game. "
-                        "Changes apply to the **next** mystery you start in this browser session."
-                    )
-                    era_dropdown = gr.Dropdown(
-                        label="Era / category",
-                        choices=ERA_OPTIONS,
-                        value="Any",
-                        interactive=True,
-                    )
-                    setting_dropdown = gr.Dropdown(
-                        label="Setting",
-                        choices=["Random"] + get_settings_for_era("Any"),
-                        value="Random",
-                        interactive=True,
-                    )
-                    difficulty_radio = gr.Radio(
-                        label="Difficulty",
-                        choices=DIFFICULTY_LEVELS,
-                        value="Normal",
-                        interactive=True,
-                    )
-                    tone_radio = gr.Radio(
-                        label="Tone",
-                        choices=TONE_OPTIONS,
-                        value="Random",
-                        interactive=True,
-                    )
-
+            # ----- GAME TAB (DEFAULT) -----
             with gr.Tab("Game"):
                 # ====== MAIN LAYOUT ======
                 with gr.Row(elem_classes="main-layout-row"):
@@ -325,7 +330,8 @@ def create_app():
                         # Stage container (styled via .center-column > .gr-group in CSS)
                         with gr.Group():
 
-                            # Speaker name - hidden initially, will show when game starts
+                            # Speaker name - hidden until the mystery starts
+                            # (placeholder text is only shown after the first turn)
                             speaker_html = gr.HTML(
                                 '<div class="speaker-name" style="display: none;"></div>'
                             )
@@ -345,6 +351,7 @@ def create_app():
                                 label=None,
                                 show_label=False,
                                 autoplay=False,  # Don't autoplay initially - no audio to play yet
+                                elem_id="mm-audio-player",
                                 elem_classes="audio-player",
                             )
 
@@ -404,6 +411,56 @@ def create_app():
                                 '<span class="accusations-pip"></span>'
                                 "</span></div>"
                             )
+
+            # ----- SETTINGS TAB -----
+            with gr.Tab("Settings"):
+                with gr.Column(elem_classes="settings-column"):
+                    gr.Markdown(
+                        "### Mystery settings\n\n"
+                        "Adjust these before starting a new game. "
+                        "Changes apply to the **next** mystery you start in this browser session."
+                    )
+                    era_dropdown = gr.Dropdown(
+                        label="Era / category",
+                        choices=ERA_OPTIONS,
+                        value="Any",
+                        interactive=True,
+                    )
+                    setting_dropdown = gr.Dropdown(
+                        label="Setting",
+                        choices=["Random"] + get_settings_for_era("Any"),
+                        value="Random",
+                        interactive=True,
+                    )
+                    difficulty_radio = gr.Radio(
+                        label="Difficulty",
+                        choices=DIFFICULTY_LEVELS,
+                        value="Normal",
+                        interactive=True,
+                    )
+                    tone_radio = gr.Radio(
+                        label="Tone",
+                        choices=TONE_OPTIONS,
+                        value="Random",
+                        interactive=True,
+                    )
+
+            # ----- DEBUG TAB -----
+            with gr.Tab("Debug"):
+                with gr.Column(elem_classes="settings-column"):
+                    gr.Markdown(
+                        "### Debug logs\n\n"
+                        "These are the most recent server logs captured during gameplay.\n\n"
+                        "- Use the **Refresh logs** button to update.\n"
+                        "- Then copy/paste any relevant lines when sharing details with the AI assistant."
+                    )
+                    debug_logs_textbox = gr.Textbox(
+                        label="Recent logs",
+                        lines=20,
+                        value="No logs captured yet. Interact with the game to generate logs.",
+                        interactive=False,
+                    )
+                    refresh_logs_btn = gr.Button("🔄 Refresh logs")
 
         # Hidden timer for checking mystery completion (inactive by default)
         mystery_check_timer = gr.Timer(value=1.0, active=False)
@@ -831,6 +888,63 @@ def create_app():
                 "",  # Clear text input
             ]
 
+        def _infer_voice_action_type(message: str, state) -> Tuple[str, str]:
+            """Infer action_type and target from a transcribed voice command.
+
+            Returns:
+                (action_type, target)
+                where action_type is one of: "talk", "search", "accuse", "custom"
+            """
+            text = (message or "").strip()
+            text_lower = text.lower()
+
+            # Default: treat as free-form custom message
+            action_type = "custom"
+            target = ""
+
+            # Simple search intent detection
+            search_prefixes = [
+                "search ",
+                "search the ",
+                "search in ",
+                "look in ",
+                "look around ",
+                "look at ",
+                "check ",
+                "investigate ",
+            ]
+            if any(text_lower.startswith(p) for p in search_prefixes):
+                action_type = "search"
+
+                # Try to map to a known location using available locations from state
+                target = text
+                try:
+                    available_locations = (
+                        state.get_available_locations()
+                        if hasattr(state, "get_available_locations")
+                        else []
+                    )
+                except Exception:  # noqa: BLE001
+                    available_locations = []
+
+                best_match = None
+                best_score = 0
+                for loc in available_locations:
+                    loc_lower = loc.lower()
+                    # Score simple substring overlap
+                    if loc_lower in text_lower or text_lower in loc_lower:
+                        score = len(loc_lower)
+                        if score > best_score:
+                            best_score = score
+                            best_match = loc
+
+                if best_match:
+                    target = best_match
+                return action_type, target
+
+            # Could extend later for explicit "talk to X" or "accuse X" patterns
+            return action_type, target
+
         def on_voice_input(audio_path: str, sess_id, progress=gr.Progress()):
             """Handle voice input with two-stage yield for faster perceived response.
 
@@ -883,13 +997,21 @@ def create_app():
                 yield [gr.update()] * 8
                 return
 
+            # Infer high-level action type from the transcribed text
+            action_type, target = _infer_voice_action_type(text, state_before)
+
             # ========== STAGE 1: FAST - Run LLM logic only ==========
             # Use the full 0→100 range for the "thinking" phase
             progress(0.5, desc="🧠 Figuring out what happens...")
 
             t2 = time.perf_counter()
             clean_response, speaker, state, actions, audio_path_from_tool = (
-                run_action_logic("custom", "", text, sess_id)
+                run_action_logic(
+                    action_type,
+                    target,
+                    text if action_type == "custom" else "",
+                    sess_id,
+                )
             )
             t3 = time.perf_counter()
             logger.info("[PERF] Action logic took %.2fs", t3 - t2)
@@ -1185,10 +1307,17 @@ def create_app():
             outputs=[voice_input],
         )
 
+        # Debug tab - refresh logs
+        getattr(refresh_logs_btn, "click")(
+            fn=get_ui_logs,
+            inputs=None,
+            outputs=[debug_logs_textbox],
+        )
+
         # Hide speaker name when audio finishes playing
         def on_audio_stop():
-            """Clear speaker name when audio playback ends."""
-            return '<div class="speaker-name" style="display: none;"></div>'
+            """Reset speaker name to placeholder when audio playback ends."""
+            return '<div class="speaker-name">Awaiting your next move…</div>'
 
         # Use getattr to access the stop event (works across Gradio versions)
         if hasattr(audio_output, "stop"):

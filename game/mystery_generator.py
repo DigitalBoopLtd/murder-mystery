@@ -456,6 +456,7 @@ def prepare_game_prompt(
         [f'- "{c.id}": {c.description} [Location: {c.location}]' for c in mystery.clues]
     )
 
+    # Build suspect profiles with initial emotional state (game start)
     suspect_profiles = "\n".join(
         [
             f"""
@@ -467,7 +468,15 @@ Secret: {s.secret}
 Will share if asked: {s.clue_they_know}
 Guilty: {s.isGuilty}
 Voice ID: {s.voice_id or 'None'}{f'''
-Murder details: Used {mystery.weapon} because {mystery.motive}''' if s.isGuilty else ''}"""
+Murder details: Used {mystery.weapon} because {mystery.motive}''' if s.isGuilty else ''}
+
+EMOTIONAL STATE (initial - pass to tool):
+- Trust: 50%
+- Nervousness: 30%
+- Contradictions caught: 0
+
+CONVERSATION HISTORY (pass to tool):
+No previous conversations."""
             for s in mystery.suspects
         ]
     )
@@ -498,9 +507,25 @@ Murder details: Used {mystery.weapon} because {mystery.motive}''' if s.isGuilty 
 {suspect_profiles}
 
 ## YOUR ROLE
-1. When player wants to TALK to a suspect → Use "Interrogate Suspect" tool. IMPORTANT: Pass the suspect's FULL PROFILE from above INCLUDING their Voice ID.
-2. When player wants to SEARCH a location → Describe findings, reveal clues if correct location
-3. When player makes ACCUSATION → Check if correct with evidence
+1. TALK to suspect → MUST call "interrogate_suspect" tool with:
+   - name: Suspect's full name
+   - profile: Include ALL of the following in the profile string:
+     * Static info (role, personality, alibi, secret, clue_they_know, isGuilty)
+     * EMOTIONAL STATE (trust %, nervousness %, contradictions caught)
+     * CONVERSATION HISTORY (all previous exchanges with this suspect)
+     * BEHAVIORAL INSTRUCTIONS (if any - based on emotional state)
+   - question: The player's question/statement
+   - voice_id: The suspect's voice ID for audio
+2. SEARCH location → Describe findings, reveal clues if correct location
+3. ACCUSATION → Check if correct with evidence
+
+## RAG MEMORY TOOLS (use to enhance gameplay)
+- "search_past_statements" → When player references something said earlier
+- "find_contradictions" → When checking if a suspect contradicted themselves
+- "get_cross_references" → When confronting a suspect with what others said
+
+CRITICAL: For ANY talk/interrogate request, you MUST use the interrogate_suspect tool.
+CRITICAL: Always include the FULL profile with emotional state and conversation history!
 
 ## GAME RULES
 - 3 wrong accusations = lose

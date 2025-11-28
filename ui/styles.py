@@ -1,8 +1,8 @@
 """UI styling for the murder mystery game interface."""
 
 RETRO_CSS = """
-/* Import retro arcade fonts */
-@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap');
+/* Import fonts */
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&family=Source+Sans+3:wght@300;400;600;700&display=swap');
 
 /* ========== ROOT VARIABLES ========== */
 :root {
@@ -22,47 +22,24 @@ RETRO_CSS = """
     --accent-yellow: #FFFF00;
     --border-color: #00FFFF;
     --border-dark: #006666;
+    --terminal-green: #33ff33;
+    --terminal-green-soft: rgba(51, 255, 51, 0.3);
+    --terminal-green-soft-strong: rgba(51, 255, 51, 0.5);
+    --terminal-green-glow: rgba(51, 255, 51, 0.15);
+    --terminal-green-vignette: rgba(51, 255, 51, 0.08);
+    --terminal-green-hover: rgba(51, 255, 51, 0.1);
+    --terminal-green-border-strong: rgba(51, 255, 51, 0.3);
+    --terminal-green-border-soft: rgba(51, 255, 51, 0.2);
+    --terminal-green-accent: #90EE90;
+    --terminal-green-muted: #1a8f1a;
+    --font-body: 'Source Sans 3', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --font-retro-mono: 'VT323', monospace;
+    --font-retro-title: 'Press Start 2P', cursive;
 }
 
 /* ========== UTILITY PATTERNS ========== */
-/* Consolidated "hide element" pattern - use on selectors that need complete hiding */
-.u-hidden,
-.audio-player .play-pause-wrapper,
-.audio-player .play-pause-button,
-.audio-player .rewind,
-.audio-player .skip,
-.audio-player .controls,
-.audio-player .volume,
-.audio-player .playback,
-.audio-player .cc-button,
-.audio-player .waveform-container,
-.audio-player #waveform,
-.audio-player .timestamps,
-.audio-player time,
-.audio-player canvas,
-.audio-player button,
-.audio-player [role="button"],
-.audio-player [class*="button"],
-.audio-player [class*="control"]:not(:has(.subtitle-display)),
-.audio-player [class*="waveform"],
-.audio-player [class*="wave"],
-.audio-player [aria-label*="Skip"],
-.audio-player [aria-label*="Pause"],
-.audio-player [aria-label*="Play"],
-.audio-player [aria-label*="volume"],
-.audio-player [aria-label*="playback speed"],
-.audio-player [data-testid="waveform-controls"],
-.audio-player [data-testid="subtitles-toggle"],
-.audio-player [class*="download"],
-.audio-player [class*="share"],
-.audio-player svg:not([class*="subtitle"]),
-.audio-player .component-wrapper:not(:has(.subtitle-display)),
-[data-testid="waveform-controls"],
-[data-testid="status-tracker"].wrap.default.full.hide,
-[data-testid="status-tracker"].wrap.default:not(.full),
-[data-testid="status-tracker"].wrap.default.full:not(.center),
-.input-bar [data-testid="status-tracker"],
-.audio-player [data-testid="status-tracker"] {
+/* Hide utility class */
+.u-hidden {
     display: none !important;
     visibility: hidden !important;
     opacity: 0 !important;
@@ -74,23 +51,97 @@ RETRO_CSS = """
     left: -9999px !important;
 }
 
-/* ========== ANIMATIONS ========== */
-@keyframes button-pulse {
-    0%, 100% { 
-        box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.5), 0 0 10px rgba(0, 255, 255, 0.4), 0 0 20px rgba(0, 255, 255, 0.2);
-        transform: scale(1);
-        border-color: rgba(0, 255, 255, 0.8);
-    }
-    50% { 
-        box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.5), 0 0 25px rgba(0, 255, 255, 0.9), 0 0 50px rgba(0, 255, 255, 0.5), 0 0 80px rgba(0, 255, 255, 0.3);
-        transform: scale(1.02);
-        border-color: rgba(0, 255, 255, 1);
-    }
+/* Hide all built-in audio player controls - use precise ID selector */
+#mm-audio-player button,
+#mm-audio-player [role=\"button\"],
+#mm-audio-player [class*=\"button\"],
+#mm-audio-player [class*=\"control\"]:not(:has(.subtitle-display)),
+#mm-audio-player [class*=\"waveform\"],
+#mm-audio-player [class*=\"wave\"],
+#mm-audio-player [data-testid=\"waveform-controls\"],
+#mm-audio-player [data-testid=\"subtitles-toggle\"],
+#mm-audio-player [class*=\"download\"],
+#mm-audio-player [class*=\"share\"],
+#mm-audio-player svg:not([class*=\"subtitle\"]),
+#mm-audio-player .component-wrapper:not(:has(.subtitle-display)),
+#mm-audio-player canvas,
+#mm-audio-player time {
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+    height: 0 !important;
+    width: 0 !important;
+    overflow: hidden !important;
+    pointer-events: none !important;
+    position: absolute !important;
+    left: -9999px !important;
 }
 
-@keyframes statusPulse {
-    0%, 100% { border-color: var(--border-color); }
-    50% { border-color: var(--border-dark); }
+/* Hide status trackers that appear in wrong places (input bar, audio player, inline) */
+/* Only the centered modal should be visible - handled by dedicated status tracker section below */
+.input-bar [data-testid=\"status-tracker\"],
+#mm-audio-player [data-testid=\"status-tracker\"],
+[data-testid=\"status-tracker\"].wrap.default.full.hide,
+[data-testid=\"status-tracker\"].wrap.default:not(.full),
+[data-testid=\"status-tracker\"].wrap.default.full:not(.center) {
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+    height: 0 !important;
+    width: 0 !important;
+    overflow: hidden !important;
+    pointer-events: none !important;
+    position: absolute !important;
+    left: -9999px !important;
+}
+
+/* Hide duplicate/extra status tracker wrappers that appear during processing */
+/* Only hide wrapper divs that don't contain the visible status tracker */
+.wrap.default.full:not(:has([data-testid=\"status-tracker\"]:not(.hide):not(:empty))),
+.wrap.default:not(.full):not(:has([data-testid=\"status-tracker\"]:not(.hide):not(:empty))) {
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+    height: 0 !important;
+    width: 0 !important;
+    overflow: hidden !important;
+    pointer-events: none !important;
+    position: absolute !important;
+    left: -9999px !important;
+}
+
+/* Hide unwanted Gradio UI elements that appear during processing in center column */
+/* Hide empty input/textarea/textbox fields */
+.center-column textarea:empty,
+.center-column input[type=\"text\"]:empty,
+.center-column .gr-textbox:empty,
+.center-column .gr-textbox:not(:has(*)) {
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+    height: 0 !important;
+    width: 0 !important;
+    overflow: hidden !important;
+    pointer-events: none !important;
+    position: absolute !important;
+    left: -9999px !important;
+}
+
+/* Hide empty blocks in center column that aren't our main components */
+.center-column > .gr-group > .block:not(:has(.speaker-name)):not(:has(.portrait-image)):not(:has(#mm-audio-player)):not(:has([data-testid=\"status-tracker\"]:not(.hide):not(:empty))):empty,
+.center-column > .gr-group > .gr-block:not(:has(.speaker-name)):not(:has(.portrait-image)):not(:has(#mm-audio-player)):not(:has([data-testid=\"status-tracker\"]:not(.hide):not(:empty))):empty {
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+    height: 0 !important;
+    min-height: 0 !important;
+    overflow: hidden !important;
+}
+
+/* Hide any stray text/percentage indicators that appear during processing */
+/* Target text that contains percentage signs but isn't in status tracker */
+.center-column > .gr-group *:not([data-testid=\"status-tracker\"] *):not(.speaker-name *):not(.portrait-image *):not(#mm-audio-player *) {
+    /* Only hide if it's clearly a progress indicator - be conservative */
 }
 
 /* ========== BASE LAYOUT ========== */
@@ -223,7 +274,7 @@ label.svelte-19qdtil:hover {
 }
 
 .gr-button {
-    font-family: 'VT323', monospace !important;
+    font-family: var(--font-retro-mono) !important;
 }
 
 footer { display: none !important; }
@@ -241,7 +292,7 @@ footer { display: none !important; }
 }
 
 .game-title {
-    font-family: 'Press Start 2P', cursive;
+    font-family: var(--font-retro-title);
     font-size: 18px;
     font-weight: 700;
     color: var(--accent-blue);
@@ -304,6 +355,29 @@ footer { display: none !important; }
         inset 0 0 30px rgba(0, 255, 255, 0.05),
         0 0 40px rgba(0, 255, 255, 0.3),
         0 0 80px rgba(0, 255, 255, 0.1) !important;
+}
+
+/* Hide unwanted elements that appear in center column during processing */
+/* Hide any blocks that aren't our main components (speaker, portrait, audio, status tracker) */
+.center-column > .gr-group > .block:not(:has(.speaker-name)):not(:has(.portrait-image)):not(:has(#mm-audio-player)):not(:has([data-testid=\"status-tracker\"]:not(.hide):not(:empty))),
+.center-column > .gr-group > .gr-block:not(:has(.speaker-name)):not(:has(.portrait-image)):not(:has(#mm-audio-player)):not(:has([data-testid=\"status-tracker\"]:not(.hide):not(:empty))) {
+    /* Only hide if empty or contains unwanted text/inputs */
+}
+
+/* Hide textareas, inputs, and textboxes in center column (except status tracker content) */
+.center-column > .gr-group textarea:not([data-testid=\"status-tracker\"] *),
+.center-column > .gr-group input[type=\"text\"]:not([data-testid=\"status-tracker\"] *),
+.center-column > .gr-group .gr-textbox:not([data-testid=\"status-tracker\"] *),
+.center-column > .gr-group .gr-textarea:not([data-testid=\"status-tracker\"] *) {
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+    height: 0 !important;
+    width: 0 !important;
+    overflow: hidden !important;
+    pointer-events: none !important;
+    position: absolute !important;
+    left: -9999px !important;
 }
 
 /* Scanlines overlay */
@@ -439,7 +513,7 @@ img { border: 4px solid white !important; }
 
 /* ========== SPEAKER NAME ========== */
 .speaker-name {
-    font-family: 'VT323', monospace !important;
+    font-family: var(--font-retro-mono) !important;
     font-size: 16px !important;
     font-weight: 700 !important;
     color: var(--accent-blue) !important;
@@ -453,8 +527,23 @@ img { border: 4px solid white !important; }
     min-width: 200px !important;
 }
 
+/* Ensure the speaker-name wrapper uses the main stage background
+   rather than the default card background. This removes the dark
+   card strip under the (initially hidden) speaker name. */
+.center-column .block.svelte-1plpy97:has(.speaker-name),
+.center-column .block:has(.speaker-name),
+.center-column .html-container,
+.center-column .html-container .prose {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+}
+
 /* ========== AUDIO PLAYER & SUBTITLES ========== */
-.audio-player {
+/* Main audio player container - use ID for precision */
+#mm-audio-player {
     position: relative !important;
     width: 100% !important;
     margin: 0 !important;
@@ -469,7 +558,7 @@ img { border: 4px solid white !important; }
 }
 
 /* Hide audio element visually but keep functional */
-.audio-player audio {
+#mm-audio-player audio {
     position: absolute !important;
     width: 1px !important;
     height: 1px !important;
@@ -478,23 +567,22 @@ img { border: 4px solid white !important; }
 }
 
 /* Hide audio player when empty */
-.audio-player:has(.empty),
-.block.audio-player:has(.empty) {
+#mm-audio-player:has(.empty) {
     display: none !important;
     height: 0 !important;
     min-height: 0 !important;
 }
 
 /* Subtitle display - always visible */
-.audio-player .subtitle-display,
-.audio-player [data-testid="subtitle-display"] {
+#mm-audio-player .subtitle-display,
+#mm-audio-player [data-testid="subtitle-display"] {
     display: block !important;
     visibility: visible !important;
     opacity: 1 !important;
     color: #2d2418 !important;
     text-align: center !important;
     font-size: 24px !important;
-    font-family: 'VT323', monospace !important;
+    font-family: var(--font-retro-mono) !important;
     font-weight: 600 !important;
     margin: 0 !important;
     height: auto !important;
@@ -506,7 +594,7 @@ img { border: 4px solid white !important; }
 }
 
 /* Component wrapper containing subtitles */
-.audio-player .component-wrapper:has(.subtitle-display) {
+#mm-audio-player .component-wrapper:has(.subtitle-display) {
     background: transparent !important;
     border: none !important;
     padding: 0 !important;
@@ -518,7 +606,7 @@ img { border: 4px solid white !important; }
 }
 
 /* Audio player in context of portrait image */
-.center-column > .gr-group:has(.portrait-image img[src]:not([src=""])) .block.audio-player {
+.center-column > .gr-group:has(.portrait-image img[src]:not([src=""])) #mm-audio-player {
     margin: 0 !important;
     background: transparent !important;
     border: none !important;
@@ -526,7 +614,7 @@ img { border: 4px solid white !important; }
 }
 
 /* Audio player without portrait image */
-.center-column > .gr-group:not(:has(.portrait-image img[src]:not([src=""]))) .audio-player {
+.center-column > .gr-group:not(:has(.portrait-image img[src]:not([src=""]))) #mm-audio-player {
     position: relative !important;
     background: var(--bg-panel) !important;
     border: 1px solid var(--border-color) !important;
@@ -580,171 +668,8 @@ img { border: 4px solid white !important; }
     padding: 0 !important;
 }
 
-/* ========== LEFT PANEL - GREEN PHOSPHOR TERMINAL ========== */
-.side-column-left .gr-group:has(.panel-title) {
-    background: #040804 !important;
-    /* Screen glass edge - subtle green tint */
-    border: 2px solid #0a2a0a !important;
-    border-radius: 6px !important;
-    position: relative;
-    overflow: hidden;
-    padding: 12px 10px 10px 10px !important;
-    box-sizing: border-box;
-    /* CRT monitor bezel - layered effect using box-shadow */
-    /* Inner bevel (dark) -> Mid bezel (gray) -> Outer bevel (highlight) -> Ambient glow */
-    box-shadow: 
-        inset 0 0 20px rgba(0, 0, 0, 0.8),
-        0 0 0 4px #1a1a1a,
-        0 0 0 6px #3a3a3a,
-        0 0 0 10px #2d2d2d,
-        0 0 0 12px #1a1a1a,
-        0 0 20px rgba(51, 255, 51, 0.15) !important;
-}
-
-/* Power LED indicator */
-.side-column-left .gr-group:has(.panel-title) .panel-title::after {
-    content: '●';
-    position: absolute;
-    right: 8px;
-    top: 50%;
-    transform: translateY(-50%);
-    font-size: 8px;
-    color: #33ff33;
-    text-shadow: 0 0 6px #33ff33, 0 0 12px #33ff33;
-    animation: led-pulse 2s ease-in-out infinite;
-}
-
-@keyframes led-pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.6; }
-}
-
-/* Terminal scanlines */
-.side-column-left .gr-group:has(.panel-title)::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background: repeating-linear-gradient(
-        0deg,
-        transparent,
-        transparent 2px,
-        rgba(0, 0, 0, 0.4) 2px,
-        rgba(0, 0, 0, 0.4) 4px
-    );
-    pointer-events: none;
-    z-index: 10;
-}
-
-/* Phosphor screen glow */
-.side-column-left .gr-group:has(.panel-title)::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background: radial-gradient(ellipse at center, rgba(51, 255, 51, 0.08) 0%, transparent 70%);
-    pointer-events: none;
-    z-index: 1;
-}
-
-/* Terminal header with system prompt */
-.side-column-left .panel-title {
-    font-family: 'VT323', monospace !important;
-    color: #33ff33 !important;
-    font-size: 13px !important;
-    font-weight: 400 !important;
-    text-shadow: 0 0 8px #33ff33, 0 0 16px rgba(51, 255, 51, 0.5);
-    letter-spacing: 2px !important;
-    text-transform: uppercase !important;
-    padding: 4px 8px !important;
-    margin-bottom: 8px !important;
-    border-bottom: 1px solid rgba(51, 255, 51, 0.3);
-    position: relative;
-    z-index: 20;
-}
-
-/* Add terminal prompt before title */
-.side-column-left .panel-title::before {
-    content: 'C:\\> ';
-    opacity: 0.7;
-}
-
-/* Left panel content */
-.side-column-left .transcript-panel,
-.side-column-left .suspects-list {
-    color: #33ff33 !important;
-    font-family: 'VT323', monospace !important;
-    font-size: 14px !important;
-    line-height: 1.6 !important;
-    position: relative;
-    z-index: 20;
-}
-
-.side-column-left .side-panel .block,
-.side-column-left .side-panel .prose {
-    background: transparent !important;
-}
-
-/* Suspect items in terminal style */
-.side-column-left .suspect-item {
-    background: rgba(0, 20, 0, 0.4) !important;
-    border: 1px solid rgba(51, 255, 51, 0.3) !important;
-    border-radius: 0 !important;
-    margin-bottom: 6px;
-    font-family: 'VT323', monospace !important;
-    position: relative;
-    z-index: 20;
-}
-
-.side-column-left .suspect-item summary {
-    color: #33ff33 !important;
-    font-weight: 400;
-}
-
-.side-column-left .suspect-item summary::before {
-    color: #33ff33 !important;
-    content: '>' !important;
-    text-shadow: 0 0 6px #33ff33;
-}
-
-.side-column-left .suspect-item[open] summary::before {
-    content: 'v' !important;
-    transform: none !important;
-}
-
-.side-column-left .suspect-item summary:hover {
-    background: rgba(51, 255, 51, 0.1) !important;
-}
-
-.side-column-left .suspect-details {
-    background: rgba(0, 30, 0, 0.5) !important;
-    border-top: 1px solid rgba(51, 255, 51, 0.2) !important;
-    color: #33ff33 !important;
-}
-
-.side-column-left .suspect-role-preview {
-    color: #90EE90 !important;
-}
-
-.side-column-left .suspect-check {
-    color: #90EE90 !important;
-    text-shadow: 0 0 6px #33ff33;
-}
-
-/* Left panel accordion buttons */
-.side-column-left button.label-wrap {
-    background: transparent !important;
-    color: #33ff33 !important;
-}
-
-.side-column-left button.label-wrap:hover {
-    background: rgba(51, 255, 51, 0.1) !important;
-}
-
-.side-column-left button.label-wrap svg {
-    color: #33ff33 !important;
-    filter: drop-shadow(0 0 4px #33ff33);
-}
-
-/* ========== RIGHT PANEL - GREEN PHOSPHOR TERMINAL ========== */
+/* ========== SIDE PANELS - GREEN PHOSPHOR TERMINAL ========== */
+.side-column-left .gr-group:has(.panel-title),
 .side-column-right .gr-group:has(.panel-title) {
     background: #040804 !important;
     /* Screen glass edge - subtle green tint */
@@ -762,10 +687,11 @@ img { border: 4px solid white !important; }
         0 0 0 6px #3a3a3a,
         0 0 0 10px #2d2d2d,
         0 0 0 12px #1a1a1a,
-        0 0 20px rgba(51, 255, 51, 0.15) !important;
+        0 0 20px var(--terminal-green-glow) !important;
 }
 
 /* Power LED indicator */
+.side-column-left .gr-group:has(.panel-title) .panel-title::after,
 .side-column-right .gr-group:has(.panel-title) .panel-title::after {
     content: '●';
     position: absolute;
@@ -773,12 +699,18 @@ img { border: 4px solid white !important; }
     top: 50%;
     transform: translateY(-50%);
     font-size: 8px;
-    color: #33ff33;
-    text-shadow: 0 0 6px #33ff33, 0 0 12px #33ff33;
+    color: var(--terminal-green);
+    text-shadow: 0 0 6px var(--terminal-green), 0 0 12px var(--terminal-green);
     animation: led-pulse 2s ease-in-out infinite;
 }
 
+@keyframes led-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+}
+
 /* Terminal scanlines */
+.side-column-left .gr-group:has(.panel-title)::before,
 .side-column-right .gr-group:has(.panel-title)::before {
     content: '';
     position: absolute;
@@ -795,46 +727,125 @@ img { border: 4px solid white !important; }
 }
 
 /* Phosphor screen glow */
+.side-column-left .gr-group:has(.panel-title)::after,
 .side-column-right .gr-group:has(.panel-title)::after {
     content: '';
     position: absolute;
     inset: 0;
-    background: radial-gradient(ellipse at center, rgba(51, 255, 51, 0.08) 0%, transparent 70%);
+    background: radial-gradient(ellipse at center, var(--terminal-green-vignette) 0%, transparent 70%);
     pointer-events: none;
     z-index: 1;
 }
 
 /* Terminal header with system prompt */
+.side-column-left .panel-title,
 .side-column-right .panel-title {
-    font-family: 'VT323', monospace !important;
-    color: #33ff33 !important;
+    font-family: var(--font-retro-mono) !important;
+    color: var(--terminal-green) !important;
     font-size: 13px !important;
     font-weight: 400 !important;
-    text-shadow: 0 0 8px #33ff33, 0 0 16px rgba(51, 255, 51, 0.5);
+    text-shadow: 0 0 8px var(--terminal-green), 0 0 16px var(--terminal-green-soft-strong);
     letter-spacing: 2px !important;
     text-transform: uppercase !important;
     padding: 4px 8px !important;
     margin-bottom: 8px !important;
-    border-bottom: 1px solid rgba(51, 255, 51, 0.3);
+    border-bottom: 1px solid var(--terminal-green-border-strong);
     position: relative;
     z-index: 20;
 }
 
 /* Add terminal prompt before title */
+.side-column-left .panel-title::before,
 .side-column-right .panel-title::before {
     content: 'C:\\> ';
     opacity: 0.7;
 }
 
-/* Right panel content */
+/* Left panel content */
+.side-column-left .transcript-panel,
+.side-column-left .suspects-list {
+    color: var(--terminal-green) !important;
+    font-family: var(--font-body) !important;
+    font-size: 14px !important;
+    line-height: 1.6 !important;
+    position: relative;
+    z-index: 20;
+}
+
+.side-column-left .side-panel .block,
+.side-column-left .side-panel .prose,
 .side-column-right .side-panel .block,
 .side-column-right .side-panel .prose {
     background: transparent !important;
 }
 
+/* Suspect items in terminal style */
+.side-column-left .suspect-item {
+    background: rgba(0, 20, 0, 0.4) !important;
+    border: 1px solid rgba(51, 255, 51, 0.3) !important;
+    border-radius: 0 !important;
+    margin-bottom: 6px;
+    font-family: var(--font-body) !important;
+    position: relative;
+    z-index: 20;
+}
+
+.side-column-left .suspect-item summary {
+    color: var(--terminal-green) !important;
+    font-weight: 400;
+}
+
+.side-column-left .suspect-item summary::before {
+    color: var(--terminal-green) !important;
+    content: '>' !important;
+    text-shadow: 0 0 6px var(--terminal-green);
+}
+
+.side-column-left .suspect-item[open] summary::before {
+    content: 'v' !important;
+    transform: none !important;
+}
+
+.side-column-left .suspect-item summary:hover {
+    background: var(--terminal-green-hover) !important;
+}
+
+.side-column-left .suspect-details {
+    background: rgba(0, 30, 0, 0.5) !important;
+    border-top: 1px solid var(--terminal-green-border-soft) !important;
+    color: var(--terminal-green) !important;
+}
+
+.side-column-left .suspect-role-preview {
+    color: var(--terminal-green-accent) !important;
+}
+
+.side-column-left .suspect-check {
+    color: var(--terminal-green-accent) !important;
+    text-shadow: 0 0 6px var(--terminal-green);
+}
+
+/* Left & right panel accordion buttons */
+.side-column-left button.label-wrap,
+.side-column-right button.label-wrap {
+    background: transparent !important;
+    color: var(--terminal-green) !important;
+}
+
+.side-column-left button.label-wrap:hover,
+.side-column-right button.label-wrap:hover {
+    background: var(--terminal-green-hover) !important;
+}
+
+.side-column-left button.label-wrap svg,
+.side-column-right button.label-wrap svg {
+    color: var(--terminal-green) !important;
+    filter: drop-shadow(0 0 4px var(--terminal-green));
+}
+
 /* Location items - terminal style */
 .side-column-right .location-item {
-    font-family: 'VT323', monospace !important;
+    font-family: var(--font-body) !important;
     font-size: 14px !important;
     color: #ffffff !important;
     background: transparent !important;
@@ -851,23 +862,23 @@ img { border: 4px solid white !important; }
 }
 
 .side-column-right .location-item.searched {
-    color: #1a8f1a !important;
+    color: var(--terminal-green-muted) !important;
     text-decoration: line-through;
     opacity: 0.6;
 }
 
 .side-column-right .location-check {
-    color: #90EE90 !important;
-    text-shadow: 0 0 6px #33ff33;
+    color: var(--terminal-green-accent) !important;
+    text-shadow: 0 0 6px var(--terminal-green);
 }
 
 /* Clue items - terminal log entries */
 .side-column-right .clue-item {
-    font-family: 'VT323', monospace !important;
+    font-family: var(--font-body) !important;
     font-size: 11px !important;
-    color: #33ff33 !important;
+    color: var(--terminal-green) !important;
     background: rgba(0, 20, 0, 0.4) !important;
-    border-left: 2px solid #33ff33 !important;
+    border-left: 2px solid var(--terminal-green) !important;
     border-radius: 0 !important;
     padding: 6px 10px !important;
     margin-bottom: 4px !important;
@@ -878,25 +889,25 @@ img { border: 4px solid white !important; }
 
 .side-column-right .clue-item::before {
     content: '[LOG] ';
-    color: #1a8f1a;
+    color: var(--terminal-green-muted);
     font-weight: 700;
 }
 
 /* Accusations display - terminal warning style */
 .side-column-right .accusations-display {
-    font-family: 'VT323', monospace !important;
+    font-family: var(--font-body) !important;
     font-size: 12px !important;
-    color: #33ff33 !important;
+    color: var(--terminal-green) !important;
     position: relative;
     z-index: 20;
     padding: 8px;
 }
 
 .side-column-right .accusations-pip {
-    background: #33ff33 !important;
+    background: var(--terminal-green) !important;
     width: 12px !important;
     height: 12px !important;
-    border: 1px solid #1a8f1a;
+    border: 1px solid var(--terminal-green-muted);
 }
 
 .side-column-right .accusations-pip.used {
@@ -915,7 +926,7 @@ img { border: 4px solid white !important; }
     content: '█';
     animation: cursor-blink 1s step-end infinite;
     margin-left: 4px;
-    color: #33ff33;
+    color: var(--terminal-green);
 }
 
 @keyframes cursor-blink {
@@ -924,23 +935,11 @@ img { border: 4px solid white !important; }
 }
 
 /* Right panel accordion buttons */
-.side-column-right button.label-wrap {
-    background: transparent !important;
-    color: #33ff33 !important;
-}
-
-.side-column-right button.label-wrap:hover {
-    background: rgba(51, 255, 51, 0.1) !important;
-}
-
-.side-column-right button.label-wrap svg {
-    color: #33ff33 !important;
-    filter: drop-shadow(0 0 4px #33ff33);
-}
+/* (Right panel accordion buttons share base styles with left via unified selector above) */
 
 /* ========== BASE PANEL TITLE (fallback) ========== */
 .panel-title {
-    font-family: 'VT323', monospace;
+    font-family: var(--font-retro-mono);
     font-size: 16px;
     font-weight: 700;
     color: var(--accent-blue);
@@ -953,7 +952,7 @@ img { border: 4px solid white !important; }
 
 /* ========== CLUES & ITEMS ========== */
 .clue-item {
-    font-family: 'VT323', monospace;
+    font-family: var(--font-body);
     font-size: 13px;
     color: var(--text-primary);
     padding: 8px 12px;
@@ -965,7 +964,7 @@ img { border: 4px solid white !important; }
 }
 
 .location-item {
-    font-family: 'VT323', monospace;
+    font-family: var(--font-body);
     font-size: 14px;
     padding: 6px 12px;
     color: var(--text-primary);
@@ -987,7 +986,7 @@ img { border: 4px solid white !important; }
 
 /* ========== SUSPECT ITEMS ========== */
 .suspect-item {
-    font-family: 'VT323', monospace;
+    font-family: var(--font-body);
     font-size: 14px;
     color: var(--text-primary);
     border-radius: 4px;
@@ -1046,7 +1045,7 @@ img { border: 4px solid white !important; }
 
 /* ========== ACCUSATIONS ========== */
 .accusations-display {
-    font-family: 'VT323', monospace;
+    font-family: var(--font-retro-mono);
     font-size: 14px;
     font-weight: 500;
     color: var(--text-primary);
@@ -1069,7 +1068,7 @@ img { border: 4px solid white !important; }
 .transcript-panel {
     max-height: 300px;
     overflow-y: auto;
-    font-family: 'VT323', monospace;
+    font-family: var(--font-retro-mono);
     font-size: 13px;
     line-height: 1.5;
 }
@@ -1102,7 +1101,6 @@ img { border: 4px solid white !important; }
     text-transform: uppercase !important;
     letter-spacing: 2px !important;
     box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.5), 0 0 10px rgba(0, 255, 255, 0.4), 0 0 20px rgba(0, 255, 255, 0.2) !important;
-    animation: button-pulse 1s ease-in-out 5 !important;
 }
 
 .download-link,
@@ -1180,7 +1178,6 @@ img { border: 4px solid white !important; }
         inset 0 0 0 4px #000033,
         inset 0 0 0 5px var(--border-color),
         inset 0 2px 8px rgba(0, 0, 0, 0.8) !important;
-    animation: statusPulse 2s ease-in-out infinite !important;
     /* Center content */
     display: flex !important;
     flex-direction: column !important;
@@ -1207,7 +1204,7 @@ img { border: 4px solid white !important; }
 [data-testid="status-tracker"]:not(.hide):not(:empty) .meta-text-center,
 [data-testid="status-tracker"]:not(.hide):not(:empty) span {
     color: var(--accent-blue) !important;
-    font-family: 'VT323', monospace !important;
+    font-family: var(--font-retro-mono) !important;
     font-weight: 700 !important;
     font-size: 18px !important;
     text-transform: uppercase !important;
@@ -1231,7 +1228,22 @@ img { border: 4px solid white !important; }
     visibility: hidden !important;
 }
 
+/* Hide status trackers that appear during component updates (like when audio stops) */
+/* These brief flashes don't have proper processing content - hide them immediately */
+/* The main processing status tracker has .progress-text/.meta-text so it will still show */
+[data-testid="status-tracker"]:not(.hide):not(:empty):not(:has(.progress-text)):not(:has(.meta-text)):not(:has(.meta-text-center)):not(:has(span:not(:empty))) {
+    display: none !important;
+    opacity: 0 !important;
+    visibility: hidden !important;
+    height: 0 !important;
+    width: 0 !important;
+    overflow: hidden !important;
+    pointer-events: none !important;
+    position: absolute !important;
+    left: -9999px !important;
+}
+
 [data-testid="status-tracker"] {
-    transition: opacity 0.3s ease, transform 0.3s ease !important;
+    transition: opacity 0.1s ease, transform 0.1s ease !important;
 }
 """

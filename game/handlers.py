@@ -24,8 +24,144 @@ from game.state_manager import (
     get_or_create_state,
     get_suspect_voice_id,
 )
+from services.game_memory import get_game_memory
 
 logger = logging.getLogger(__name__)
+
+
+# ============================================================================
+# AI Enhancement Helpers
+# ============================================================================
+
+
+def _analyze_question_style(question: str) -> Tuple[int, int]:
+    """Analyze the player's question to determine emotional impact on suspect.
+    
+    Returns:
+        Tuple of (trust_delta, nervousness_delta) to apply to the suspect.
+    """
+    question_lower = question.lower()
+    trust_delta = 0
+    nervousness_delta = 0
+    
+    # Aggressive/accusatory language decreases trust, increases nervousness
+    aggressive_words = [
+        "liar", "lying", "killed", "murder", "guilty", "confess",
+        "admit", "truth", "suspicious", "caught", "evidence against",
+        "you did it", "accuse", "blame"
+    ]
+    for word in aggressive_words:
+        if word in question_lower:
+            trust_delta -= 5
+            nervousness_delta += 10
+            break  # Only apply once
+    
+    # Friendly/empathetic language increases trust, decreases nervousness
+    friendly_words = [
+        "help", "understand", "sorry", "difficult", "must be hard",
+        "appreciate", "thank", "please", "kind", "trust you"
+    ]
+    for word in friendly_words:
+        if word in question_lower:
+            trust_delta += 5
+            nervousness_delta -= 5
+            break  # Only apply once
+    
+    # Direct confrontation with evidence increases nervousness
+    confrontation_phrases = [
+        "but you said", "you told me", "earlier you", "contradict",
+        "that doesn't match", "someone saw you", "witness"
+    ]
+    for phrase in confrontation_phrases:
+        if phrase in question_lower:
+            nervousness_delta += 15
+            break
+    
+    return trust_delta, nervousness_delta
+
+
+def _get_last_suspect_speaker(state: GameState) -> Optional[str]:
+    """Return the last non-Game-Master speaker from state.messages, if any.
+
+    Used as a fallback to interpret follow-up custom messages as being
+    directed to the last suspect the player was talking to (e.g. when the
+    player says "Why did you lie about the time?" right after Father Fiber
+    spoke, without repeating his name).
+    """
+    # Walk messages in reverse and find the most recent assistant message
+    # from a suspect (speaker != "Game Master").
+    for msg in reversed(getattr(state, "messages", [])):
+        try:
+            if msg.get("role") == "assistant":
+                speaker = msg.get("speaker")
+                if speaker and speaker != "Game Master":
+                    return speaker
+        except AttributeError:
+            # If messages are not dict-like for some reason, skip gracefully
+            continue
+    return None
+
+
+def _record_interrogation(
+    state: GameState,
+    suspect_name: str,
+    question: str,
+    answer: str
+) -> None:
+    """Record an interrogation and update suspect emotional state.
+    
+    This is the core of Phase 1 AI enhancements - the Game Master tracks
+    all conversations and emotional states, then passes this to stateless
+    suspect agents as context.
+    
+    Phase 2 addition: Also indexes the conversation in the RAG vector store
+    for semantic search.
+    
+    Args:
+        state: Current game state
+        suspect_name: Name of the suspect who responded
+        question: The player's question/message
+        answer: The suspect's response
+    """
+    try:
+        # Record the conversation exchange (Phase 1: structured state)
+        state.record_interrogation(suspect_name, question, answer)
+        logger.info(
+            "[AI] Recorded interrogation with %s (turn %d)",
+            suspect_name,
+            state.current_turn
+        )
+        
+        # Phase 2: Index in vector store for RAG search
+        memory = get_game_memory()
+        if memory.is_available:
+            memory.add_conversation(
+                suspect=suspect_name,
+                question=question,
+                answer=answer,
+                turn=state.current_turn
+            )
+        
+        # Analyze question style and update emotional state
+        trust_delta, nervousness_delta = _analyze_question_style(question)
+        
+        if trust_delta != 0 or nervousness_delta != 0:
+            state.update_suspect_emotion(
+                suspect_name,
+                trust_delta=trust_delta,
+                nervousness_delta=nervousness_delta
+            )
+            suspect_state = state.get_suspect_state(suspect_name)
+            logger.info(
+                "[AI] Updated %s emotional state: trust=%d%% (%+d), nervousness=%d%% (%+d)",
+                suspect_name,
+                suspect_state.trust,
+                trust_delta,
+                suspect_state.nervousness,
+                nervousness_delta
+            )
+    except Exception:
+        logger.exception("[AI] Failed to record interrogation with %s", suspect_name)
 
 def process_player_action(
     action_type: str, target: str, custom_message: str, session_id: str
@@ -198,6 +334,29 @@ def process_player_action(
                 logger.exception(
                     "Error resolving suspect name via AI; falling back to heuristics only"
                 )
+
+        # Final fallback: treat as follow-up to the last suspect who spoke,
+        # as long as the message doesn't clearly mention a different suspect.
+        if not suspect_to_assign and state.mystery:
+            last_speaker = _get_last_suspect_speaker(state)
+            if last_speaker:
+                # Avoid overriding when the message explicitly names someone else
+                explicit_other = False
+                for s in state.mystery.suspects:
+                    if s.name == last_speaker:
+                        continue
+                    if s.name.lower() in message_lower:
+                        explicit_other = True
+                        break
+                if not explicit_other:
+                    for s in state.mystery.suspects:
+                        if s.name == last_speaker:
+                            suspect_to_assign = s
+                            logger.info(
+                                "Assuming follow-up question to last suspect speaker: %s",
+                                last_speaker,
+                            )
+                            break
     
     if suspect_to_assign and _is_invalid_voice_id(getattr(suspect_to_assign, "voice_id", None)):
         logger.info("Assigning voice on-demand for suspect: %s", suspect_to_assign.name)
@@ -208,6 +367,25 @@ def process_player_action(
             if s.voice_id and s.name != suspect_to_assign.name
         ]
         assign_voice_to_suspect(suspect_to_assign, used_voice_ids)
+
+    # If this was a custom message and we resolved a suspect, gently steer the
+    # Game Master to treat it as talking to that suspect. This helps for follow-up
+    # lines like "I know you're lying, give it up" where the player doesn't repeat
+    # the suspect's name but clearly intends to confront the last speaker.
+    if action_type == "custom" and custom_message and suspect_to_assign:
+        message = (
+            f"I want to talk to {suspect_to_assign.name}. "
+            f"Here's what I say to them: {custom_message}"
+        )
+        # Update the stored player message so state/messages stay in sync
+        try:
+            if state.messages:
+                state.messages[-1]["content"] = message
+        except Exception:
+            # If messages aren't dict-like for some reason, fail gracefully
+            logger.exception(
+                "[GAME] Failed to update stored custom message content on state"
+            )
 
     # Get or create agent
     if not hasattr(process_player_action, "agent"):
@@ -268,6 +446,11 @@ def process_player_action(
         # Remove the audio marker from the text
         clean_response = re.sub(audio_marker_pattern, "", response).strip()
         logger.info("Extracted audio path from tool: %s", audio_path_from_tool)
+
+    # AI Enhancement Phase 1: Record interrogation and update emotional state
+    # This must happen after we have clean_response but before storing the message
+    if speaker and speaker != "Game Master":
+        _record_interrogation(state, speaker, message, clean_response)
 
     # Generate portrait and assign voice on-demand if a suspect was talked to
     # (This handles cases where speaker is detected from custom messages)
@@ -586,6 +769,28 @@ def run_action_logic(
                     "Error resolving suspect name via AI; falling back to heuristics only"
                 )
 
+        # Final fallback: treat as follow-up to the last suspect who spoke,
+        # as long as the message doesn't clearly mention a different suspect.
+        if not suspect_to_assign and state.mystery:
+            last_speaker = _get_last_suspect_speaker(state)
+            if last_speaker:
+                explicit_other = False
+                for s in state.mystery.suspects:
+                    if s.name == last_speaker:
+                        continue
+                    if s.name.lower() in message_lower:
+                        explicit_other = True
+                        break
+                if not explicit_other:
+                    for s in state.mystery.suspects:
+                        if s.name == last_speaker:
+                            suspect_to_assign = s
+                            logger.info(
+                                "Assuming follow-up question to last suspect speaker: %s",
+                                last_speaker,
+                            )
+                            break
+
     if suspect_to_assign and not suspect_to_assign.voice_id:
         logger.info("Assigning voice on-demand for suspect: %s", suspect_to_assign.name)
         used_voice_ids = [
@@ -594,6 +799,22 @@ def run_action_logic(
             if s.voice_id and s.name != suspect_to_assign.name
         ]
         assign_voice_to_suspect(suspect_to_assign, used_voice_ids)
+
+    # As in process_player_action, if this is a custom message and we resolved
+    # a suspect, rewrite the message to make that intent explicit so the agent
+    # reliably calls the interrogate_suspect tool for follow-ups.
+    if action_type == "custom" and custom_message and suspect_to_assign:
+        message = (
+            f"I want to talk to {suspect_to_assign.name}. "
+            f"Here's what I say to them: {custom_message}"
+        )
+        try:
+            if state.messages:
+                state.messages[-1]["content"] = message
+        except Exception:
+            logger.exception(
+                "[GAME] Failed to update stored custom message content on state (fast path)"
+            )
 
     # Get or create agent
     if not hasattr(run_action_logic, "agent"):
@@ -651,6 +872,11 @@ def run_action_logic(
         audio_path_from_tool = match.group(1)
         clean_response = re.sub(audio_marker_pattern, "", response).strip()
         logger.info("Extracted audio path from tool: %s", audio_path_from_tool)
+
+    # AI Enhancement Phase 1: Record interrogation and update emotional state
+    # This must happen after we have clean_response but before storing the message
+    if speaker and speaker != "Game Master":
+        _record_interrogation(state, speaker, message, clean_response)
 
     # Store assistant message (text only)
     state.messages.append(
