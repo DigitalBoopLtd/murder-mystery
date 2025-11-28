@@ -58,8 +58,9 @@ RETRO_CSS = """
 .audio-player svg:not([class*="subtitle"]),
 .audio-player .component-wrapper:not(:has(.subtitle-display)),
 [data-testid="waveform-controls"],
-[data-testid="status-tracker"].wrap.center.translucent,
 [data-testid="status-tracker"].wrap.default.full.hide,
+[data-testid="status-tracker"].wrap.default:not(.full),
+[data-testid="status-tracker"].wrap.default.full:not(.center),
 .input-bar [data-testid="status-tracker"],
 .audio-player [data-testid="status-tracker"] {
     display: none !important;
@@ -389,6 +390,15 @@ img { border: 4px solid white !important; }
     width: 100% !important;
     height: auto !important;
     max-width: 100% !important;
+}
+
+/* Hide portrait container when no image is loaded */
+.portrait-image:not(:has(img[src])),
+.portrait-image:has(img[src=""]) {
+    display: none !important;
+    height: 0 !important;
+    min-height: 0 !important;
+    overflow: hidden !important;
 }
 
 /* Portrait image container positioning */
@@ -1127,13 +1137,29 @@ img { border: 4px solid white !important; }
     color: var(--accent-blue) !important;
 }
 
+/* ========== STATUS TEXT ========== */
+.status-text {
+    text-align: center !important;
+    font-size: 16px !important;
+    color: var(--accent-blue) !important;
+    padding: 12px 16px !important;
+    min-height: 24px !important;
+    background: transparent !important;
+    border: none !important;
+}
+
+.status-text:empty {
+    display: none !important;
+}
+
 .image-container {
     padding-bottom: 2px;
     border-radius: 6px;
 }
 
 /* ========== STATUS TRACKER ========== */
-[data-testid="status-tracker"]:not(.translucent):not(.wrap.center):not(.hide) {
+/* Style ALL status trackers consistently - one centered modal */
+[data-testid="status-tracker"]:not(.hide):not(:empty) {
     position: fixed !important;
     top: 50% !important;
     left: 50% !important;
@@ -1163,8 +1189,8 @@ img { border: 4px solid white !important; }
     text-align: center !important;
 }
 
-[data-testid="status-tracker"]:not(.translucent):not(.wrap.center):not(.hide)::before,
-[data-testid="status-tracker"]:not(.translucent):not(.wrap.center):not(.hide)::after {
+[data-testid="status-tracker"]:not(.hide):not(:empty)::before,
+[data-testid="status-tracker"]:not(.hide):not(:empty)::after {
     content: "◆";
     position: absolute;
     color: var(--border-color);
@@ -1173,13 +1199,13 @@ img { border: 4px solid white !important; }
     transform: translateX(-50%);
 }
 
-[data-testid="status-tracker"]:not(.translucent):not(.wrap.center):not(.hide)::before { top: -8px; }
-[data-testid="status-tracker"]:not(.translucent):not(.wrap.center):not(.hide)::after { bottom: -8px; }
+[data-testid="status-tracker"]:not(.hide):not(:empty)::before { top: -8px; }
+[data-testid="status-tracker"]:not(.hide):not(:empty)::after { bottom: -8px; }
 
-[data-testid="status-tracker"]:not(.translucent):not(.wrap.center):not(.hide) .progress-text,
-[data-testid="status-tracker"]:not(.translucent):not(.wrap.center):not(.hide) .meta-text,
-[data-testid="status-tracker"]:not(.translucent):not(.wrap.center):not(.hide) .meta-text-center,
-[data-testid="status-tracker"]:not(.translucent):not(.wrap.center):not(.hide) span {
+[data-testid="status-tracker"]:not(.hide):not(:empty) .progress-text,
+[data-testid="status-tracker"]:not(.hide):not(:empty) .meta-text,
+[data-testid="status-tracker"]:not(.hide):not(:empty) .meta-text-center,
+[data-testid="status-tracker"]:not(.hide):not(:empty) span {
     color: var(--accent-blue) !important;
     font-family: 'VT323', monospace !important;
     font-weight: 700 !important;
@@ -1190,8 +1216,7 @@ img { border: 4px solid white !important; }
     text-align: center !important;
 }
 
-
-[data-testid="status-tracker"]:not(.translucent):not(.wrap.center):not(.hide) svg {
+[data-testid="status-tracker"]:not(.hide):not(:empty) svg {
     color: var(--border-color) !important;
     width: 24px !important;
     height: 24px !important;

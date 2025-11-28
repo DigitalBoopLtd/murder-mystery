@@ -29,9 +29,17 @@ pip install -r requirements.txt
 
 # Check if .env file exists
 if [ ! -f ".env" ]; then
-    echo "⚠️  .env file not found. Creating template..."
-    echo "OPENAI_API_KEY=your_openai_api_key_here" > .env
-    echo "📝 Please edit .env and add your OpenAI API key!"
+    echo "⚠️  .env file not found."
+    if [ -f "env.example" ]; then
+        echo "📄 Creating .env from env.example..."
+        cp env.example .env
+        echo "📝 A new .env file has been created from env.example."
+        echo "   Open it and add your API keys (at least OPENAI_API_KEY)."
+    else
+        echo "⚠️  env.example not found either."
+        echo "   Please create a .env file with at least:"
+        echo "   OPENAI_API_KEY=your_openai_api_key_here"
+    fi
 else
     echo "✅ .env file found"
 fi
@@ -41,7 +49,8 @@ echo "✨ Setup complete!"
 echo ""
 echo "To run the application:"
 echo "  1. Activate the virtual environment: source venv/bin/activate"
-echo "  2. Make sure your .env file has your OPENAI_API_KEY"
+echo "  2. Make sure your .env file has at least OPENAI_API_KEY set"
+echo "     (optionally ELEVENLABS_API_KEY and HF_TOKEN for voice and images)"
 echo "  3. Run: python app.py"
 echo ""
 

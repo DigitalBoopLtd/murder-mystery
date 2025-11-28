@@ -8,7 +8,7 @@ from typing import Optional, Tuple, List
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
 
-from game_state import GameState
+from game.state import GameState
 
 logger = logging.getLogger(__name__)
 

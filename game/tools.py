@@ -8,7 +8,7 @@ from typing import Annotated, Optional
 from langchain_core.tools import tool
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
-from tts_service import text_to_speech
+from services.tts_service import text_to_speech
 
 logger = logging.getLogger(__name__)
 
@@ -147,7 +147,7 @@ def generate_suspect_audio(
         # Enhance text with capitalization for emphasis
         enhanced_text = enhance_text_for_speech(text)
 
-        # Use tts_service to get audio with alignment data
+        # Use services.tts_service to get audio with alignment data
         audio_path, alignment_data = text_to_speech(
             enhanced_text, voice_id=voice_id, speaker_name=suspect_name
         )

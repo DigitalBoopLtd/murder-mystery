@@ -1,7 +1,7 @@
 """Game state management."""
 
 from typing import Dict, Optional, List
-from models import Mystery
+from game.models import Mystery
 from mystery_config import MysteryConfig, create_validated_config
 
 

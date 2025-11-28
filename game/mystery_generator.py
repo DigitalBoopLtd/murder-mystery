@@ -10,8 +10,8 @@ from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import PydanticOutputParser
 from langchain_core.runnables import RunnableLambda
-from models import Mystery, MysteryPremise
-from voice_service import get_voice_service
+from game.models import Mystery, MysteryPremise
+from services.voice_service import get_voice_service
 from mystery_config import MysteryConfig
 
 logger = logging.getLogger(__name__)
