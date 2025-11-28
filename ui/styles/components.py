@@ -1,42 +1,6 @@
-"""UI styling for the murder mystery game interface."""
+"""Component-specific CSS styles."""
 
-RETRO_CSS = """
-/* Import fonts */
-@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&family=Source+Sans+3:wght@300;400;600;700&display=swap');
-
-/* ========== ROOT VARIABLES ========== */
-:root {
-    --bg-primary: #000033;
-    --bg-secondary: #0a0a1a;
-    --bg-panel: #1a0033;
-    --bg-card: #0d0d26;
-    --text-primary: #FFFFFF;
-    --text-secondary: #CCCCFF;
-    --body-text-color: var(--text-primary);
-    --accent-blue: #00FFFF;
-    --accent-blue-dark: #00CCCC;
-    --accent-green: #00FF00;
-    --accent-red: #FF0088;
-    --accent-orange: #FF8800;
-    --accent-magenta: #FF00FF;
-    --accent-yellow: #FFFF00;
-    --border-color: #00FFFF;
-    --border-dark: #006666;
-    --terminal-green: #33ff33;
-    --terminal-green-soft: rgba(51, 255, 51, 0.3);
-    --terminal-green-soft-strong: rgba(51, 255, 51, 0.5);
-    --terminal-green-glow: rgba(51, 255, 51, 0.15);
-    --terminal-green-vignette: rgba(51, 255, 51, 0.08);
-    --terminal-green-hover: rgba(51, 255, 51, 0.1);
-    --terminal-green-border-strong: rgba(51, 255, 51, 0.3);
-    --terminal-green-border-soft: rgba(51, 255, 51, 0.2);
-    --terminal-green-accent: #90EE90;
-    --terminal-green-muted: #1a8f1a;
-    --font-body: 'Source Sans 3', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    --font-retro-mono: 'VT323', monospace;
-    --font-retro-title: 'Press Start 2P', cursive;
-}
-
+CSS_COMPONENTS = """
 /* ========== UTILITY PATTERNS ========== */
 /* Hide utility class */
 .u-hidden {
@@ -53,16 +17,16 @@ RETRO_CSS = """
 
 /* Hide all built-in audio player controls - use precise ID selector */
 #mm-audio-player button,
-#mm-audio-player [role=\"button\"],
-#mm-audio-player [class*=\"button\"],
-#mm-audio-player [class*=\"control\"]:not(:has(.subtitle-display)),
-#mm-audio-player [class*=\"waveform\"],
-#mm-audio-player [class*=\"wave\"],
-#mm-audio-player [data-testid=\"waveform-controls\"],
-#mm-audio-player [data-testid=\"subtitles-toggle\"],
-#mm-audio-player [class*=\"download\"],
-#mm-audio-player [class*=\"share\"],
-#mm-audio-player svg:not([class*=\"subtitle\"]),
+#mm-audio-player [role="button"],
+#mm-audio-player [class*="button"],
+#mm-audio-player [class*="control"]:not(:has(.subtitle-display)),
+#mm-audio-player [class*="waveform"],
+#mm-audio-player [class*="wave"],
+#mm-audio-player [data-testid="waveform-controls"],
+#mm-audio-player [data-testid="subtitles-toggle"],
+#mm-audio-player [class*="download"],
+#mm-audio-player [class*="share"],
+#mm-audio-player svg:not([class*="subtitle"]),
 #mm-audio-player .component-wrapper:not(:has(.subtitle-display)),
 #mm-audio-player canvas,
 #mm-audio-player time {
@@ -79,11 +43,11 @@ RETRO_CSS = """
 
 /* Hide status trackers that appear in wrong places (input bar, audio player, inline) */
 /* Only the centered modal should be visible - handled by dedicated status tracker section below */
-.input-bar [data-testid=\"status-tracker\"],
-#mm-audio-player [data-testid=\"status-tracker\"],
-[data-testid=\"status-tracker\"].wrap.default.full.hide,
-[data-testid=\"status-tracker\"].wrap.default:not(.full),
-[data-testid=\"status-tracker\"].wrap.default.full:not(.center) {
+.input-bar [data-testid="status-tracker"],
+#mm-audio-player [data-testid="status-tracker"],
+[data-testid="status-tracker"].wrap.default.full.hide,
+[data-testid="status-tracker"].wrap.default:not(.full),
+[data-testid="status-tracker"].wrap.default.full:not(.center) {
     display: none !important;
     visibility: hidden !important;
     opacity: 0 !important;
@@ -97,8 +61,8 @@ RETRO_CSS = """
 
 /* Hide duplicate/extra status tracker wrappers that appear during processing */
 /* Only hide wrapper divs that don't contain the visible status tracker */
-.wrap.default.full:not(:has([data-testid=\"status-tracker\"]:not(.hide):not(:empty))),
-.wrap.default:not(.full):not(:has([data-testid=\"status-tracker\"]:not(.hide):not(:empty))) {
+.wrap.default.full:not(:has([data-testid="status-tracker"]:not(.hide):not(:empty))),
+.wrap.default:not(.full):not(:has([data-testid="status-tracker"]:not(.hide):not(:empty))) {
     display: none !important;
     visibility: hidden !important;
     opacity: 0 !important;
@@ -113,7 +77,7 @@ RETRO_CSS = """
 /* Hide unwanted Gradio UI elements that appear during processing in center column */
 /* Hide empty input/textarea/textbox fields */
 .center-column textarea:empty,
-.center-column input[type=\"text\"]:empty,
+.center-column input[type="text"]:empty,
 .center-column .gr-textbox:empty,
 .center-column .gr-textbox:not(:has(*)) {
     display: none !important;
@@ -128,8 +92,8 @@ RETRO_CSS = """
 }
 
 /* Hide empty blocks in center column that aren't our main components */
-.center-column > .gr-group > .block:not(:has(.speaker-name)):not(:has(.portrait-image)):not(:has(#mm-audio-player)):not(:has([data-testid=\"status-tracker\"]:not(.hide):not(:empty))):empty,
-.center-column > .gr-group > .gr-block:not(:has(.speaker-name)):not(:has(.portrait-image)):not(:has(#mm-audio-player)):not(:has([data-testid=\"status-tracker\"]:not(.hide):not(:empty))):empty {
+.center-column > .gr-group > .block:not(:has(.speaker-name)):not(:has(.portrait-image)):not(:has(#mm-audio-player)):not(:has([data-testid="status-tracker"]:not(.hide):not(:empty))):empty,
+.center-column > .gr-group > .gr-block:not(:has(.speaker-name)):not(:has(.portrait-image)):not(:has(#mm-audio-player)):not(:has([data-testid="status-tracker"]:not(.hide):not(:empty))):empty {
     display: none !important;
     visibility: hidden !important;
     opacity: 0 !important;
@@ -140,7 +104,7 @@ RETRO_CSS = """
 
 /* Hide any stray text/percentage indicators that appear during processing */
 /* Target text that contains percentage signs but isn't in status tracker */
-.center-column > .gr-group *:not([data-testid=\"status-tracker\"] *):not(.speaker-name *):not(.portrait-image *):not(#mm-audio-player *) {
+.center-column > .gr-group *:not([data-testid="status-tracker"] *):not(.speaker-name *):not(.portrait-image *):not(#mm-audio-player *) {
     /* Only hide if it's clearly a progress indicator - be conservative */
 }
 
@@ -359,16 +323,16 @@ footer { display: none !important; }
 
 /* Hide unwanted elements that appear in center column during processing */
 /* Hide any blocks that aren't our main components (speaker, portrait, audio, status tracker) */
-.center-column > .gr-group > .block:not(:has(.speaker-name)):not(:has(.portrait-image)):not(:has(#mm-audio-player)):not(:has([data-testid=\"status-tracker\"]:not(.hide):not(:empty))),
-.center-column > .gr-group > .gr-block:not(:has(.speaker-name)):not(:has(.portrait-image)):not(:has(#mm-audio-player)):not(:has([data-testid=\"status-tracker\"]:not(.hide):not(:empty))) {
+.center-column > .gr-group > .block:not(:has(.speaker-name)):not(:has(.portrait-image)):not(:has(#mm-audio-player)):not(:has([data-testid="status-tracker"]:not(.hide):not(:empty))),
+.center-column > .gr-group > .gr-block:not(:has(.speaker-name)):not(:has(.portrait-image)):not(:has(#mm-audio-player)):not(:has([data-testid="status-tracker"]:not(.hide):not(:empty))) {
     /* Only hide if empty or contains unwanted text/inputs */
 }
 
 /* Hide textareas, inputs, and textboxes in center column (except status tracker content) */
-.center-column > .gr-group textarea:not([data-testid=\"status-tracker\"] *),
-.center-column > .gr-group input[type=\"text\"]:not([data-testid=\"status-tracker\"] *),
-.center-column > .gr-group .gr-textbox:not([data-testid=\"status-tracker\"] *),
-.center-column > .gr-group .gr-textarea:not([data-testid=\"status-tracker\"] *) {
+.center-column > .gr-group textarea:not([data-testid="status-tracker"] *),
+.center-column > .gr-group input[type="text"]:not([data-testid="status-tracker"] *),
+.center-column > .gr-group .gr-textbox:not([data-testid="status-tracker"] *),
+.center-column > .gr-group .gr-textarea:not([data-testid="status-tracker"] *) {
     display: none !important;
     visibility: hidden !important;
     opacity: 0 !important;
@@ -1247,3 +1211,4 @@ img { border: 4px solid white !important; }
     transition: opacity 0.1s ease, transform 0.1s ease !important;
 }
 """
+
