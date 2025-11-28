@@ -1,0 +1,242 @@
+"""UI component creation for the murder mystery game."""
+
+import uuid
+import base64
+import gradio as gr
+from mystery_config import (
+    ERA_OPTIONS,
+    DIFFICULTY_LEVELS,
+    TONE_OPTIONS,
+    get_settings_for_era,
+)
+from ui.styles import RETRO_CSS
+from app.utils import create_favicon
+
+
+def create_ui_components() -> dict:
+    """Create all Gradio UI components and return them as a dictionary.
+
+    Returns:
+        Dictionary containing all UI components with descriptive keys.
+    """
+    # Create and inject favicon
+    favicon_path = create_favicon()
+    # Convert favicon to base64 data URI for embedding
+    with open(favicon_path, "rb") as f:
+        favicon_data = base64.b64encode(f.read()).decode("utf-8")
+    favicon_html = f"""
+    <link rel="icon" type="image/png" href="data:image/png;base64,{favicon_data}">
+    <link rel="shortcut icon" type="image/png" href="data:image/png;base64,{favicon_data}">
+    """
+
+    # Inject CSS and favicon
+    gr.HTML(f"<style>{RETRO_CSS}</style>{favicon_html}")
+
+    # Session state
+    session_id = gr.State(lambda: str(uuid.uuid4()))
+
+    # ====== TITLE BAR ======
+    with gr.Row(elem_classes="title-bar"):
+        gr.HTML(
+            '<div class="game-title"><span class="detective-avatar">🕵️‍♀️</span> MURDER MYSTERY</div>'
+        )
+
+    # ====== MAIN LAYOUT, SETTINGS, AND DEBUG ======
+    with gr.Tabs(elem_classes="main-tabs"):
+        # ----- GAME TAB (DEFAULT) -----
+        with gr.Tab("Game"):
+            # ====== MAIN LAYOUT ======
+            with gr.Row(elem_classes="main-layout-row"):
+
+                # === LEFT: SIDE PANEL ===
+                with gr.Column(
+                    scale=1,
+                    min_width=200,
+                    elem_classes="side-column side-column-left",
+                ):
+                    # Victim and Scene - first card (open by default)
+                    with gr.Accordion(
+                        "🧳 CASE DETAILS",
+                        open=True,
+                        elem_classes="side-panel",
+                    ):
+                        victim_scene_html = gr.HTML(
+                            "<em>Start a game to see case details...</em>",
+                            elem_classes="transcript-panel",
+                        )
+
+                    # Suspects list - show who can be questioned (open by default)
+                    with gr.Accordion(
+                        "🎭 SUSPECTS",
+                        open=True,
+                        elem_classes="side-panel suspects-panel",
+                    ):
+                        suspects_list_html = gr.HTML(
+                            "<em>Start a game to see suspects...</em>",
+                            elem_classes="transcript-panel suspects-list",
+                        )
+
+                # === CENTER: MAIN STAGE ===
+                with gr.Column(scale=3, elem_classes="center-column"):
+
+                    # Stage container (styled via .center-column > .gr-group in CSS)
+                    with gr.Group():
+
+                        # Speaker name - hidden until the mystery starts
+                        # (placeholder text is only shown after the first turn)
+                        speaker_html = gr.HTML(
+                            '<div class="speaker-name" style="display: none;"></div>'
+                        )
+
+                        # Portrait display - larger size for better visibility
+                        # Start visible but empty; CSS will handle hiding when no image
+                        portrait_image = gr.Image(
+                            value=None,
+                            type="filepath",  # We pass file paths from the backend
+                            show_label=False,
+                            elem_classes="portrait-image",
+                            visible=True,  # Always visible; CSS hides when empty
+                        )
+
+                        # Audio player with built-in subtitles support (Gradio handles word highlighting)
+                        audio_output = gr.Audio(
+                            label=None,
+                            show_label=False,
+                            autoplay=False,  # Don't autoplay initially - no audio to play yet
+                            elem_id="mm-audio-player",
+                            elem_classes="audio-player",
+                        )
+
+                    # Start game button (shown initially)
+                    with gr.Column(elem_classes="start-button-container"):
+                        start_btn = gr.Button(
+                            "🚀 START NEW MYSTERY",
+                            elem_classes="start-button",
+                            size="lg",
+                        )
+
+                    # Input bar - voice only
+                    with gr.Column(
+                        elem_classes="input-bar", visible=False
+                    ) as input_row:
+                        # Voice input - only input method
+                        voice_input = gr.Audio(
+                            sources=["microphone"],
+                            type="filepath",
+                            label=None,
+                            show_label=False,
+                        )
+
+                # === RIGHT: SIDE PANEL ===
+                with gr.Column(
+                    scale=1,
+                    min_width=200,
+                    elem_classes="side-column side-column-right",
+                ):
+                    # Locations card (open by default)
+                    with gr.Accordion(
+                        "📍 LOCATIONS",
+                        open=True,
+                        elem_classes="side-panel",
+                    ):
+                        locations_html = gr.HTML("<em>Start a game...</em>")
+
+                    # Clues card (open by default)
+                    with gr.Accordion(
+                        "🔎 CLUES FOUND",
+                        open=True,
+                        elem_classes="side-panel",
+                    ):
+                        clues_html = gr.HTML("<em>No clues yet...</em>")
+
+                    # Accusations card (open by default)
+                    with gr.Accordion(
+                        "⚖️ ACCUSATIONS",
+                        open=True,
+                        elem_classes="side-panel",
+                    ):
+                        accusations_html = gr.HTML(
+                            '<div class="accusations-display">Accusations: '
+                            "<span>"
+                            '<span class="accusations-pip"></span>'
+                            '<span class="accusations-pip"></span>'
+                            '<span class="accusations-pip"></span>'
+                            "</span></div>"
+                        )
+
+        # ----- SETTINGS TAB -----
+        with gr.Tab("Settings"):
+            with gr.Column(elem_classes="settings-column"):
+                gr.Markdown(
+                    "### Mystery settings\n\n"
+                    "Adjust these before starting a new game. "
+                    "Changes apply to the **next** mystery you start in this browser session."
+                )
+                era_dropdown = gr.Dropdown(
+                    label="Era / category",
+                    choices=ERA_OPTIONS,
+                    value="Any",
+                    interactive=True,
+                )
+                setting_dropdown = gr.Dropdown(
+                    label="Setting",
+                    choices=["Random"] + get_settings_for_era("Any"),
+                    value="Random",
+                    interactive=True,
+                )
+                difficulty_radio = gr.Radio(
+                    label="Difficulty",
+                    choices=DIFFICULTY_LEVELS,
+                    value="Normal",
+                    interactive=True,
+                )
+                tone_radio = gr.Radio(
+                    label="Tone",
+                    choices=TONE_OPTIONS,
+                    value="Random",
+                    interactive=True,
+                )
+
+        # ----- DEBUG TAB -----
+        with gr.Tab("Debug"):
+            with gr.Column(elem_classes="settings-column"):
+                gr.Markdown(
+                    "### Debug logs\n\n"
+                    "These are the most recent server logs captured during gameplay.\n\n"
+                    "- Use the **Refresh logs** button to update.\n"
+                    "- Then copy/paste any relevant lines when sharing details with the AI assistant."
+                )
+                debug_logs_textbox = gr.Textbox(
+                    label="Recent logs",
+                    lines=20,
+                    value="No logs captured yet. Interact with the game to generate logs.",
+                    interactive=False,
+                )
+                refresh_logs_btn = gr.Button("🔄 Refresh logs")
+
+    # Hidden timer for checking mystery completion (inactive by default)
+    mystery_check_timer = gr.Timer(value=1.0, active=False)
+
+    # Return all components as a dictionary
+    return {
+        "session_id": session_id,
+        "speaker_html": speaker_html,
+        "audio_output": audio_output,
+        "portrait_image": portrait_image,
+        "input_row": input_row,
+        "start_btn": start_btn,
+        "victim_scene_html": victim_scene_html,
+        "suspects_list_html": suspects_list_html,
+        "locations_html": locations_html,
+        "clues_html": clues_html,
+        "accusations_html": accusations_html,
+        "era_dropdown": era_dropdown,
+        "setting_dropdown": setting_dropdown,
+        "difficulty_radio": difficulty_radio,
+        "tone_radio": tone_radio,
+        "debug_logs_textbox": debug_logs_textbox,
+        "refresh_logs_btn": refresh_logs_btn,
+        "mystery_check_timer": mystery_check_timer,
+        "voice_input": voice_input,
+    }
+
