@@ -557,6 +557,12 @@ def process_player_action(
                 speaker,
             )
             voice_id = None
+    else:
+        # Narrator: prefer the per-game Game Master voice picked at startup
+        gm_voice = getattr(state, "game_master_voice_id", None)
+        if gm_voice:
+            voice_id = gm_voice
+
     voice_id = voice_id or GAME_MASTER_VOICE_ID
 
     # Generate audio

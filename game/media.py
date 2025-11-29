@@ -350,6 +350,12 @@ def generate_turn_media(
     voice_id = None
     if speaker and speaker != "Game Master":
         voice_id = get_suspect_voice_id(speaker, state)
+    else:
+        # Narrator: prefer the per-game Game Master voice picked at startup
+        gm_voice = getattr(state, "game_master_voice_id", None)
+        if gm_voice:
+            voice_id = gm_voice
+
     voice_id = voice_id or GAME_MASTER_VOICE_ID
 
     # Generate audio (always foreground - needed for immediate playback)

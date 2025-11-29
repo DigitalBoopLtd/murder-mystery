@@ -613,16 +613,8 @@ No previous conversations."""
 - "find_contradictions" → When checking if a suspect contradicted themselves
 - "get_cross_references" → When confronting a suspect with what others said
 
-## TEXT-TO-SPEECH TOOL (MCP)
-- "generate_tts_via_mcp" → Use this to generate audio for Game Master responses
-  - Call this tool when you want to generate audio for narrative responses
-  - Parameters: text (your response), voice_id (Game Master voice: JBFqnCBsd6RMkjVDRZzb)
-  - Returns: [AUDIO:path]text format (the system will handle the audio automatically)
-  - Note: Suspect audio is handled automatically by interrogate_suspect tool
-
 CRITICAL: For ANY talk/interrogate request, you MUST use the interrogate_suspect tool.
 CRITICAL: Always include the FULL profile with emotional state and conversation history!
-OPTIONAL: For Game Master narrative responses, you can use generate_tts_via_mcp to generate audio via MCP.
 
 ## GAME RULES
 - 3 wrong accusations = lose

@@ -42,6 +42,8 @@ class GameState:
         self.voice_mode: str = "pending"  # pending, full, text_only (silent film mode)
         self.voice_fetch_error: Optional[str] = None
         self.voice_diversity_stats: Dict = {}  # Stats for UI display
+        # Per-game Game Master voice (picked from available ElevenLabs voices)
+        self.game_master_voice_id: Optional[str] = None
         
         # Setup wizard state
         self.setup_step: int = 1  # 1 = configure, 2 = casting

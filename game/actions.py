@@ -16,7 +16,6 @@ from services.agent import create_game_master_agent, process_message
 from game.parser import parse_game_actions, clean_response_markers
 from game.state import GameState
 from game.state_manager import (
-    game_states,
     mystery_images,
     GAME_MASTER_VOICE_ID,
     _is_invalid_voice_id,
@@ -382,6 +381,12 @@ def process_player_action(
                 speaker,
             )
             voice_id = None
+    else:
+        # Narrator: prefer the per-game Game Master voice picked at startup
+        gm_voice = getattr(state, "game_master_voice_id", None)
+        if gm_voice:
+            voice_id = gm_voice
+
     voice_id = voice_id or GAME_MASTER_VOICE_ID
 
     # Generate audio

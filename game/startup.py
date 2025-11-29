@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import logging
 import os
+import random
 import threading
 import time
 from typing import Optional, Tuple, List, Dict
@@ -32,9 +33,68 @@ from game.state_manager import (
 )
 from game.media import _prewarm_suspect_portraits, _prewarm_scene_images
 from services.game_memory import initialize_game_memory, reset_game_memory
-from services.voice_service import get_voice_service
+from services.voice_service import get_voice_service, Voice
 
 logger = logging.getLogger(__name__)
+
+
+def pick_expressive_narrator_voice(voices: List[Voice]) -> str:
+    """Pick an expressive, English-friendly voice for the Game Master.
+
+    Falls back to the default GAME_MASTER_VOICE_ID if anything goes wrong.
+    """
+    if not voices:
+        return GAME_MASTER_VOICE_ID
+
+    expressive_keywords = [
+        "dramatic",
+        "theatrical",
+        "expressive",
+        "bold",
+        "edgy",
+        "mysterious",
+        "intense",
+        "energetic",
+        "brooding",
+        "suspense",
+    ]
+    expressive_use_cases = {
+        "characters_animation",
+        "narrative_story",
+        "entertainment_tv",
+        "video_games",
+    }
+
+    def is_expressive(v: Voice) -> bool:
+        text_parts: List[str] = []
+        if getattr(v, "descriptive", None):
+            text_parts.append(str(v.descriptive))
+        if getattr(v, "description", None):
+            text_parts.append(str(v.description))
+        text = " ".join(text_parts).lower()
+        use_case = str(getattr(v, "use_case", "") or "").lower()
+        return any(kw in text for kw in expressive_keywords) or use_case in expressive_use_cases
+
+    # Prefer English voices
+    english_voices = [
+        v
+        for v in voices
+        if str(getattr(v, "language", "") or "").lower() in ("", "en", "english")
+    ]
+
+    # Then prefer expressive ones within that set
+    pool = [v for v in english_voices if is_expressive(v)] or english_voices or voices
+    chosen = random.choice(pool)
+
+    logger.info(
+        "[VOICE] Selected Game Master voice: %s (id=%s, gender=%s, accent=%s, use_case=%s)",
+        getattr(chosen, "name", "Unknown"),
+        getattr(chosen, "voice_id", ""),
+        getattr(chosen, "gender", ""),
+        getattr(chosen, "accent", ""),
+        getattr(chosen, "use_case", ""),
+    )
+    return chosen.voice_id
 
 
 def _background_generate_title_card_from_premise(session_id: str):
@@ -197,10 +257,24 @@ def start_new_game(session_id: str):
     voices, voice_summary, voice_status = fetch_voices_for_session(session_id)
     
     if voice_status in ["mcp_success", "api_success", "success", "cached"]:
-        logger.info("[VOICE] %d voices available for character generation (via %s)", 
-                    len(voices), voice_status)
+        logger.info(
+            "[VOICE] %d voices available for character generation (via %s)",
+            len(voices),
+            voice_status,
+        )
     else:
         logger.warning("[VOICE] No voices available - running in Silent Film mode")
+
+    # Choose a Game Master voice for this game from the available voices (if any)
+    narrator_voice_id = GAME_MASTER_VOICE_ID
+    if voices:
+        try:
+            narrator_voice_id = pick_expressive_narrator_voice(voices)
+        except Exception:
+            logger.exception(
+                "[VOICE] Failed to pick expressive narrator voice; using default"
+            )
+    state.game_master_voice_id = narrator_voice_id
 
     # ========== STAGE 1: FAST PREMISE ==========
     logger.info("Generating mystery premise...")
@@ -279,9 +353,14 @@ system or background tasks. Stay purely in-world."""
 
     # Generate audio (needs the response text)
     logger.info("[GAME] Calling TTS for welcome message (%d chars)", len(response))
+    gm_voice = getattr(state, "game_master_voice_id", None) or GAME_MASTER_VOICE_ID
+    logger.info(
+        "[GAME] Using Game Master voice_id=%s for welcome message",
+        gm_voice,
+    )
     t4 = time.perf_counter()
     audio_path, alignment_data = text_to_speech(
-        response, GAME_MASTER_VOICE_ID, speaker_name="Game Master"
+        response, gm_voice, speaker_name="Game Master"
     )
     t5 = time.perf_counter()
     logger.info("[PERF] Welcome TTS (with timestamps) took %.2fs", t5 - t4)
