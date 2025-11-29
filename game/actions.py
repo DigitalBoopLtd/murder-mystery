@@ -13,7 +13,7 @@ import re
 from typing import Optional, Tuple, List, Dict
 
 from services.agent import create_game_master_agent, process_message
-from game.parser import parse_game_actions
+from game.parser import parse_game_actions, clean_response_markers
 from game.state import GameState
 from game.state_manager import (
     game_states,
@@ -23,12 +23,10 @@ from game.state_manager import (
     _get_scene_mood_for_state,
     get_or_create_state,
     get_suspect_voice_id,
+    normalize_location_name,
 )
 from services.image_service import generate_portrait_on_demand, get_image_service
-from mystery_config import create_validated_config
 from game.mystery_generator import (
-    generate_mystery,
-    prepare_game_prompt,
     assign_voice_to_suspect,
 )
 from services.tts_service import text_to_speech
@@ -280,6 +278,9 @@ def process_player_action(
         clean_response = re.sub(audio_marker_pattern, "", response).strip()
         logger.info("Extracted audio path from tool: %s", audio_path_from_tool)
 
+    # Remove game state markers from response (SEARCHED, ACCUSATION, CLUE_FOUND)
+    clean_response = clean_response_markers(clean_response)
+
     # Generate portrait and assign voice on-demand if a suspect was talked to
     # (This handles cases where speaker is detected from custom messages)
     if speaker and speaker != "Game Master":
@@ -332,11 +333,12 @@ def process_player_action(
     # Generate scene image on-demand if a location was searched
     if actions.get("location_searched"):
         location = actions["location_searched"]
+        normalized_location = normalize_location_name(location, state)
         session_images = mystery_images.get(session_id, {})
-
-        # Only generate if we don't already have this scene
-        if location not in session_images:
-            logger.info("Generating scene image for location: %s", location)
+        
+        # Only generate if we don't already have this scene (check both original and normalized)
+        if normalized_location not in session_images and location not in session_images:
+            logger.info("Generating scene image for location: %s (normalized: %s)", location, normalized_location)
             service = get_image_service()
             if service and service.is_available:
                 # Use the response text as context for scene generation
@@ -344,21 +346,27 @@ def process_player_action(
                 context_text = clean_response[:500]  # Use first 500 chars as context
                 mood = _get_scene_mood_for_state(state)
                 scene_path = service.generate_scene(
-                    location_name=location,
+                    location_name=normalized_location,  # Use normalized name for generation
                     setting_description=state.mystery.setting if state.mystery else "",
                     mood=mood,
                     context=context_text,
                 )
                 if scene_path:
-                    # Store in mystery_images dict for this session
+                    # Store in mystery_images dict for this session with normalized name
+                    # Also store with original name as fallback
                     if session_id not in mystery_images:
                         mystery_images[session_id] = {}
-                    mystery_images[session_id][location] = scene_path
+                    mystery_images[session_id][normalized_location] = scene_path
+                    if normalized_location != location:
+                        mystery_images[session_id][location] = scene_path  # Also store with original
                     logger.info(
-                        "Generated and stored scene for %s: %s", location, scene_path
+                        "Generated and stored scene for %s (normalized: %s): %s",
+                        location,
+                        normalized_location,
+                        scene_path,
                     )
                 else:
-                    logger.warning("Failed to generate scene for %s", location)
+                    logger.warning("Failed to generate scene for %s", normalized_location)
             else:
                 logger.warning("Image service not available for scene generation")
 
@@ -656,6 +664,9 @@ def run_action_logic(
         audio_path_from_tool = match.group(1)
         clean_response = re.sub(audio_marker_pattern, "", response).strip()
         logger.info("Extracted audio path from tool: %s", audio_path_from_tool)
+
+    # Remove game state markers from response (SEARCHED, ACCUSATION, CLUE_FOUND)
+    clean_response = clean_response_markers(clean_response)
 
     # Store assistant message (text only)
     state.messages.append(

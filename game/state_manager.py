@@ -6,6 +6,9 @@ import logging
 from typing import Dict, Optional
 
 from game.state import GameState
+import logging
+
+logger = logging.getLogger(__name__)
 
 logger = logging.getLogger(__name__)
 
@@ -82,5 +85,41 @@ def get_suspect_voice_id(suspect_name: str, state: GameState) -> Optional[str]:
         if suspect.name == suspect_name:
             return getattr(suspect, "voice_id", None)
     return None
+
+
+def normalize_location_name(location: str, state: GameState) -> str:
+    """Normalize location name to match exact clue location name.
+    
+    This ensures consistent storage/retrieval of location images even if
+    the parser returns a slightly different variation of the location name.
+    
+    Args:
+        location: Location name from parser/player message
+        state: Game state with mystery data
+        
+    Returns:
+        Normalized location name (exact match from clue if found, otherwise original)
+    """
+    if not state.mystery:
+        return location
+    
+    location_lower = location.lower()
+    for clue in state.mystery.clues:
+        clue_location_lower = clue.location.lower()
+        # Exact match or location is contained in clue location (or vice versa)
+        if (clue_location_lower == location_lower or 
+            location_lower in clue_location_lower or 
+            clue_location_lower in location_lower):
+            # Return exact clue location name for consistency
+            if clue.location != location:
+                logger.info(
+                    "Normalizing location name: '%s' -> '%s'",
+                    location,
+                    clue.location,
+                )
+            return clue.location
+    
+    # No match found, return original
+    return location
 
 

@@ -17,6 +17,7 @@ from game.state_manager import (
     _get_scene_mood_for_state,
     GAME_MASTER_VOICE_ID,
     get_suspect_voice_id,
+    normalize_location_name,
 )
 
 logger = logging.getLogger(__name__)
@@ -298,29 +299,32 @@ def generate_turn_media(
     # Start scene image generation (background or foreground)
     if actions.get("location_searched"):
         location = actions["location_searched"]
+        normalized_location = normalize_location_name(location, state)
         session_images = mystery_images.get(session_id, {})
-
-        # Only generate if we don't already have this scene
-        if location not in session_images:
+        
+        # Only generate if we don't already have this scene (check both original and normalized)
+        if normalized_location not in session_images and location not in session_images:
             mystery_setting = state.mystery.setting if state.mystery else ""
             context_text = clean_response[:500]  # Use first 500 chars as context
-
+            
             if background_images:
                 logger.info(
-                    "[GAME] Starting background scene generation for: %s", location
+                    "[GAME] Starting background scene generation for: %s (normalized: %s)",
+                    location,
+                    normalized_location,
                 )
                 threading.Thread(
                     target=_generate_scene_background,
-                    args=(location, mystery_setting, context_text, session_id),
+                    args=(normalized_location, mystery_setting, context_text, session_id),
                     daemon=True,
                 ).start()
             else:
                 # Foreground (blocking)
-                logger.info("Generating scene image for location: %s", location)
+                logger.info("Generating scene image for location: %s (normalized: %s)", location, normalized_location)
                 service = get_image_service()
                 if service and service.is_available:
                     scene_path = service.generate_scene(
-                        location_name=location,
+                        location_name=normalized_location,  # Use normalized name for generation
                         setting_description=mystery_setting,
                         mood="mysterious",
                         context=context_text,
@@ -328,14 +332,17 @@ def generate_turn_media(
                     if scene_path:
                         if session_id not in mystery_images:
                             mystery_images[session_id] = {}
-                        mystery_images[session_id][location] = scene_path
+                        mystery_images[session_id][normalized_location] = scene_path
+                        if normalized_location != location:
+                            mystery_images[session_id][location] = scene_path  # Also store with original
                         logger.info(
-                            "Generated and stored scene for %s: %s",
+                            "Generated and stored scene for %s (normalized: %s): %s",
                             location,
+                            normalized_location,
                             scene_path,
                         )
                     else:
-                        logger.warning("Failed to generate scene for %s", location)
+                        logger.warning("Failed to generate scene for %s", normalized_location)
                 else:
                     logger.warning("Image service not available for scene generation")
 

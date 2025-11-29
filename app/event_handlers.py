@@ -477,9 +477,44 @@ def on_custom_message(message: str, sess_id: str):
     if not display_portrait and newly_searched_location:
         location = list(newly_searched_location)[0]
         scene_image = images.get(location, None)
+        
+        # Fallback: try case-insensitive match if exact match fails
+        if not scene_image:
+            location_lower = location.lower()
+            for key, value in images.items():
+                if key.lower() == location_lower:
+                    scene_image = value
+                    logger.info(
+                        "Found scene image via case-insensitive match: %s -> %s",
+                        location,
+                        key,
+                    )
+                    break
+        
+        # Fallback: try partial match via clue locations
+        if not scene_image and state.mystery:
+            location_lower = location.lower()
+            for clue in state.mystery.clues:
+                clue_location = clue.location
+                if clue_location.lower() == location_lower or location_lower in clue_location.lower():
+                    scene_image = images.get(clue_location, None)
+                    if scene_image:
+                        logger.info(
+                            "Found scene image via clue location match: %s -> %s",
+                            location,
+                            clue_location,
+                        )
+                        break
+        
         if scene_image:
             logger.info("Displaying scene image for location: %s", location)
             display_portrait = scene_image
+        else:
+            logger.warning(
+                "Location %s searched but no scene image found. Available keys: %s",
+                location,
+                list(images.keys()),
+            )
 
     # Priority 3: Fall back to opening scene image (Game Master)
     if not display_portrait:
@@ -807,6 +842,35 @@ def on_voice_input(audio_path: str, sess_id, progress=gr.Progress()):
     if not display_portrait and newly_searched_location:
         location = list(newly_searched_location)[0]
         scene_image = images.get(location, None)
+        
+        # Fallback: try case-insensitive match if exact match fails
+        if not scene_image:
+            location_lower = location.lower()
+            for key, value in images.items():
+                if key.lower() == location_lower:
+                    scene_image = value
+                    logger.info(
+                        "Stage 2: Found scene image via case-insensitive match: %s -> %s",
+                        location,
+                        key,
+                    )
+                    break
+        
+        # Fallback: try partial match (location name contains searched location or vice versa)
+        if not scene_image and state.mystery:
+            location_lower = location.lower()
+            for clue in state.mystery.clues:
+                clue_location = clue.location
+                if clue_location.lower() == location_lower or location_lower in clue_location.lower():
+                    scene_image = images.get(clue_location, None)
+                    if scene_image:
+                        logger.info(
+                            "Stage 2: Found scene image via clue location match: %s -> %s",
+                            location,
+                            clue_location,
+                        )
+                        break
+        
         if scene_image:
             logger.info(
                 "Stage 2: Using scene image for location %s: %s",
@@ -816,8 +880,9 @@ def on_voice_input(audio_path: str, sess_id, progress=gr.Progress()):
             display_portrait = scene_image
         else:
             logger.warning(
-                "Stage 2: Location %s searched but no scene image found in images dict",
+                "Stage 2: Location %s searched but no scene image found in images dict. Available keys: %s",
                 location,
+                list(images.keys()),
             )
 
     # Priority 3: Fall back to opening scene image (Game Master)
@@ -892,7 +957,10 @@ def reset_voice_input():
     return gr.update(value=None)
 
 
-def on_audio_stop():
+def on_audio_stop(sess_id):
     """Reset speaker name to placeholder when audio playback ends."""
-    return '<div class="speaker-name">Awaiting your next move…</div>'
+    sess_id = normalize_session_id(sess_id)
+    state = get_or_create_state(sess_id)
+    """Reset speaker name to placeholder when audio playback ends."""
+    return f'<div class="speaker-name">The Murder of {state.premise_victim_name if state.premise_victim_name else "..."}</div>'
 

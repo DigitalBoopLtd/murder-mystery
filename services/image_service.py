@@ -157,9 +157,9 @@ No text, no words, no letters, no writing, no labels, no captions, no name tags.
                 "badge text, tag text, watermark text, copyright text, signature text"
             )
 
-            # Prefer Qwen-Image (previous default), optionally extend with fallbacks later if needed
+            # Use Tongyi-MAI/Z-Image-Turbo for fast image generation
             models_to_try = [
-                "Qwen/Qwen-Image",
+                "Tongyi-MAI/Z-Image-Turbo",
             ]
             
             image = None
@@ -262,9 +262,9 @@ No text, no words, no letters, no writing, no labels, no captions, no name tags.
                 "watermark text, copyright text, signature text, store signs, "
                 "building signs, door signs, window signs, neon signs with text"
             )
-            # Prefer Qwen-Image (previous default), optionally extend with fallbacks later if needed
+            # Use Tongyi-MAI/Z-Image-Turbo for fast image generation
             models_to_try = [
-                "Qwen/Qwen-Image",
+                "Tongyi-MAI/Z-Image-Turbo",
             ]
             
             image = None
@@ -343,9 +343,9 @@ Atmospheric scene only, no text overlay.
                 "badge text, tag text, watermark text, copyright text, signature text, "
                 "title overlay, title card overlay, game title overlay, movie title overlay"
             )
-            # Prefer Qwen-Image (previous default), optionally extend with fallbacks later if needed
+            # Use Tongyi-MAI/Z-Image-Turbo for fast image generation
             models_to_try = [
-                "Qwen/Qwen-Image",
+                "Tongyi-MAI/Z-Image-Turbo",
             ]
             
             image = None

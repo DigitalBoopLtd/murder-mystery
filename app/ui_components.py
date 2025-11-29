@@ -121,6 +121,18 @@ def create_ui_components() -> dict:
                             elem_id="mm-audio-player",
                             elem_classes="audio-player",
                         )
+                        
+                                        # Input bar - voice only
+                    with gr.Column(
+                        elem_classes="input-bar", visible=False
+                    ) as input_row:
+                        # Voice input - only input method
+                        voice_input = gr.Audio(
+                            sources=["microphone"],
+                            type="filepath",
+                            label=None,
+                            show_label=False,
+                        )
 
                     # ====== SETUP WIZARD ======
                     # Step 1: Configure + Voice Loading
@@ -171,18 +183,6 @@ def create_ui_components() -> dict:
                                 elem_classes="start-button wizard-primary-btn",
                                 size="lg",
                             )
-
-                    # Input bar - voice only
-                    with gr.Column(
-                        elem_classes="input-bar", visible=False
-                    ) as input_row:
-                        # Voice input - only input method
-                        voice_input = gr.Audio(
-                            sources=["microphone"],
-                            type="filepath",
-                            label=None,
-                            show_label=False,
-                        )
                     
                     # Tab group with accordion content (always visible)
                     with gr.Tabs(elem_classes="info-tabs"):
