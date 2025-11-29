@@ -299,7 +299,7 @@ def text_to_speech(
 
     voice_id = voice_id or GAME_MASTER_VOICE_ID
 
-    # First try to get timestamps (non-streaming, more reliable than streaming)
+    # Try to get timestamps (non-streaming, more reliable than streaming)
     audio_path, timestamps = text_to_speech_with_timestamps(text, voice_id)
 
     if audio_path:

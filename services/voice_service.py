@@ -4,13 +4,19 @@ import os
 import logging
 import random
 import re
+import asyncio
+import time
 from typing import Optional, List, Dict, Tuple
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from concurrent.futures import ThreadPoolExecutor
 import requests
 
 logger = logging.getLogger(__name__)
 
 ELEVENLABS_API_URL = "https://api.elevenlabs.io/v1"
+
+# Session voice cache TTL (not used with pure session cache, but kept for potential future use)
+VOICE_CACHE_TTL = 300  # 5 minutes
 
 
 @dataclass
@@ -26,9 +32,20 @@ class Voice:
     use_case: Optional[str] = None
     category: Optional[str] = None  # "premade" for default voices, "cloned"/"custom" for user voices
     language: Optional[str] = None  # Language code (e.g., "en" for English)
+    descriptive: Optional[str] = None  # Voice style description (e.g., "warm", "authoritative")
 
     def __repr__(self):
         return f"Voice({self.name}, {self.gender}, {self.age}, {self.accent})"
+
+
+@dataclass
+class VoiceCache:
+    """Session-level voice cache."""
+    voices: List[Voice] = field(default_factory=list)
+    voice_summary: str = ""
+    fetched_at: float = 0.0
+    fetch_status: str = "pending"  # pending, fetching, success, failed
+    error_message: Optional[str] = None
 
 
 class VoiceService:
@@ -47,13 +64,13 @@ class VoiceService:
         """Get API headers."""
         return {"xi-api-key": self.api_key, "Content-Type": "application/json"}
 
-    def get_available_voices(self, force_refresh: bool = False, english_only: bool = True, default_only: bool = True) -> List[Voice]:
+    def get_available_voices(self, force_refresh: bool = False, english_only: bool = False, default_only: bool = False) -> List[Voice]:
         """Fetch all available voices from ElevenLabs.
 
         Args:
             force_refresh: Force refresh of cached voices
-            english_only: Filter to only English-speaking voices (default: True)
-            default_only: Filter to characters_animation voices (includes both premade and professional, excludes custom "My voices") (default: True)
+            english_only: Filter to only English-speaking voices (default: False - use all voices)
+            default_only: Filter to characters_animation voices (default: False - use all voices)
 
         Returns:
             List of Voice objects with metadata
@@ -87,6 +104,7 @@ class VoiceService:
                             use_case=labels.get("use_case"),
                             category=category,
                             language=labels.get("language"),  # Extract language (should be "en" for English)
+                            descriptive=labels.get("descriptive"),  # Voice style
                         )
                     )
 
@@ -139,6 +157,222 @@ class VoiceService:
             return filtered_voices
         
         return voices
+    
+    def fetch_voices_for_session(self, timeout: float = 10.0) -> Tuple[List[Voice], str]:
+        """Fetch voices with error handling for session initialization.
+        
+        Returns:
+            Tuple of (voices list, status string: 'success', 'failed', 'timeout')
+        """
+        if not self.is_available:
+            logger.warning("ElevenLabs API key not set - running in silent mode")
+            return [], "no_api_key"
+        
+        try:
+            response = requests.get(
+                f"{ELEVENLABS_API_URL}/voices",
+                headers=self._get_headers(),
+                timeout=timeout
+            )
+            response.raise_for_status()
+            data = response.json()
+            
+            voices = []
+            for voice_data in data.get("voices", []):
+                labels = voice_data.get("labels", {})
+                category = voice_data.get("category")
+                voices.append(
+                    Voice(
+                        voice_id=voice_data["voice_id"],
+                        name=voice_data["name"],
+                        gender=labels.get("gender"),
+                        age=labels.get("age"),
+                        accent=labels.get("accent"),
+                        description=labels.get("description"),
+                        use_case=labels.get("use_case"),
+                        category=category,
+                        language=labels.get("language"),
+                        descriptive=labels.get("descriptive"),
+                    )
+                )
+            
+            self._voices_cache = voices
+            logger.info(f"Fetched {len(voices)} voices for session")
+            return voices, "success"
+            
+        except requests.Timeout:
+            logger.warning("Voice fetch timed out")
+            return [], "timeout"
+        except requests.RequestException as e:
+            logger.error(f"Error fetching voices: {e}")
+            return [], "failed"
+
+    def fetch_voices_via_mcp_with_fallback(self, timeout: float = 30.0) -> Tuple[List[Voice], str]:
+        """Fetch voices via MCP, falling back to direct API if MCP fails.
+        
+        This method tries MCP first (for hackathon "MCP in Action" track),
+        then falls back to the direct REST API if MCP is unavailable or fails.
+        
+        Args:
+            timeout: Maximum time to wait for response
+        
+        Returns:
+            Tuple of (voices list, status string)
+            Status includes: 'mcp_success', 'api_success', 'failed', etc.
+        """
+        import asyncio
+        
+        # Try MCP first
+        try:
+            from services.mcp_elevenlabs import fetch_voices_via_mcp, MCP_AVAILABLE, MCPVoice
+            
+            if MCP_AVAILABLE and self.is_available:
+                logger.info("[VOICE] Attempting to fetch voices via MCP...")
+                
+                # Run async MCP call
+                loop = asyncio.new_event_loop()
+                try:
+                    mcp_voices, status = loop.run_until_complete(
+                        fetch_voices_via_mcp(timeout=timeout)
+                    )
+                finally:
+                    loop.close()
+                
+                if status == "success" and mcp_voices:
+                    # Convert MCPVoice to Voice
+                    voices = [
+                        Voice(
+                            voice_id=v.voice_id,
+                            name=v.name,
+                            gender=v.gender,
+                            age=v.age,
+                            accent=v.accent,
+                            description=v.description,
+                            use_case=v.use_case,
+                            category=v.category,
+                            language=v.language,
+                            descriptive=v.descriptive,
+                        )
+                        for v in mcp_voices
+                    ]
+                    self._voices_cache = voices
+                    logger.info(f"[MCP] Successfully fetched {len(voices)} voices via MCP")
+                    return voices, "mcp_success"
+                else:
+                    logger.warning(f"[MCP] Fetch returned status: {status}, falling back to direct API")
+            else:
+                if not MCP_AVAILABLE:
+                    logger.info("[VOICE] MCP SDK not available, using direct API")
+                else:
+                    logger.info("[VOICE] API key not set, using direct API")
+                
+        except ImportError:
+            logger.info("[VOICE] MCP module not available, using direct API")
+        except Exception as e:
+            logger.warning(f"[MCP] Fetch failed ({e}), falling back to direct API")
+        
+        # Fallback to direct API
+        logger.info("[VOICE] Using direct API fallback...")
+        voices, status = self.fetch_voices_for_session(timeout=timeout)
+        
+        if status == "success":
+            return voices, "api_success"
+        return voices, status
+
+    def summarize_voices_for_llm(self, voices: List[Voice]) -> str:
+        """Create a concise summary of available voices for the LLM to use when generating characters.
+        
+        The LLM will use this to create characters that match available voices,
+        eliminating the need for post-hoc voice matching.
+        
+        Args:
+            voices: List of Voice objects
+            
+        Returns:
+            Formatted string for inclusion in LLM prompt
+        """
+        if not voices:
+            return "No voices available - generate characters without voice assignments."
+        
+        # Filter to voices suitable for characters (exclude narration-only voices)
+        suitable_voices = []
+        for voice in voices:
+            # Include all voices - let LLM decide what fits best
+            suitable_voices.append(voice)
+        
+        # Build concise summary
+        summary_lines = []
+        summary_lines.append(f"AVAILABLE VOICE ACTORS ({len(suitable_voices)} total):")
+        summary_lines.append("=" * 50)
+        
+        # Group by gender for easier matching
+        male_voices = [v for v in suitable_voices if v.gender and v.gender.lower() == "male"]
+        female_voices = [v for v in suitable_voices if v.gender and v.gender.lower() == "female"]
+        other_voices = [v for v in suitable_voices if not v.gender or v.gender.lower() not in ["male", "female"]]
+        
+        def format_voice(v: Voice) -> str:
+            parts = [f"  - ID: {v.voice_id}"]
+            parts.append(f"    Name: {v.name}")
+            if v.age:
+                parts.append(f"    Age: {v.age}")
+            if v.accent:
+                parts.append(f"    Accent: {v.accent}")
+            if v.descriptive:
+                parts.append(f"    Style: {v.descriptive}")
+            return "\n".join(parts)
+        
+        if male_voices:
+            summary_lines.append(f"\nMALE VOICES ({len(male_voices)}):")
+            for v in male_voices[:10]:  # Limit to avoid prompt bloat
+                summary_lines.append(format_voice(v))
+            if len(male_voices) > 10:
+                summary_lines.append(f"  ... and {len(male_voices) - 10} more")
+        
+        if female_voices:
+            summary_lines.append(f"\nFEMALE VOICES ({len(female_voices)}):")
+            for v in female_voices[:10]:
+                summary_lines.append(format_voice(v))
+            if len(female_voices) > 10:
+                summary_lines.append(f"  ... and {len(female_voices) - 10} more")
+        
+        if other_voices:
+            summary_lines.append(f"\nOTHER VOICES ({len(other_voices)}):")
+            for v in other_voices[:5]:
+                summary_lines.append(format_voice(v))
+            if len(other_voices) > 5:
+                summary_lines.append(f"  ... and {len(other_voices) - 5} more")
+        
+        summary_lines.append("\n" + "=" * 50)
+        
+        return "\n".join(summary_lines)
+    
+    def get_voice_diversity_stats(self, voices: List[Voice]) -> Dict:
+        """Get statistics about voice diversity for UI display.
+        
+        Returns:
+            Dict with counts by gender, age, accent
+        """
+        stats = {
+            "total": len(voices),
+            "by_gender": {},
+            "by_age": {},
+            "by_accent": {},
+        }
+        
+        for voice in voices:
+            # Gender
+            gender = (voice.gender or "unknown").lower()
+            stats["by_gender"][gender] = stats["by_gender"].get(gender, 0) + 1
+            
+            # Age
+            age = (voice.age or "unknown").lower()
+            stats["by_age"][age] = stats["by_age"].get(age, 0) + 1
+            
+            # Accent
+            accent = (voice.accent or "unknown").lower()
+            stats["by_accent"][accent] = stats["by_accent"].get(accent, 0) + 1
+        
+        return stats
 
     def extract_suspect_characteristics(self, suspect_profile: dict) -> dict:
         """Extract voice-relevant characteristics from a suspect profile.
@@ -632,13 +866,13 @@ class VoiceService:
 
         return best_voice
 
-    def assign_voices_to_suspects(self, suspects: List[dict], english_only: bool = True, default_only: bool = True) -> Dict[str, str]:
+    def assign_voices_to_suspects(self, suspects: List[dict], english_only: bool = False, default_only: bool = False) -> Dict[str, str]:
         """Assign voices to all suspects.
 
         Args:
             suspects: List of suspect profile dicts
-            english_only: Only use English-speaking voices (default: True)
-            default_only: Filter to characters_animation voices (includes both premade and professional, excludes custom "My voices") (default: True)
+            english_only: Only use English-speaking voices (default: False - use all voices)
+            default_only: Filter to characters_animation voices (default: False - use all voices)
 
         Returns:
             Dict mapping suspect name to voice_id

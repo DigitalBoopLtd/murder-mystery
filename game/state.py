@@ -1,6 +1,6 @@
 """Game state management."""
 
-from typing import Dict, Optional, List
+from typing import Dict, Optional, List, Any
 from game.models import Mystery, SuspectState
 from mystery_config import MysteryConfig, create_validated_config
 
@@ -32,6 +32,20 @@ class GameState:
         # The Game Master (orchestrator) owns this state and passes it to stateless suspects
         self.suspect_states: Dict[str, SuspectState] = {}
         self.current_turn: int = 0
+        
+        # Voice-First Character Generation (Session Cache)
+        # Voices are fetched BEFORE character generation so LLM can create 
+        # characters that match available voices
+        self.available_voices: List[Any] = []  # List of Voice objects
+        self.voice_summary: str = ""  # Formatted summary for LLM
+        self.voices_fetched: bool = False
+        self.voice_mode: str = "pending"  # pending, full, text_only (silent film mode)
+        self.voice_fetch_error: Optional[str] = None
+        self.voice_diversity_stats: Dict = {}  # Stats for UI display
+        
+        # Setup wizard state
+        self.setup_step: int = 1  # 1 = configure, 2 = casting
+        self.setup_ready: bool = False  # True when voices fetched and ready to proceed
 
     def is_new_game(self, message: str) -> bool:
         """Check if the message indicates a new game."""
@@ -59,6 +73,11 @@ class GameState:
         # AI Enhancement Phase 1: Reset suspect state tracking
         self.suspect_states = {}
         self.current_turn = 0
+        # Note: We do NOT reset voice fields here - voices are session-cached
+        # and should persist across multiple games in the same session
+        # Reset setup state for new game
+        self.setup_step = 1
+        self.setup_ready = False
 
     def add_clue(self, clue_id: str, clue_description: str):
         """Add a discovered clue."""

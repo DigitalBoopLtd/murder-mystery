@@ -26,6 +26,7 @@ from app.ui_components import create_ui_components
 from app.event_handlers import (
     on_config_era_change,
     on_config_generic_change,
+    on_wizard_config_change,
     on_start_game,
     check_mystery_ready,
     on_voice_input,
@@ -89,6 +90,7 @@ def create_app():
         clues_html = components["clues_html"]
         accusations_html = components["accusations_html"]
         notebook_html = components["notebook_html"]
+        dashboard_html_tab = components["dashboard_html_tab"]
         victim_scene_html_tab = components["victim_scene_html_tab"]
         suspects_list_html_tab = components["suspects_list_html_tab"]
         locations_html_tab = components["locations_html_tab"]
@@ -103,6 +105,13 @@ def create_app():
         refresh_logs_btn = components["refresh_logs_btn"]
         mystery_check_timer = components["mystery_check_timer"]
         voice_input = components["voice_input"]
+        # Setup wizard components
+        setup_wizard = components["setup_wizard"]
+        wizard_era_dropdown = components["wizard_era_dropdown"]
+        wizard_setting_dropdown = components["wizard_setting_dropdown"]
+        wizard_difficulty_radio = components["wizard_difficulty_radio"]
+        wizard_tone_radio = components["wizard_tone_radio"]
+        refresh_voices_btn = components["refresh_voices_btn"]
 
         # ====== WIRE UP EVENTS ======
 
@@ -118,6 +127,7 @@ def create_app():
             accusations_html,
             notebook_html,
             # Tab components (replicated from accordions)
+            dashboard_html_tab,
             victim_scene_html_tab,
             suspects_list_html_tab,
             locations_html_tab,
@@ -173,7 +183,64 @@ def create_app():
             outputs=None,
         )
 
-        # Start game
+        # ====== WIZARD EVENT HANDLERS ======
+        
+        # Wizard era dropdown - updates settings and syncs config
+        getattr(wizard_era_dropdown, "change")(
+            fn=on_wizard_config_change,
+            inputs=[
+                wizard_era_dropdown,
+                wizard_setting_dropdown,
+                wizard_difficulty_radio,
+                wizard_tone_radio,
+                session_id,
+            ],
+            outputs=[wizard_setting_dropdown],
+        )
+        
+        # Wizard setting changes - sync config
+        getattr(wizard_setting_dropdown, "change")(
+            fn=on_config_generic_change,
+            inputs=[
+                wizard_setting_dropdown,
+                wizard_era_dropdown,
+                wizard_difficulty_radio,
+                wizard_tone_radio,
+                session_id,
+            ],
+            outputs=None,
+        )
+        
+        # Wizard difficulty changes - sync config
+        getattr(wizard_difficulty_radio, "change")(
+            fn=on_config_generic_change,
+            inputs=[
+                wizard_setting_dropdown,
+                wizard_era_dropdown,
+                wizard_difficulty_radio,
+                wizard_tone_radio,
+                session_id,
+            ],
+            outputs=None,
+        )
+        
+        # Wizard tone changes - sync config
+        getattr(wizard_tone_radio, "change")(
+            fn=on_config_generic_change,
+            inputs=[
+                wizard_setting_dropdown,
+                wizard_era_dropdown,
+                wizard_difficulty_radio,
+                wizard_tone_radio,
+                session_id,
+            ],
+            outputs=None,
+        )
+        
+        # Note: Voices are fetched on-demand when START is clicked
+        # The refresh button allows manual refresh before starting
+
+        # Start game - now with wizard outputs
         getattr(start_btn, "click")(
             on_start_game,
             inputs=[session_id],
@@ -182,12 +249,13 @@ def create_app():
                 audio_output,
                 portrait_image,
                 input_row,
-                start_btn,
+                setup_wizard,  # Hide wizard
                 victim_scene_html,
                 suspects_list_html,
                 locations_html,
                 clues_html,
                 accusations_html,
+                dashboard_html_tab,
                 victim_scene_html_tab,
                 suspects_list_html_tab,
                 locations_html_tab,
@@ -206,6 +274,7 @@ def create_app():
                 victim_scene_html,
                 suspects_list_html,
                 locations_html,
+                dashboard_html_tab,
                 victim_scene_html_tab,
                 suspects_list_html_tab,
                 locations_html_tab,

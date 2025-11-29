@@ -13,3 +13,5 @@ requests>=2.31.0
 huggingface_hub>=0.20.0
 Pillow>=10.0.0
 websockets>=12.0
+mcp>=1.0.0
+mcp-elevenlabs>=0.1.0

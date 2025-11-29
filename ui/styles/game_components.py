@@ -150,4 +150,282 @@ CSS_GAME_COMPONENTS = """/* ========== BASE PANEL TITLE (fallback) ========== */
     overflow: visible !important;
 }
 
+/* ========== INVESTIGATION DASHBOARD ========== */
+.investigation-dashboard {
+    position: relative;
+    z-index: 20;
+    padding: 12px;
+    font-family: var(--font-body);
+    color: var(--terminal-green);
+}
+
+.dashboard-empty {
+    text-align: center;
+    padding: 24px;
+    color: var(--terminal-green-muted);
+    font-family: var(--font-body);
+    font-size: 14px;
+    line-height: 1.6;
+}
+
+.dashboard-icon {
+    font-size: 36px;
+    margin-bottom: 12px;
+    opacity: 0.6;
+}
+
+/* Dashboard Status Card */
+.dashboard-status {
+    background: rgba(0, 30, 0, 0.6);
+    border: 1px solid var(--terminal-green-border-soft);
+    padding: 14px;
+    margin-bottom: 16px;
+}
+
+.dashboard-status.ready-high {
+    border-color: var(--terminal-green);
+    background: rgba(51, 255, 51, 0.1);
+}
+
+.dashboard-status.ready-medium {
+    border-color: #ffcc00;
+    background: rgba(255, 204, 0, 0.08);
+}
+
+.dashboard-status.ready-low {
+    border-color: var(--terminal-green-muted);
+}
+
+.status-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+}
+
+.status-icon {
+    font-size: 20px;
+}
+
+.status-score {
+    font-family: var(--font-retro-mono);
+    font-size: 20px;
+    font-weight: 400;
+    color: var(--terminal-green);
+    text-shadow: 0 0 8px var(--terminal-green);
+}
+
+.status-text {
+    font-size: 14px;
+    color: var(--terminal-green-accent);
+    margin-bottom: 10px;
+    font-family: var(--font-body);
+    line-height: 1.5;
+}
+
+.status-accusations {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: var(--terminal-green-muted);
+    font-family: var(--font-body);
+}
+
+.status-accusations .pip {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    background: var(--terminal-green);
+    border-radius: 2px;
+}
+
+.status-accusations .pip.used {
+    background: #ff4444;
+    animation: pip-flash 1s ease-in-out infinite;
+}
+
+@keyframes pip-flash {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+/* Dashboard Sections */
+.dashboard-section {
+    margin-bottom: 16px;
+    background: rgba(0, 20, 0, 0.4);
+    border: 1px solid var(--terminal-green-border-soft);
+    padding: 12px;
+}
+
+.dashboard-section-header {
+    font-family: var(--font-retro-mono);
+    font-size: 14px;
+    color: var(--terminal-green);
+    letter-spacing: 2px;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--terminal-green-border-soft);
+    text-shadow: 0 0 6px var(--terminal-green);
+}
+
+/* Progress Rows */
+.dashboard-progress-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+    font-size: 14px;
+}
+
+.dashboard-label {
+    width: 120px;
+    color: var(--terminal-green);
+    flex-shrink: 0;
+    font-family: var(--font-body);
+    font-weight: 400;
+}
+
+.dashboard-bar-track {
+    flex: 1;
+    min-width: 0;
+    height: 14px;
+    background: rgba(0, 20, 0, 0.6);
+    border: 1px solid var(--terminal-green-border-soft);
+    border-radius: 2px;
+    overflow: hidden;
+}
+
+.dashboard-bar-fill {
+    height: 100%;
+    transition: width 0.3s ease;
+    border-radius: 1px;
+}
+
+.dashboard-value {
+    width: 55px;
+    text-align: right;
+    color: var(--terminal-green);
+    flex-shrink: 0;
+    font-family: var(--font-body);
+    font-weight: 600;
+}
+
+.dashboard-hint {
+    font-size: 14px;
+    color: var(--terminal-green-muted);
+    text-align: center;
+    padding: 16px;
+    font-style: italic;
+    font-family: var(--font-body);
+    line-height: 1.5;
+}
+
+/* Suspicion Ranking */
+.suspicion-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 6px;
+    margin-bottom: 6px;
+    background: rgba(0, 30, 0, 0.3);
+    border-left: 3px solid transparent;
+}
+
+.suspicion-row:first-child {
+    border-left-color: #ff4444;
+    background: rgba(255, 68, 68, 0.1);
+}
+
+.suspicion-rank {
+    width: 28px;
+    text-align: center;
+    font-size: 14px;
+}
+
+.suspicion-name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--terminal-green);
+    font-size: 14px;
+    font-family: var(--font-body);
+    font-weight: 600;
+}
+
+.suspicion-bar-track {
+    width: 80px;
+    height: 10px;
+    background: rgba(0, 20, 0, 0.6);
+    border: 1px solid var(--terminal-green-border-soft);
+    border-radius: 2px;
+    overflow: hidden;
+    flex-shrink: 0;
+}
+
+.suspicion-bar-fill {
+    height: 100%;
+    transition: width 0.3s ease;
+    border-radius: 1px;
+}
+
+.suspicion-contradiction {
+    font-size: 11px;
+    color: #ff6666;
+    font-family: var(--font-body);
+    animation: contradiction-pulse 2s ease-in-out infinite;
+}
+
+/* ========== SETUP WIZARD ========== */
+.setup-wizard {
+    max-width: 600px;
+    margin: 0 auto;
+    padding: 24px;
+}
+
+.wizard-settings {
+    background: rgba(0, 20, 0, 0.4);
+    border: 1px solid var(--terminal-green-border-soft);
+    padding: 20px;
+    margin-bottom: 20px;
+}
+
+.wizard-section-title {
+    font-family: var(--font-retro-mono);
+    font-size: 16px;
+    color: var(--terminal-green);
+    letter-spacing: 2px;
+    margin-bottom: 16px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--terminal-green-border-soft);
+    text-shadow: 0 0 6px var(--terminal-green);
+    text-transform: uppercase;
+}
+
+.wizard-buttons {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+}
+
+.wizard-secondary-btn {
+    background: transparent !important;
+    border: 1px solid var(--terminal-green-border-soft) !important;
+    color: var(--terminal-green-muted) !important;
+    font-size: 12px !important;
+    padding: 8px 16px !important;
+}
+
+.wizard-secondary-btn:hover {
+    border-color: var(--terminal-green) !important;
+    color: var(--terminal-green) !important;
+}
+
+.wizard-primary-btn {
+    flex: 1;
+    max-width: 300px;
+}
 """

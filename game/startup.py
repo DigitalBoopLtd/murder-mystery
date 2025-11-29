@@ -1,10 +1,12 @@
 """Game startup logic for the murder mystery game.
 
 This module handles:
+- Voice-first character generation (fetch voices BEFORE generating characters)
 - Fast premise generation
 - Initial Game Master welcome
 - Background full-case generation
 - Background prewarming of portraits and scene images
+- Graceful fallback to "Silent Film" mode if voices unavailable
 """
 
 from __future__ import annotations
@@ -30,6 +32,7 @@ from game.state_manager import (
 )
 from game.media import _prewarm_suspect_portraits, _prewarm_scene_images
 from services.game_memory import initialize_game_memory, reset_game_memory
+from services.voice_service import get_voice_service
 
 logger = logging.getLogger(__name__)
 
@@ -95,8 +98,78 @@ def _background_generate_title_card_from_premise(session_id: str):
         )
 
 
+def fetch_voices_for_session(session_id: str) -> Tuple[List, str, str]:
+    """Fetch voices for a session with MCP-first approach and fallback.
+    
+    This should be called BEFORE generating characters so the LLM can
+    create characters that match available voices.
+    
+    Uses MCP (Model Context Protocol) to communicate with ElevenLabs,
+    qualifying for the "MCP in Action" hackathon track. Falls back to
+    direct API if MCP is unavailable.
+    
+    Returns:
+        Tuple of (voices list, voice_summary string, status string)
+        Status is one of: 'mcp_success', 'api_success', 'cached', 'failed', etc.
+    """
+    state = get_or_create_state(session_id)
+    
+    # Check session cache first
+    if state.voices_fetched and state.available_voices:
+        logger.info("[VOICE] Using cached voices for session %s (%d voices)", 
+                    session_id[:8], len(state.available_voices))
+        return state.available_voices, state.voice_summary, "cached"
+    
+    # Fetch fresh voices using MCP with fallback to direct API
+    voice_service = get_voice_service()
+    
+    t0 = time.perf_counter()
+    # Try MCP first, fallback to direct API
+    voices, status = voice_service.fetch_voices_via_mcp_with_fallback(timeout=30.0)
+    t1 = time.perf_counter()
+    logger.info("[PERF] Voice fetch took %.2fs (status=%s)", t1 - t0, status)
+    
+    if status in ["mcp_success", "api_success", "success"] and voices:
+        # Generate summary for LLM
+        voice_summary = voice_service.summarize_voices_for_llm(voices)
+        voice_stats = voice_service.get_voice_diversity_stats(voices)
+        
+        # Cache in session state
+        state.available_voices = voices
+        state.voice_summary = voice_summary
+        state.voices_fetched = True
+        state.voice_mode = "full"
+        state.voice_diversity_stats = voice_stats
+        state.voice_fetch_error = None
+        
+        # Log with source info
+        source = "MCP" if status == "mcp_success" else "Direct API"
+        logger.info("[VOICE] Fetched %d voices via %s for session %s", len(voices), source, session_id[:8])
+        logger.info("[VOICE] Diversity: %s", voice_stats)
+        
+        return voices, voice_summary, status
+    else:
+        # Failed to fetch - enable silent film mode
+        state.available_voices = []
+        state.voice_summary = ""
+        state.voices_fetched = True  # Mark as fetched (even if failed) to avoid retrying
+        state.voice_mode = "text_only"  # Silent film mode
+        state.voice_fetch_error = status
+        
+        logger.warning("[VOICE] Failed to fetch voices (status=%s), running in silent film mode", status)
+        
+        return [], "", status
+
+
 def start_new_game(session_id: str):
-    """Start a new mystery game with fast premise + background case generation."""
+    """Start a new mystery game with voice-first character generation.
+    
+    Flow:
+    1. Fetch voices (with session caching and fallback)
+    2. Generate premise
+    3. Generate Game Master welcome
+    4. Background: Generate full mystery WITH voice assignments
+    """
     state = get_or_create_state(session_id)
     state.reset_game()
 
@@ -116,6 +189,18 @@ def start_new_game(session_id: str):
         state.tone_instruction = config.get_tone_instruction()
     except Exception:  # noqa: BLE001
         state.tone_instruction = None
+
+    # ========== STAGE 0: FETCH VOICES (Voice-First) ==========
+    # This MUST happen before mystery generation so LLM can create
+    # characters that match available voices
+    logger.info("Fetching voices for session %s...", session_id[:8])
+    voices, voice_summary, voice_status = fetch_voices_for_session(session_id)
+    
+    if voice_status in ["mcp_success", "api_success", "success", "cached"]:
+        logger.info("[VOICE] %d voices available for character generation (via %s)", 
+                    len(voices), voice_status)
+    else:
+        logger.warning("[VOICE] No voices available - running in Silent Film mode")
 
     # ========== STAGE 1: FAST PREMISE ==========
     logger.info("Generating mystery premise...")
@@ -226,8 +311,9 @@ system or background tasks. Stay purely in-world."""
     )
 
     # ========== STAGE 2: FULL CASE IN BACKGROUND ==========
+    # Pass voice_summary so LLM can assign voices during generation
 
-    def _background_generate_full_case(sess_id: str, premise_obj):
+    def _background_generate_full_case(sess_id: str, premise_obj, bg_voice_summary: str):
         bg_state = get_or_create_state(sess_id)
         try:
             # Use the latest config for this session when generating the full case
@@ -241,13 +327,27 @@ system or background tasks. Stay purely in-world."""
                 bg_state.tone_instruction = None
 
             logger.info("[BG] Starting full mystery generation in background...")
+            logger.info("[BG] Voice mode: %s (summary length: %d chars)", 
+                        bg_state.voice_mode, len(bg_voice_summary) if bg_voice_summary else 0)
+            
             t_full_0 = time.perf_counter()
-            full_mystery = generate_mystery(premise=premise_obj, config=bg_config)
+            # Pass voice_summary so LLM assigns voices during character generation
+            full_mystery = generate_mystery(
+                premise=premise_obj, 
+                config=bg_config,
+                voice_summary=bg_voice_summary if bg_voice_summary else None
+            )
             t_full_1 = time.perf_counter()
             logger.info(
                 "[PERF] Full mystery generation (background) took %.2fs",
                 t_full_1 - t_full_0,
             )
+            
+            # Log voice assignments
+            assigned_count = sum(1 for s in full_mystery.suspects if s.voice_id)
+            logger.info("[BG] Voice assignments: %d/%d suspects have voices",
+                        assigned_count, len(full_mystery.suspects))
+            
             bg_state.mystery = full_mystery
             bg_state.system_prompt = prepare_game_prompt(
                 full_mystery, bg_state.tone_instruction
@@ -287,11 +387,58 @@ system or background tasks. Stay purely in-world."""
 
     threading.Thread(
         target=_background_generate_full_case,
-        args=(session_id, premise),
+        args=(session_id, premise, voice_summary),  # Pass voice_summary!
         daemon=True,
     ).start()
 
     return state, response, audio_path, "Game Master", alignment_data
+
+
+def prepare_game_resources(session_id: str) -> Dict:
+    """Pre-fetch voices and prepare game resources.
+    
+    This should be called when the settings screen opens to:
+    1. Fetch voices in the background
+    2. Cache them for use when game starts
+    3. Return status for UI to show progress
+    
+    Returns:
+        Dict with status info:
+        - voices_ready: bool
+        - voice_count: int
+        - voice_mode: str (full/text_only)
+        - diversity_stats: dict
+        - error: str or None
+    """
+    state = get_or_create_state(session_id)
+    
+    # Fetch voices (uses session cache)
+    voices, voice_summary, status = fetch_voices_for_session(session_id)
+    
+    return {
+        "voices_ready": len(voices) > 0,
+        "voice_count": len(voices),
+        "voice_mode": state.voice_mode,
+        "diversity_stats": state.voice_diversity_stats,
+        "error": state.voice_fetch_error,
+        "status": status,
+    }
+
+
+def refresh_voices(session_id: str) -> Dict:
+    """Force refresh voices from ElevenLabs.
+    
+    Called when user clicks the refresh button.
+    """
+    state = get_or_create_state(session_id)
+    
+    # Clear cache to force refresh
+    state.voices_fetched = False
+    state.available_voices = []
+    state.voice_summary = ""
+    
+    # Re-fetch
+    return prepare_game_resources(session_id)
 
 
 def start_new_game_staged(session_id: str):
@@ -299,20 +446,28 @@ def start_new_game_staged(session_id: str):
 
     This wraps the existing start_new_game() function and exposes coarse
     progress stages as a generator:
-      - ("premise", 0.2, None)
-      - ("welcome", 0.5, None)
-      - ("tts", 0.8, None)
+      - ("voices", 0.1, voice_status)
+      - ("premise", 0.3, None)
+      - ("welcome", 0.6, None)
+      - ("tts", 0.9, None)
       - ("complete", 1.0, {...})
     """
-    # Initial stage - premise (we don't re-run premise here, just expose stage)
-    yield ("premise", 0.2, None)
+    state = get_or_create_state(session_id)
+    
+    # Stage 0: Voice status (may already be cached)
+    voice_status = {
+        "mode": state.voice_mode,
+        "count": len(state.available_voices) if state.available_voices else 0,
+    }
+    yield ("voices", 0.1, voice_status)
 
-    # Run the actual startup logic (premise + welcome + TTS + BG full mystery)
+    # Run the actual startup logic (voices + premise + welcome + TTS + BG full mystery)
     state, response, audio_path, speaker, alignment_data = start_new_game(session_id)
 
     # Expose additional coarse stages so the UI can animate the progress bar
-    yield ("welcome", 0.5, None)
-    yield ("tts", 0.8, None)
+    yield ("premise", 0.3, None)
+    yield ("welcome", 0.6, None)
+    yield ("tts", 0.9, None)
 
     # Final stage with full data
     yield (
@@ -324,6 +479,7 @@ def start_new_game_staged(session_id: str):
             "audio_path": audio_path,
             "speaker": speaker,
             "alignment_data": alignment_data,
+            "voice_mode": state.voice_mode,
         },
     )
 

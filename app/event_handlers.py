@@ -7,7 +7,7 @@ from typing import Tuple
 import gradio as gr
 from mystery_config import get_settings_for_era, create_validated_config
 from game.state_manager import get_or_create_state, mystery_images
-from game.startup import start_new_game_staged
+from game.startup import start_new_game_staged, prepare_game_resources, refresh_voices
 from game.handlers import process_player_action, run_action_logic
 from game.media import generate_turn_media
 from services.tts_service import transcribe_audio
@@ -17,6 +17,7 @@ from ui.formatters import (
     format_locations_html,
     format_clues_html,
     format_detective_notebook_html,
+    format_dashboard_html,
 )
 from app.utils import convert_alignment_to_subtitles
 
@@ -110,39 +111,55 @@ def on_config_generic_change(setting, era, difficulty, tone, sess_id):
         state.config = create_validated_config()
 
 
+def on_wizard_config_change(era, setting, difficulty, tone, sess_id):
+    """Update config from wizard controls and refresh setting options if era changed."""
+    state = ensure_config(sess_id)
+    
+    available_settings = get_settings_for_era(era)
+    # If current setting is not valid for the new era, reset to Random
+    if setting not in available_settings and setting != "Random":
+        setting = "Random"
+    
+    try:
+        state.config = create_validated_config(
+            setting=setting,
+            era=era,
+            difficulty=difficulty,
+            tone=tone,
+        )
+    except ValueError as e:
+        logger.warning(
+            "Invalid mystery config from wizard for session %s: %s",
+            sess_id,
+            e,
+        )
+        state.config = create_validated_config()
+        era = state.config.era
+        available_settings = get_settings_for_era(era)
+        setting = "Random"
+    
+    return gr.update(
+        choices=["Random"] + available_settings,
+        value=setting,
+    )
+
 def on_start_game(sess_id, progress=gr.Progress()):
     """Handle game start with staged progress updates.
 
-    Fast path (~6s): premise → welcome → TTS → image
-    Background: full mystery generation (~15s, timer updates panels when ready)
+    Flow:
+    1. Hide wizard, show casting progress
+    2. Voice-first: Use pre-fetched voices for character generation
+    3. Generate premise → welcome → TTS → image
+    4. Background: full mystery generation with voice assignments
     """
     sess_id = normalize_session_id(sess_id)
+    state = get_or_create_state(sess_id)
 
-    # Initial yield to hide start button immediately
-    progress(0, desc="🔍 Starting mystery generation...")
-    yield [
-        gr.update(),  # speaker_html
-        gr.update(),  # audio_output
-        gr.update(),  # portrait_image
-        gr.update(),  # input_row
-        gr.update(visible=False),  # start_btn - hide button
-        gr.update(),  # victim_scene_html
-        gr.update(),  # suspects_list_html
-        gr.update(),  # locations_html
-        gr.update(),  # clues_html
-        gr.update(),  # accusations_html
-        gr.update(),  # victim_scene_html_tab
-        gr.update(),  # suspects_list_html_tab
-        gr.update(),  # locations_html_tab
-        gr.update(),  # clues_html_tab
-        gr.update(),  # accusations_html_tab
-        gr.update(),  # notebook_html_tab
-        gr.update(),  # mystery_check_timer
-    ]
 
     # Stage descriptions for progress bar
     stage_descriptions = {
-        "premise": "🎭 Creating murder scenario...",
+        "voices": "🎭 Preparing voice actors...",
+        "premise": "📜 Creating murder scenario...",
         "welcome": "🎙️ Preparing Game Master...",
         "tts": "🔊 Generating voice narration...",
         "complete": "✅ Ready to play!",
@@ -278,6 +295,11 @@ def on_start_game(sess_id, progress=gr.Progress()):
 
     # Final progress
     progress(1.0, desc="🎮 Let's play!")
+    
+    # Check voice mode for any UI adaptation
+    voice_mode = getattr(state, "voice_mode", "full")
+    if voice_mode == "text_only":
+        logger.info("[APP] Running in Silent Film mode (no voices)")
 
     yield [
         # Speaker - show when game starts
@@ -288,7 +310,7 @@ def on_start_game(sess_id, progress=gr.Progress()):
         display_portrait,
         # Show game UI
         gr.update(visible=True),  # input_row
-        gr.update(visible=False),  # start_btn
+        gr.update(visible=False),  # setup_wizard - hide wizard
         # Side panels - show "loading" state, timer will update when ready
         victim_html,
         format_suspects_list_html(None, state.suspects_talked_to, loading=True),
@@ -297,6 +319,14 @@ def on_start_game(sess_id, progress=gr.Progress()):
         # Accusations
         format_accusations_html(state.wrong_accusations),
         # Tab components (replicated from accordions)
+        format_dashboard_html(
+            None,
+            state.clues_found,
+            state.suspects_talked_to,
+            state.searched_locations,
+            state.suspect_states,
+            state.wrong_accusations
+        ),
         victim_html,
         format_suspects_list_html(None, state.suspects_talked_to, loading=True),
         format_locations_html(None, state.searched_locations, loading=True),
@@ -332,11 +362,20 @@ def check_mystery_ready(sess_id: str):
         locations_html = format_locations_html(
             state.mystery, state.searched_locations, loading=False
         )
+        dashboard_html = format_dashboard_html(
+            state.mystery,
+            state.clues_found,
+            state.suspects_talked_to,
+            state.searched_locations,
+            state.suspect_states,
+            state.wrong_accusations
+        )
         return [
             victim_html,
             suspects_html,
             locations_html,
             # Tab components (replicated from accordions)
+            dashboard_html,
             victim_html,
             suspects_html,
             locations_html,
@@ -349,6 +388,7 @@ def check_mystery_ready(sess_id: str):
             gr.update(),  # suspects_list_html - no change
             gr.update(),  # locations_html - no change
             # Tab components - no change
+            gr.update(),  # dashboard_html_tab
             gr.update(),
             gr.update(),
             gr.update(),
@@ -548,7 +588,7 @@ def on_voice_input(audio_path: str, sess_id, progress=gr.Progress()):
     Stage 2 (slow): Generate TTS audio + images, yield final update with audio
     """
     if not audio_path:
-        yield [gr.update()] * 15
+        yield [gr.update()] * 16
         return
 
     # Normalize session id so it matches what on_start_game used
@@ -560,12 +600,12 @@ def on_voice_input(audio_path: str, sess_id, progress=gr.Progress()):
         state_before, "premise_setting", None
     ):
         logger.warning("[APP] Voice input received but no game started yet")
-        yield [gr.update()] * 15
+        yield [gr.update()] * 16
         return
 
     # Show progress indicator while processing
     progress(0, desc="🗣️ Transcribing...")
-    yield [gr.update()] * 15
+    yield [gr.update()] * 16
 
     # Store previous state to detect what changed
     # IMPORTANT: Make copies of the lists since state is mutated in place
@@ -590,7 +630,7 @@ def on_voice_input(audio_path: str, sess_id, progress=gr.Progress()):
     logger.info("[PERF] Transcription took %.2fs", t1 - t0)
 
     if not text.strip():
-        yield [gr.update()] * 15
+        yield [gr.update()] * 16
         return
 
     # Infer high-level action type from the transcribed text
@@ -701,6 +741,14 @@ def on_voice_input(audio_path: str, sess_id, progress=gr.Progress()):
         format_accusations_html(state.wrong_accusations),
         format_detective_notebook_html(state.suspect_states),
         # Tab components (replicated from accordions)
+        format_dashboard_html(
+            state.mystery,
+            state.clues_found,
+            state.suspects_talked_to,
+            state.searched_locations,
+            state.suspect_states,
+            state.wrong_accusations
+        ),
         format_victim_scene_html(state.mystery),
         format_suspects_list_html(
             state.mystery,
@@ -818,6 +866,14 @@ def on_voice_input(audio_path: str, sess_id, progress=gr.Progress()):
         format_accusations_html(state.wrong_accusations),
         format_detective_notebook_html(state.suspect_states),
         # Tab components (replicated from accordions)
+        format_dashboard_html(
+            state.mystery,
+            state.clues_found,
+            state.suspects_talked_to,
+            state.searched_locations,
+            state.suspect_states,
+            state.wrong_accusations
+        ),
         format_victim_scene_html(state.mystery),
         format_suspects_list_html(
             state.mystery,

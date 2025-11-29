@@ -289,3 +289,183 @@ def format_detective_notebook_html(
         </div>
     </div>'''
 
+
+def format_dashboard_html(
+    mystery,
+    clues_found: List[str] = None,
+    suspects_talked_to: List[str] = None,
+    searched_locations: List[str] = None,
+    suspect_states: Optional[Dict[str, SuspectState]] = None,
+    wrong_accusations: int = 0
+) -> str:
+    """Format the investigation dashboard with progress tracking and suspicion ranking.
+    
+    Shows at-a-glance:
+    - Investigation progress (locations, suspects, clues)
+    - Suspicion ranking based on contradictions and nervousness
+    - Quick status/readiness indicator
+    
+    Args:
+        mystery: The Mystery object
+        clues_found: List of discovered clue descriptions
+        suspects_talked_to: List of suspect names talked to
+        searched_locations: List of searched location names
+        suspect_states: Dict mapping suspect name -> SuspectState
+        wrong_accusations: Number of wrong accusations made
+    """
+    if not mystery:
+        return '''
+        <div class="dashboard-empty">
+            <div class="dashboard-icon">📊</div>
+            <div>Start a mystery to track your investigation.</div>
+        </div>'''
+    
+    clues_found = clues_found or []
+    suspects_talked_to = suspects_talked_to or []
+    searched_locations = searched_locations or []
+    suspect_states = suspect_states or {}
+    
+    # Calculate progress percentages
+    total_clues = len(mystery.clues)
+    found_clues = len(clues_found)
+    clue_pct = int((found_clues / total_clues) * 100) if total_clues > 0 else 0
+    
+    total_suspects = len(mystery.suspects)
+    talked_suspects = len(suspects_talked_to)
+    suspect_pct = int((talked_suspects / total_suspects) * 100) if total_suspects > 0 else 0
+    
+    available_locations = list(set(clue.location for clue in mystery.clues))
+    total_locations = len(available_locations)
+    searched_count = len(searched_locations)
+    location_pct = int((searched_count / total_locations) * 100) if total_locations > 0 else 0
+    
+    # Calculate overall investigation score
+    overall_pct = int((clue_pct * 0.35) + (suspect_pct * 0.30) + (location_pct * 0.20))
+    
+    # Count total contradictions
+    total_contradictions = sum(
+        state.contradictions_caught 
+        for state in suspect_states.values()
+    )
+    # Bonus for contradictions (up to 15%)
+    contradiction_bonus = min(total_contradictions * 5, 15)
+    overall_pct = min(overall_pct + contradiction_bonus, 100)
+    
+    # Build progress bars HTML using CSS bars (Unicode blocks don't render well in VT323)
+    def progress_bar(label: str, current, total, pct: int, icon: str, color: str) -> str:
+        check = " ✓" if pct == 100 else ""
+        return f'''
+        <div class="dashboard-progress-row">
+            <span class="dashboard-label">{icon} {label}</span>
+            <div class="dashboard-bar-track">
+                <div class="dashboard-bar-fill" style="width: {pct}%; background: {color};"></div>
+            </div>
+            <span class="dashboard-value">{current}/{total}{check}</span>
+        </div>'''
+    
+    progress_html = f'''
+    <div class="dashboard-section">
+        <div class="dashboard-section-header">📊 INVESTIGATION PROGRESS</div>
+        {progress_bar("Locations", searched_count, total_locations, location_pct, "📍", "#33ff33")}
+        {progress_bar("Suspects", talked_suspects, total_suspects, suspect_pct, "🎭", "#33ff33")}
+        {progress_bar("Clues", found_clues, total_clues, clue_pct, "🔎", "#33ff33")}
+        {progress_bar("Contradictions", total_contradictions, "?", min(total_contradictions * 20, 100), "⚠️", "#ff6666" if total_contradictions > 0 else "#666")}
+    </div>'''
+    
+    # Build suspicion ranking
+    # Rank suspects by: contradictions (highest weight) + nervousness
+    suspect_scores = []
+    for suspect in mystery.suspects:
+        state = suspect_states.get(suspect.name)
+        if state and suspect.name in suspects_talked_to:
+            # Score = contradictions * 40 + nervousness
+            score = (state.contradictions_caught * 40) + state.nervousness
+            suspect_scores.append({
+                "name": suspect.name,
+                "score": score,
+                "contradictions": state.contradictions_caught,
+                "nervousness": state.nervousness,
+                "trust": state.trust
+            })
+        elif suspect.name in suspects_talked_to:
+            # Talked to but no state recorded
+            suspect_scores.append({
+                "name": suspect.name,
+                "score": 0,
+                "contradictions": 0,
+                "nervousness": 50,
+                "trust": 50
+            })
+    
+    # Sort by score descending
+    suspect_scores.sort(key=lambda x: x["score"], reverse=True)
+    
+    suspicion_html = ""
+    if suspect_scores:
+        ranking_items = []
+        for i, s in enumerate(suspect_scores[:5]):  # Top 5
+            rank_icon = "🥇" if i == 0 else "🥈" if i == 1 else "🥉" if i == 2 else f"#{i+1}"
+            
+            # Build suspicion bar (visual indicator)
+            suspicion_level = min(s["score"], 100)
+            bar_color = "#ff4444" if suspicion_level > 70 else "#ffcc00" if suspicion_level > 40 else "#33ff33"
+            
+            # Contradiction indicator
+            contradiction_text = f' <span class="suspicion-contradiction">⚠️ {s["contradictions"]}</span>' if s["contradictions"] > 0 else ""
+            
+            ranking_items.append(f'''
+            <div class="suspicion-row">
+                <span class="suspicion-rank">{rank_icon}</span>
+                <span class="suspicion-name">{s["name"]}</span>
+                <div class="suspicion-bar-track">
+                    <div class="suspicion-bar-fill" style="width: {suspicion_level}%; background: {bar_color};"></div>
+                </div>
+                {contradiction_text}
+            </div>''')
+        
+        suspicion_html = f'''
+        <div class="dashboard-section">
+            <div class="dashboard-section-header">🎯 SUSPICION RANKING</div>
+            {"".join(ranking_items)}
+        </div>'''
+    else:
+        suspicion_html = '''
+        <div class="dashboard-section">
+            <div class="dashboard-section-header">🎯 SUSPICION RANKING</div>
+            <div class="dashboard-hint">Talk to suspects to build your suspicion list.</div>
+        </div>'''
+    
+    # Readiness indicator
+    accusations_remaining = 3 - wrong_accusations
+    readiness_class = "ready-high" if overall_pct >= 70 else "ready-medium" if overall_pct >= 40 else "ready-low"
+    
+    if overall_pct >= 80:
+        readiness_text = "Strong case — consider making an accusation"
+        readiness_icon = "✅"
+    elif overall_pct >= 50:
+        readiness_text = "Building evidence — dig deeper"
+        readiness_icon = "🔍"
+    else:
+        readiness_text = "Early stages — keep investigating"
+        readiness_icon = "📋"
+    
+    status_html = f'''
+    <div class="dashboard-status {readiness_class}">
+        <div class="status-header">
+            <span class="status-icon">{readiness_icon}</span>
+            <span class="status-score">{overall_pct}% Complete</span>
+        </div>
+        <div class="status-text">{readiness_text}</div>
+        <div class="status-accusations">
+            <span>Accusations remaining:</span>
+            {"".join(['<span class="pip"></span>' if i >= wrong_accusations else '<span class="pip used"></span>' for i in range(3)])}
+        </div>
+    </div>'''
+    
+    return f'''
+    <div class="investigation-dashboard">
+        {status_html}
+        {progress_html}
+        {suspicion_html}
+    </div>'''
+

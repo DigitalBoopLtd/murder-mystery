@@ -122,13 +122,55 @@ def create_ui_components() -> dict:
                             elem_classes="audio-player",
                         )
 
-                    # Start game button (shown initially)
-                    with gr.Column(elem_classes="start-button-container"):
-                        start_btn = gr.Button(
-                            "🚀 START NEW MYSTERY",
-                            elem_classes="start-button",
-                            size="lg",
-                        )
+                    # ====== SETUP WIZARD ======
+                    # Step 1: Configure + Voice Loading
+                    with gr.Column(elem_classes="setup-wizard", visible=True) as setup_wizard:
+                        
+                        # Settings (inline in wizard for Step 1)
+                        with gr.Group(elem_classes="wizard-settings"):
+                            gr.HTML('<div class="wizard-section-title">Configure Your Mystery</div>')
+                            with gr.Row():
+                                wizard_era_dropdown = gr.Dropdown(
+                                    label="Era",
+                                    choices=ERA_OPTIONS,
+                                    value="Any",
+                                    interactive=True,
+                                    scale=1,
+                                )
+                                wizard_setting_dropdown = gr.Dropdown(
+                                    label="Setting",
+                                    choices=["Random"] + get_settings_for_era("Any"),
+                                    value="Random",
+                                    interactive=True,
+                                    scale=1,
+                                )
+                            with gr.Row():
+                                wizard_difficulty_radio = gr.Radio(
+                                    label="Difficulty",
+                                    choices=DIFFICULTY_LEVELS,
+                                    value="Normal",
+                                    interactive=True,
+                                )
+                            with gr.Row():
+                                wizard_tone_radio = gr.Radio(
+                                    label="Tone",
+                                    choices=TONE_OPTIONS,
+                                    value="Random",
+                                    interactive=True,
+                                )
+                        
+                        # Buttons row
+                        with gr.Row(elem_classes="wizard-buttons"):
+                            refresh_voices_btn = gr.Button(
+                                "↻ Refresh Voices",
+                                elem_classes="wizard-secondary-btn",
+                                size="sm",
+                            )
+                            start_btn = gr.Button(
+                                "🚀 START MYSTERY",
+                                elem_classes="start-button wizard-primary-btn",
+                                size="lg",
+                            )
 
                     # Input bar - voice only
                     with gr.Column(
@@ -144,6 +186,15 @@ def create_ui_components() -> dict:
                     
                     # Tab group with accordion content (always visible)
                     with gr.Tabs(elem_classes="info-tabs"):
+                        # Dashboard tab - first for quick overview
+                        with gr.Tab("📊 DASHBOARD"):
+                            dashboard_html_tab = gr.HTML(
+                                '''<div class="dashboard-empty">
+                                    <div class="dashboard-icon">📊</div>
+                                    <div>Start a mystery to track your investigation.</div>
+                                </div>'''
+                            )
+                        
                         # Case Details tab
                         with gr.Tab("🧳 CASE DETAILS"):
                             victim_scene_html_tab = gr.HTML(
@@ -290,6 +341,7 @@ def create_ui_components() -> dict:
         "clues_html": clues_html,
         "accusations_html": accusations_html,
         "notebook_html": notebook_html,
+        "dashboard_html_tab": dashboard_html_tab,
         "victim_scene_html_tab": victim_scene_html_tab,
         "suspects_list_html_tab": suspects_list_html_tab,
         "locations_html_tab": locations_html_tab,
@@ -304,5 +356,12 @@ def create_ui_components() -> dict:
         "refresh_logs_btn": refresh_logs_btn,
         "mystery_check_timer": mystery_check_timer,
         "voice_input": voice_input,
+        # Setup wizard components
+        "setup_wizard": setup_wizard,
+        "wizard_era_dropdown": wizard_era_dropdown,
+        "wizard_setting_dropdown": wizard_setting_dropdown,
+        "wizard_difficulty_radio": wizard_difficulty_radio,
+        "wizard_tone_radio": wizard_tone_radio,
+        "refresh_voices_btn": refresh_voices_btn
     }
 
