@@ -1,7 +1,7 @@
 """Image generation service for character portraits and scene art.
 
 Uses HuggingFace Inference API with fal-ai provider for fast generation.
-Styled to look like 90s point-and-click adventure games (Monkey Island, Gabriel Knight, etc.)
+Styled to look like 90s point-and-click adventure games (Monkey Island, Day of the Tentacle, Gabriel Knight, etc.)
 """
 
 import os
@@ -22,19 +22,25 @@ os.makedirs(IMAGE_CACHE_DIR, exist_ok=True)
 
 # Art style prompt suffix for consistent 90s adventure game aesthetic
 ART_STYLE = """
-Style: 1990s point-and-click adventure game art, like Monkey Island or Gabriel Knight.
+Style: 1990s point-and-click adventure game art, like Monkey Island, Day of the Tentacle or Gabriel Knight.
 Painterly pixel art aesthetic, slightly exaggerated features, rich colors, 
 dramatic lighting, hand-painted look, vintage video game portrait.
-Square portrait composition, character facing slightly to the side.
+Framing: varied close-up and medium shots — sometimes head-and-shoulders, sometimes waist-up or three-quarter body.
+Camera: mix of straight-on, three-quarter, and slight profile angles; character not always perfectly centered, occasional head tilt or lean.
+Background: clear sense of location behind the character, simplified but colorful, not just a flat color.
 No text, no words, no letters, no writing, no labels, no captions.
 """
 
 SCENE_ART_STYLE = """
-Style: 1990s point-and-click adventure game background art.
-Painterly style, rich atmospheric colors, dramatic lighting, hand-painted look,
-vintage video game scene, detailed environment, moody and mysterious.
-Wide landscape composition suitable for a game background.
-No text, no words, no letters, no writing, no labels, no captions, no signage.
+Style: 1990s point-and-click adventure game background art, like Monkey Island, Day of the Tentacle, Gabriel Knight, or The Dig.
+Painterly digital art with rich saturated colors and dramatic chiaroscuro lighting.
+Hand-painted aesthetic with visible brushwork texture, slightly stylized proportions.
+Cinematic composition with clear focal point, atmospheric depth and layered elements.
+Moody and mysterious atmosphere with environmental storytelling details.
+First-person detective POV, as if standing in the doorway surveying the scene.
+Include period-appropriate props, furniture, and environmental details that tell a story.
+People: follow the scene description carefully — some shots may be empty, others may show a few background characters.
+No text, no words, no letters, no writing, no labels, no captions, no signage, no signs.
 """
 
 
@@ -215,27 +221,82 @@ No text, no words, no letters, no writing, no labels, no captions, no name tags.
             logger.warning("Image client not available")
             return None
 
-        # Build prompt with context if provided
+        # Extract era/period from setting description for period-accurate props
+        era_hints = []
+        setting_lower = setting_description.lower()
+        if any(x in setting_lower for x in ["1920", "20s", "prohibition", "jazz age", "gatsby"]):
+            era_hints.append("1920s Art Deco era")
+        elif any(x in setting_lower for x in ["1930", "30s", "depression", "noir"]):
+            era_hints.append("1930s noir era")
+        elif any(x in setting_lower for x in ["1940", "40s", "war", "wartime"]):
+            era_hints.append("1940s wartime era")
+        elif any(x in setting_lower for x in ["1950", "50s", "atomic", "post-war"]):
+            era_hints.append("1950s mid-century era")
+        elif any(x in setting_lower for x in ["victorian", "1880", "1890", "19th century"]):
+            era_hints.append("Victorian era, gas lamps and ornate furniture")
+        elif any(x in setting_lower for x in ["medieval", "castle", "manor"]):
+            era_hints.append("Medieval or Gothic era")
+        elif any(x in setting_lower for x in ["modern", "contemporary", "2000", "2010", "2020"]):
+            era_hints.append("Modern contemporary era")
+        
+        # Determine if likely interior or exterior
+        location_lower = location_name.lower()
+        is_interior = any(x in location_lower for x in [
+            "room", "office", "study", "library", "kitchen", "bedroom", "bathroom",
+            "hall", "chamber", "tent", "workshop", "shed", "cabin", "suite",
+            "parlor", "lounge", "bar", "cellar", "attic", "closet", "pantry"
+        ])
+        is_exterior = any(x in location_lower for x in [
+            "garden", "yard", "street", "dock", "pier", "forest", "woods",
+            "beach", "park", "courtyard", "terrace", "balcony", "roof", "path"
+        ])
+        
+        # Build rich descriptive prompt
         prompt_parts = [
-            f"{location_name}.",
-            f"Part of: {setting_description}.",
-            f"Mood: {mood}, atmospheric."
+            f"Scene: {location_name}",
         ]
         
+        # Add era context
+        if era_hints:
+            prompt_parts.append(f"Era: {era_hints[0]}")
+        
+        # Add setting context
+        prompt_parts.append(f"Setting: {setting_description}")
+        
+        # Add interior/exterior guidance
+        if is_interior:
+            prompt_parts.append("Interior scene with detailed furnishings, props, and atmospheric lighting through windows or lamps.")
+        elif is_exterior:
+            prompt_parts.append("Exterior scene with environmental details, natural lighting, and atmospheric weather effects.")
+        else:
+            prompt_parts.append("Atmospheric scene with period-appropriate details and dramatic lighting.")
+        
+        # Add mood
+        mood_descriptions = {
+            "mysterious": "Mysterious and foreboding atmosphere with deep shadows and hidden corners",
+            "tense": "Tense atmosphere, something feels wrong, unsettling lighting",
+            "peaceful": "Deceptively peaceful atmosphere, calm before the storm",
+            "dark": "Dark and ominous, danger lurking in shadows",
+            "dramatic": "Dramatically lit with strong contrast, theatrical staging",
+        }
+        mood_desc = mood_descriptions.get(mood, f"{mood} atmosphere")
+        prompt_parts.append(f"Mood: {mood_desc}")
+        
+        # Add context from game response if provided
         if context:
-            # Add context from the game response (what was found, what it looks like, etc.)
             # Clean context - remove markdown and emotional tags
             clean_context = context.replace("**", "").replace("*", "")
             clean_context = re.sub(r"\[.*?\]", "", clean_context)  # Remove [excited], etc.
-            # Take first 200 chars to keep prompt manageable
-            clean_context = clean_context[:200].strip()
+            # Extract descriptive phrases about the location
+            clean_context = clean_context[:300].strip()
             if clean_context:
-                prompt_parts.append(f"Context: {clean_context}")
+                prompt_parts.append(f"Scene details: {clean_context}")
         
+        # Add style guide
         prompt_parts.append(SCENE_ART_STYLE)
         prompt_parts.append(
             "No text, no words, no letters, no writing, no labels, "
-            "no captions, no signage, no signs."
+            "no captions, no signage, no signs, no people, no characters."
         )
         
         prompt = "\n".join(prompt_parts)

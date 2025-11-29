@@ -1,10 +1,45 @@
 """UI formatting functions for displaying game information as HTML."""
 
+import base64
 import logging
+import os
 from typing import Dict, List, Optional, Tuple
 from game.models import SuspectState
 
 logger = logging.getLogger(__name__)
+
+
+def _image_to_data_uri(image_path: str) -> Optional[str]:
+    """Convert an image file to a base64 data URI for embedding in HTML.
+    
+    Args:
+        image_path: Path to the image file
+        
+    Returns:
+        Data URI string or None if file doesn't exist/can't be read
+    """
+    if not image_path or not os.path.exists(image_path):
+        return None
+    
+    try:
+        # Determine MIME type from extension
+        ext = os.path.splitext(image_path)[1].lower()
+        mime_types = {
+            '.png': 'image/png',
+            '.jpg': 'image/jpeg',
+            '.jpeg': 'image/jpeg',
+            '.gif': 'image/gif',
+            '.webp': 'image/webp',
+        }
+        mime_type = mime_types.get(ext, 'image/png')
+        
+        with open(image_path, 'rb') as f:
+            image_data = base64.b64encode(f.read()).decode('utf-8')
+        
+        return f"data:{mime_type};base64,{image_data}"
+    except Exception as e:
+        logger.warning("Failed to convert image to data URI: %s - %s", image_path, e)
+        return None
 
 
 def format_victim_scene_html(mystery) -> str:
@@ -71,15 +106,17 @@ def format_suspects_list_html(
     mystery,
     talked_to: List[str] = None,
     loading: bool = False,
-    suspect_states: Optional[Dict[str, SuspectState]] = None
+    suspect_states: Optional[Dict[str, SuspectState]] = None,
+    portrait_images: Optional[Dict[str, str]] = None
 ) -> str:
-    """Format suspects list as HTML for quick reference.
+    """Format suspects list as HTML game cards with portraits.
     
     Args:
         mystery: The Mystery object with suspect data
         talked_to: List of suspect names that have been talked to
         loading: Whether to show loading state
         suspect_states: Dict mapping suspect name -> SuspectState (for trust/nervousness meters)
+        portrait_images: Dict mapping suspect name -> portrait image path
     """
     if not mystery:
         if loading:
@@ -88,22 +125,55 @@ def format_suspects_list_html(
     
     talked_to = talked_to or []
     suspect_states = suspect_states or {}
-    html_parts = []
+    portrait_images = portrait_images or {}
+    
+    # Debug logging for portrait images - use INFO level to ensure we see it
+    logger.info("[FORMATTER] Rendering suspects list - portrait_images keys: %s", list(portrait_images.keys()))
+    suspect_names = [s.name for s in mystery.suspects]
+    logger.info("[FORMATTER] Suspect names from mystery: %s", suspect_names)
+    for name, path in portrait_images.items():
+        if not name.startswith('_'):  # Skip scene images
+            exists = os.path.exists(path) if path else False
+            logger.info("[FORMATTER] Portrait for '%s': path=%s, exists=%s", name, path, exists)
+    
+    cards = []
     
     for suspect in mystery.suspects:
-        # Get emotional state for this suspect
         state = suspect_states.get(suspect.name)
+        is_talked = suspect.name in talked_to
+        card_class = "suspect-card talked-to" if is_talked else "suspect-card"
         
-        # Use a dedicated suspect item class so we can style progressive disclosure
-        talked_class = "suspect-item searched" if suspect.name in talked_to else "suspect-item"
-        check = '<span class="suspect-check"> ✓</span>' if suspect.name in talked_to else ""
+        # Portrait image or placeholder
+        portrait_path = portrait_images.get(suspect.name) or getattr(suspect, 'portrait_path', None)
+        data_uri = None
+        if portrait_path:
+            logger.info("[FORMATTER] Attempting to load portrait for %s from: %s", suspect.name, portrait_path)
+            data_uri = _image_to_data_uri(portrait_path)
+            if data_uri:
+                logger.info("[FORMATTER] ✅ Successfully converted portrait for %s to data URI", suspect.name)
+            else:
+                logger.warning("[FORMATTER] ❌ Failed to convert portrait for %s (path: %s)", suspect.name, portrait_path)
         
-        # Build emotional state meters (only show if talked to)
+        # Always render placeholder so card size is stable; overlay image when available
+        placeholder_html = '<div class="suspect-card-portrait-placeholder">🎭</div>'
+        img_html = f'<img src="{data_uri}" alt="{suspect.name}" />' if data_uri else ""
+        
+        # Status badges (simple chips in header)
+        badges = []
+        if is_talked:
+            badges.append('<span class="suspect-card-badge talked">TALKED</span>')
+        
+        if state and state.contradictions_caught > 0:
+            badges.append(f'<span class="suspect-card-badge contradiction">⚠️ {state.contradictions_caught}</span>')
+        
+        badges_html = f'<div class="suspect-card-status">{"".join(badges)}</div>' if badges else ''
+
+        # Emotional state meters + relationships (only after you've talked to them)
         meters_html = ""
         contradiction_badge = ""
         relationship_labels = ""
         
-        if suspect.name in talked_to and state:
+        if is_talked and state:
             trust_pct = state.trust
             nervousness_pct = state.nervousness
             
@@ -131,12 +201,12 @@ def format_suspects_list_html(
                 </div>
             </div>'''
             
-            # Contradiction badge
+            # Contradiction badge (larger, under name)
             if state.contradictions_caught > 0:
                 contradiction_badge = f'''
-                <div class="contradiction-badge" title="Caught in {state.contradictions_caught} contradiction(s)">
+                <span class="contradiction-badge" title="Caught in {state.contradictions_caught} contradiction(s)">
                     ⚠️ {state.contradictions_caught} contradiction{"s" if state.contradictions_caught > 1 else ""}
-                </div>'''
+                </span>'''
             
             # Relationship labels from cross-references
             relationships = get_suspect_relationships(suspect.name)
@@ -152,42 +222,79 @@ def format_suspects_list_html(
                 
                 relationship_labels = f'''
                 <div class="suspect-relationships">
+                    <div class="suspect-relationships-label">Relationships</div>
                     {"".join(labels)}
                 </div>'''
         
-        html_parts.append(
-            f'<details class="{talked_class}">'
-            f'<summary>'
-            f'<div class="suspect-header">'
-            f'<strong>{suspect.name}</strong>{check}{contradiction_badge}<br>'
-            f'<span class="suspect-role-preview">{suspect.role}</span>'
-            f'</div>'
-            f'</summary>'
-            f'<div class="suspect-details">'
-            f'{meters_html}'
-            f'{relationship_labels}'
-            f'<div class="suspect-motive"><strong>Motive:</strong> <em>{suspect.secret}</em></div>'
-            f'</div>'
-            f'</details>'
-        )
+        # Motive snippet (always visible)
+        motive_html = f'<div class="suspect-motive"><strong>Motive:</strong> <em>{suspect.secret}</em></div>'
+        
+        cards.append(f'''
+        <div class="{card_class}" title="Click to see details">
+            <div class="suspect-card-portrait">
+                {placeholder_html}
+                {img_html}
+            </div>
+            <div class="suspect-card-info">
+                <div class="suspect-card-name">{suspect.name}{contradiction_badge}</div>
+                <div class="suspect-card-role">{suspect.role}</div>
+                {meters_html}
+                {relationship_labels}
+                {motive_html}
+                {badges_html}
+            </div>
+        </div>''')
     
-    return "".join(html_parts)
+    return f'<div class="suspects-card-grid">{"".join(cards)}</div>'
 
 
-def format_locations_html(mystery, searched: List[str], loading: bool = False) -> str:
-    """Format locations as HTML."""
+def format_locations_html(
+    mystery,
+    searched: List[str],
+    loading: bool = False,
+    location_images: Optional[Dict[str, str]] = None,
+) -> str:
+    """Format locations as HTML, optionally with scene images.
+
+    Args:
+        mystery: The Mystery object with clues/locations
+        searched: List of location names that have been searched
+        loading: Whether to show loading state
+        location_images: Dict mapping location name -> scene image path
+    """
     if not mystery:
         if loading:
             return '<em style="color: var(--accent-gold);">🔍 Mapping the crime scene...</em>'
         return "<em>Start a game to see locations</em>"
 
+    searched = searched or []
+    location_images = location_images or {}
+
+    # Collect unique locations from clues
     locations = list(set(clue.location for clue in mystery.clues))
     html_parts = []
 
     for loc in locations:
         cls = "location-item searched" if loc in searched else "location-item"
         check = '<span class="location-check"> ✓</span>' if loc in searched else ""
-        html_parts.append(f'<div class="{cls}">{loc}{check}</div>')
+
+        # Try to find a scene image for this location
+        img_path = location_images.get(loc)
+        data_uri = _image_to_data_uri(img_path) if img_path else None
+
+        if data_uri:
+            html_parts.append(f'''
+            <div class="location-card {cls}">
+                <div class="location-image">
+                    <img src="{data_uri}" alt="{loc}" />
+                </div>
+                <div class="location-info">
+                    <div class="location-name">{loc}{check}</div>
+                </div>
+            </div>''')
+        else:
+            # Fallback to simple text row
+            html_parts.append(f'<div class="{cls}">{loc}{check}</div>')
 
     return "".join(html_parts)
 

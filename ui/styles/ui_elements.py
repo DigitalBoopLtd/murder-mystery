@@ -3,8 +3,8 @@
 CSS_UI_ELEMENTS = """/* ========== START BUTTON ========== */
 .start-button {
     font-family: 'Press Start 2P', cursive !important;
-    font-size: 16px !important;
-    font-weight: 700 !important;
+    font-size: 10px !important;
+    font-weight: 600 !important;
     background: var(--bg-card) !important;
     border: 3px solid rgba(0, 255, 255, 0.8) !important;
     color: var(--accent-blue) !important;

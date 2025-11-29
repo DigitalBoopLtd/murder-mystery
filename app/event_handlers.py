@@ -59,39 +59,6 @@ def format_accusations_html(wrong: int) -> str:
     return f'<div class="accusations-display">Accusations:<span>{pips}</span></div>'
 
 
-def on_config_era_change(era, setting, difficulty, tone, sess_id):
-    """Update config when era changes and refresh setting options."""
-    state = ensure_config(sess_id)
-
-    available_settings = get_settings_for_era(era)
-    # If current setting is not valid for the new era, reset to Random
-    if setting not in available_settings and setting != "Random":
-        setting = "Random"
-
-    try:
-        state.config = create_validated_config(
-            setting=setting,
-            era=era,
-            difficulty=difficulty,
-            tone=tone,
-        )
-    except ValueError as e:
-        logger.warning(
-            "Invalid mystery config on era change for session %s: %s",
-            sess_id,
-            e,
-        )
-        state.config = create_validated_config()
-        era = state.config.era
-        available_settings = get_settings_for_era(era)
-        setting = "Random"
-
-    return gr.update(
-        choices=["Random"] + available_settings,
-        value=setting,
-    )
-
-
 def on_config_generic_change(setting, era, difficulty, tone, sess_id):
     """Update config for non-era fields (setting/difficulty/tone)."""
     state = ensure_config(sess_id)
@@ -109,6 +76,20 @@ def on_config_generic_change(setting, era, difficulty, tone, sess_id):
             e,
         )
         state.config = create_validated_config()
+
+
+def on_refresh_voices(sess_id, progress=gr.Progress()):
+    """Manually refresh available voices for the current session."""
+    sess_id = normalize_session_id(sess_id)
+    logger.info("[APP] Manual voice refresh requested for session %s", sess_id)
+    progress(0, desc="🎭 Refreshing voices...")
+    try:
+        # Trigger a fresh voice fetch; return value is not used by UI directly.
+        refresh_voices(sess_id)
+        progress(1.0, desc="✅ Voices refreshed")
+    except Exception as e:  # noqa: BLE001
+        logger.warning("[APP] Voice refresh failed for session %s: %s", sess_id, e)
+        progress(1.0, desc="⚠️ Voice refresh failed")
 
 
 def on_wizard_config_change(era, setting, difficulty, tone, sess_id):
@@ -351,16 +332,21 @@ def check_mystery_ready(sess_id: str):
 
     if ready and state.mystery is not None:
         # Mystery is ready - update UI and stop timer
+        # Note: Portraits may still be loading - they'll appear when user clicks Suspects tab
         logger.info("[APP] Timer: Full mystery ready, updating UI panels")
         victim_html = format_victim_scene_html(state.mystery)
         suspects_html = format_suspects_list_html(
             state.mystery,
             state.suspects_talked_to,
             loading=False,
-            suspect_states=state.suspect_states
+            suspect_states=state.suspect_states,
+            portrait_images=mystery_images.get(sess_id, {})
         )
         locations_html = format_locations_html(
-            state.mystery, state.searched_locations, loading=False
+            state.mystery,
+            state.searched_locations,
+            loading=False,
+            location_images=mystery_images.get(sess_id, {}),
         )
         dashboard_html = format_dashboard_html(
             state.mystery,
@@ -548,9 +534,14 @@ def on_custom_message(message: str, sess_id: str):
         format_suspects_list_html(
             state.mystery,
             state.suspects_talked_to,
-            suspect_states=state.suspect_states
+            suspect_states=state.suspect_states,
+            portrait_images=mystery_images.get(sess_id, {})
         ),
-        format_locations_html(state.mystery, state.searched_locations),
+        format_locations_html(
+            state.mystery,
+            state.searched_locations,
+            location_images=mystery_images.get(sess_id, {}),
+        ),
         format_clues_html(state.clues_found),
         format_accusations_html(state.wrong_accusations),
         format_detective_notebook_html(state.suspect_states),
@@ -769,9 +760,14 @@ def on_voice_input(audio_path: str, sess_id, progress=gr.Progress()):
         format_suspects_list_html(
             state.mystery,
             state.suspects_talked_to,
-            suspect_states=state.suspect_states
+            suspect_states=state.suspect_states,
+            portrait_images=mystery_images.get(sess_id, {})
         ),
-        format_locations_html(state.mystery, state.searched_locations),
+        format_locations_html(
+            state.mystery,
+            state.searched_locations,
+            location_images=mystery_images.get(sess_id, {}),
+        ),
         format_clues_html(state.clues_found),
         format_accusations_html(state.wrong_accusations),
         format_detective_notebook_html(state.suspect_states),
@@ -788,9 +784,14 @@ def on_voice_input(audio_path: str, sess_id, progress=gr.Progress()):
         format_suspects_list_html(
             state.mystery,
             state.suspects_talked_to,
-            suspect_states=state.suspect_states
+            suspect_states=state.suspect_states,
+            portrait_images=mystery_images.get(sess_id, {})
         ),
-        format_locations_html(state.mystery, state.searched_locations),
+        format_locations_html(
+            state.mystery,
+            state.searched_locations,
+            location_images=mystery_images.get(sess_id, {}),
+        ),
         format_clues_html(state.clues_found),
         format_accusations_html(state.wrong_accusations),
         format_detective_notebook_html(state.suspect_states),
@@ -924,9 +925,14 @@ def on_voice_input(audio_path: str, sess_id, progress=gr.Progress()):
         format_suspects_list_html(
             state.mystery,
             state.suspects_talked_to,
-            suspect_states=state.suspect_states
+            suspect_states=state.suspect_states,
+            portrait_images=mystery_images.get(sess_id, {})
         ),
-        format_locations_html(state.mystery, state.searched_locations),
+        format_locations_html(
+            state.mystery,
+            state.searched_locations,
+            location_images=mystery_images.get(sess_id, {}),
+        ),
         format_clues_html(state.clues_found),
         format_accusations_html(state.wrong_accusations),
         format_detective_notebook_html(state.suspect_states),
@@ -943,7 +949,8 @@ def on_voice_input(audio_path: str, sess_id, progress=gr.Progress()):
         format_suspects_list_html(
             state.mystery,
             state.suspects_talked_to,
-            suspect_states=state.suspect_states
+            suspect_states=state.suspect_states,
+            portrait_images=mystery_images.get(sess_id, {})
         ),
         format_locations_html(state.mystery, state.searched_locations),
         format_clues_html(state.clues_found),
@@ -963,4 +970,54 @@ def on_audio_stop(sess_id):
     state = get_or_create_state(sess_id)
     """Reset speaker name to placeholder when audio playback ends."""
     return f'<div class="speaker-name">The Murder of {state.premise_victim_name if state.premise_victim_name else "..."}</div>'
+
+
+def on_suspects_tab_select(sess_id, evt: gr.SelectData):
+    """Refresh suspects list when Suspects tab is selected - loads latest portraits.
+    
+    Uses gr.SelectData to detect which tab was clicked. Only refreshes for suspects tab.
+    """
+    # Check if the suspects tab was selected (by checking tab value/index)
+    # evt.value contains the tab label, evt.index contains the tab index
+    tab_value = getattr(evt, 'value', None)
+    
+    # Only refresh if Suspects tab is selected (check for the emoji label)
+    if tab_value != "🎭 SUSPECTS":
+        return gr.update()  # No update for other tabs
+    
+    return _refresh_suspects_list(sess_id, "tab select")
+
+
+def on_refresh_suspects_click(sess_id):
+    """Manual refresh button click - loads latest portraits."""
+    return _refresh_suspects_list(sess_id, "button click")
+
+
+def _refresh_suspects_list(sess_id, trigger: str):
+    """Shared logic to refresh suspects list with latest portraits."""
+    sess_id = normalize_session_id(sess_id)
+    state = get_or_create_state(sess_id)
+    
+    if not state.mystery:
+        return gr.update()
+    
+    # Get latest portraits from mystery_images
+    session_images = mystery_images.get(sess_id, {})
+    suspect_names = [s.name for s in state.mystery.suspects]
+    portraits_ready = sum(1 for name in suspect_names if name in session_images)
+    
+    logger.info(
+        "[APP] Suspects refresh (%s) - %d/%d portraits ready",
+        trigger,
+        portraits_ready,
+        len(suspect_names)
+    )
+    
+    return format_suspects_list_html(
+        state.mystery,
+        state.suspects_talked_to,
+        loading=False,
+        suspect_states=state.suspect_states,
+        portrait_images=session_images
+    )
 

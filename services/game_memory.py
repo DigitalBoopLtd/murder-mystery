@@ -83,7 +83,9 @@ class GameMemory:
             return False
         
         try:
-            embeddings = _embeddings()
+            # Use a small, fast embedding model optimized for speed and cost.
+            # text-embedding-3-small is sufficient for our RAG needs here.
+            embeddings = _embeddings(model="text-embedding-3-small")
             # Initialize with a placeholder document (FAISS requires at least one)
             self.vectorstore = _vectorstore_class.from_texts(
                 ["Game memory initialized. No conversations recorded yet."],
@@ -123,10 +125,21 @@ class GameMemory:
             return False
         
         try:
-            # Create a searchable document combining question and answer
+            # Create a SHORT searchable document combining question and answer.
+            # We only need a compact snippet for embeddings – full text is kept
+            # in metadata for later inspection.
+            max_q = 160
+            max_a = 400
+            q_snippet = (question or "")[:max_q]
+            a_snippet = (answer or "")[:max_a]
+            if len(question or "") > max_q:
+                q_snippet += "..."
+            if len(answer or "") > max_a:
+                a_snippet += "..."
+
             doc = (
-                f"Turn {turn}: Detective asked {suspect}: \"{question}\" "
-                f"and {suspect} responded: \"{answer}\""
+                f"Turn {turn}: Q to {suspect}: \"{q_snippet}\" "
+                f"A: \"{a_snippet}\""
             )
             
             doc_metadata = {

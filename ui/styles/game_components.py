@@ -41,6 +41,41 @@ CSS_GAME_COMPONENTS = """/* ========== BASE PANEL TITLE (fallback) ========== */
     background: var(--bg-panel);
 }
 
+/* Location cards for tabs (optional scene image + label) */
+.location-card {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 6px;
+}
+
+.location-card .location-image {
+    flex: 0 0 96px;
+    width: 96px;
+    height: 72px;
+    border-radius: 4px;
+    overflow: hidden;
+    background: rgba(0, 20, 0, 0.6);
+}
+
+.location-card .location-image img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.location-card .location-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.location-card .location-name {
+    font-family: var(--font-body);
+    font-size: 14px;
+    color: var(--text-primary);
+}
+
 .suspect-check,
 .location-check {
     color: var(--accent-green) !important;
@@ -380,9 +415,8 @@ CSS_GAME_COMPONENTS = """/* ========== BASE PANEL TITLE (fallback) ========== */
 
 /* ========== SETUP WIZARD ========== */
 .setup-wizard {
-    max-width: 600px;
     margin: 0 auto;
-    padding: 24px;
+    padding:0;
 }
 
 .wizard-settings {
@@ -427,5 +461,201 @@ CSS_GAME_COMPONENTS = """/* ========== BASE PANEL TITLE (fallback) ========== */
 .wizard-primary-btn {
     flex: 1;
     max-width: 300px;
+}
+
+/* ========== SUSPECT CARDS LIST (TAB) ========== */
+.suspects-card-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 8px;
+}
+
+.suspect-card {
+    display: flex;
+    flex-direction: row;
+    align-items: flex-start; /* don't stretch portrait; keep its own height */
+    background: var(--bg-card);
+    border: 1px solid var(--terminal-green-border-soft);
+    border-radius: 6px;
+    overflow: hidden;
+    transition: border-color 0.2s ease, transform 0.15s ease, background 0.2s ease;
+    cursor: pointer;
+    position: relative;
+}
+
+.suspect-card:hover {
+    border-color: var(--terminal-green);
+    transform: translateY(-2px);
+}
+
+.suspect-card.talked-to {
+    border-color: var(--terminal-green-border-strong);
+}
+
+.suspect-card.talked-to::after {
+    content: '✓';
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    color: var(--terminal-green);
+    font-size: 14px;
+    font-weight: bold;
+    z-index: 2;
+    text-shadow: 0 0 6px var(--terminal-green);
+}
+
+.suspect-card-portrait {
+    position: relative;
+    flex: 0 0 120px;
+    max-width: 120px;
+    width: 100%;
+    /* Square aspect ratio so cards never jump when images load, regardless of content */
+    aspect-ratio: 1 / 1;
+    background: rgba(0, 20, 0, 0.4);
+    overflow: hidden;
+    align-self: flex-start; /* explicitly prevent flexbox from stretching */
+}
+
+.suspect-card-portrait img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    filter: sepia(10%) saturate(1.1);
+    transition: filter 0.2s ease;
+}
+
+.suspect-card:hover .suspect-card-portrait img {
+    filter: sepia(0%) saturate(1.2);
+}
+
+.suspect-card-portrait-placeholder {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 48px;
+    color: var(--terminal-green-muted);
+    background: linear-gradient(135deg, rgba(0, 30, 0, 0.6) 0%, rgba(0, 20, 0, 0.8) 100%);
+}
+
+/* Hide placeholder once an image is present, but keep layout fixed */
+.suspect-card-portrait:has(img) .suspect-card-portrait-placeholder {
+    opacity: 0;
+    visibility: hidden;
+}
+
+.suspect-card-info {
+    flex: 1;
+    min-width: 0;
+    padding: 12px;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.suspect-card-name {
+    font-family: var(--font-body);
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--terminal-green);
+    margin-bottom: 4px;
+    text-shadow: 0 0 4px var(--terminal-green-glow);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.suspect-card-role {
+    font-family: var(--font-body);
+    font-size: 13px;
+    color: var(--terminal-green-accent);
+    font-style: italic;
+    margin-bottom: 8px;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.suspect-card-status {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-top: 6px;
+}
+
+.suspect-card-badge {
+    font-family: var(--font-retro-mono);
+    font-size: 11px;
+    padding: 2px 6px;
+    border-radius: 3px;
+    background: rgba(51, 255, 51, 0.1);
+    border: 1px solid var(--terminal-green-border-soft);
+    color: var(--terminal-green-muted);
+}
+
+.suspect-card-badge.contradiction {
+    background: rgba(255, 68, 68, 0.15);
+    border-color: #ff4444;
+    color: #ff6666;
+}
+
+.suspect-card-badge.talked {
+    background: rgba(51, 255, 51, 0.2);
+    color: var(--terminal-green);
+}
+
+/* Responsive adjustments */
+@media (max-width: 600px) {
+    .suspect-card {
+        flex-direction: column;
+    }
+    
+    .suspect-card-info {
+        padding: 8px;
+    }
+    
+    .suspect-card-name {
+        font-size: 13px;
+    }
+    
+    .suspect-card-role {
+        font-size: 11px;
+    }
+}
+
+@media (min-width: 900px) {
+    .suspects-card-grid {
+        grid-template-columns: repeat(4, 1fr);
+    }
+}
+
+/* ========== REFRESH SUSPECTS BUTTON ========== */
+.refresh-suspects-btn {
+    background: transparent !important;
+    border: 1px solid var(--terminal-green-border-soft) !important;
+    color: var(--terminal-green-muted) !important;
+    font-family: var(--font-retro-mono) !important;
+    font-size: 16px !important; /* slightly larger icon */
+    padding: 0 !important;
+    border-radius: 4px !important;
+    cursor: pointer !important;
+    transition: all 0.2s ease !important;
+    width: 32px !important;
+    height: 32px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+}
+
+.refresh-suspects-btn:hover {
+    border-color: var(--terminal-green) !important;
+    color: var(--terminal-green) !important;
+    background: rgba(51, 255, 51, 0.1) !important;
 }
 """

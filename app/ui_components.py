@@ -41,7 +41,7 @@ def create_ui_components() -> dict:
             '<div class="game-title"><span class="detective-avatar">🕵️‍♀️</span> MURDER MYSTERY</div>'
         )
 
-    # ====== MAIN LAYOUT, SETTINGS, AND DEBUG ======
+    # ====== MAIN LAYOUT AND DEBUG ======
     with gr.Tabs(elem_classes="main-tabs"):
         # ----- GAME TAB (DEFAULT) -----
         with gr.Tab("Game"):
@@ -185,9 +185,9 @@ def create_ui_components() -> dict:
                             )
                     
                     # Tab group with accordion content (always visible)
-                    with gr.Tabs(elem_classes="info-tabs"):
+                    with gr.Tabs(elem_classes="info-tabs") as info_tabs:
                         # Dashboard tab - first for quick overview
-                        with gr.Tab("📊 DASHBOARD"):
+                        with gr.Tab("📊 DASHBOARD", id="dashboard"):
                             dashboard_html_tab = gr.HTML(
                                 '''<div class="dashboard-empty">
                                     <div class="dashboard-icon">📊</div>
@@ -196,14 +196,22 @@ def create_ui_components() -> dict:
                             )
                         
                         # Case Details tab
-                        with gr.Tab("🧳 CASE DETAILS"):
+                        with gr.Tab("🧳 CASE DETAILS", id="case_details"):
                             victim_scene_html_tab = gr.HTML(
                                 "<em>Start a game to see case details...</em>",
                                 elem_classes="transcript-panel",
                             )
                         
-                        # Suspects tab
-                        with gr.Tab("🎭 SUSPECTS"):
+                        # Suspects tab - with select event for lazy portrait loading
+                        with gr.Tab("🎭 SUSPECTS", id="suspects") as suspects_tab:
+                            with gr.Row():
+                                gr.HTML('<span style="flex: 1;"></span>')  # Spacer
+                                refresh_suspects_btn = gr.Button(
+                                    "↻",
+                                    size="sm",
+                                    elem_classes="refresh-suspects-btn",
+                                    scale=0,
+                                )
                             suspects_list_html_tab = gr.HTML(
                                 "<em>Start a game to see suspects...</em>",
                                 elem_classes="transcript-panel suspects-list",
@@ -274,39 +282,6 @@ def create_ui_components() -> dict:
                             </div>'''
                         )
 
-        # ----- SETTINGS TAB -----
-        with gr.Tab("Settings"):
-            with gr.Column(elem_classes="settings-column"):
-                gr.Markdown(
-                    "### Mystery settings\n\n"
-                    "Adjust these before starting a new game. "
-                    "Changes apply to the **next** mystery you start in this browser session."
-                )
-                era_dropdown = gr.Dropdown(
-                    label="Era / category",
-                    choices=ERA_OPTIONS,
-                    value="Any",
-                    interactive=True,
-                )
-                setting_dropdown = gr.Dropdown(
-                    label="Setting",
-                    choices=["Random"] + get_settings_for_era("Any"),
-                    value="Random",
-                    interactive=True,
-                )
-                difficulty_radio = gr.Radio(
-                    label="Difficulty",
-                    choices=DIFFICULTY_LEVELS,
-                    value="Normal",
-                    interactive=True,
-                )
-                tone_radio = gr.Radio(
-                    label="Tone",
-                    choices=TONE_OPTIONS,
-                    value="Random",
-                    interactive=True,
-                )
-
         # ----- DEBUG TAB -----
         with gr.Tab("Debug"):
             with gr.Column(elem_classes="settings-column"):
@@ -348,10 +323,6 @@ def create_ui_components() -> dict:
         "clues_html_tab": clues_html_tab,
         "accusations_html_tab": accusations_html_tab,
         "notebook_html_tab": notebook_html_tab,
-        "era_dropdown": era_dropdown,
-        "setting_dropdown": setting_dropdown,
-        "difficulty_radio": difficulty_radio,
-        "tone_radio": tone_radio,
         "debug_logs_textbox": debug_logs_textbox,
         "refresh_logs_btn": refresh_logs_btn,
         "mystery_check_timer": mystery_check_timer,
@@ -362,6 +333,10 @@ def create_ui_components() -> dict:
         "wizard_setting_dropdown": wizard_setting_dropdown,
         "wizard_difficulty_radio": wizard_difficulty_radio,
         "wizard_tone_radio": wizard_tone_radio,
-        "refresh_voices_btn": refresh_voices_btn
+        "refresh_voices_btn": refresh_voices_btn,
+        # Tabs for select events (lazy portrait loading)
+        "info_tabs": info_tabs,
+        "suspects_tab": suspects_tab,
+        "refresh_suspects_btn": refresh_suspects_btn,
     }
 

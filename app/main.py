@@ -1,7 +1,7 @@
 """Voice-First Murder Mystery Game - 90s Point-and-Click Adventure Style.
 
 A reimagined interface that prioritizes voice output with streaming captions,
-styled like classic adventure games (Monkey Island, Gabriel Knight, etc.)
+styled like classic adventure games (Monkey Island, Day of the Tentacles, Gabriel Knight, etc.)
 """
 
 import os
@@ -24,14 +24,16 @@ from game.state_manager import init_game_handlers, mystery_images
 from app.utils import setup_ui_logging, get_ui_logs
 from app.ui_components import create_ui_components
 from app.event_handlers import (
-    on_config_era_change,
     on_config_generic_change,
     on_wizard_config_change,
+    on_refresh_voices,
     on_start_game,
     check_mystery_ready,
     on_voice_input,
     reset_voice_input,
     on_audio_stop,
+    on_suspects_tab_select,
+    on_refresh_suspects_click,
 )
 
 # Load environment variables
@@ -97,10 +99,6 @@ def create_app():
         clues_html_tab = components["clues_html_tab"]
         accusations_html_tab = components["accusations_html_tab"]
         notebook_html_tab = components["notebook_html_tab"]
-        era_dropdown = components["era_dropdown"]
-        setting_dropdown = components["setting_dropdown"]
-        difficulty_radio = components["difficulty_radio"]
-        tone_radio = components["tone_radio"]
         debug_logs_textbox = components["debug_logs_textbox"]
         refresh_logs_btn = components["refresh_logs_btn"]
         mystery_check_timer = components["mystery_check_timer"]
@@ -112,6 +110,9 @@ def create_app():
         wizard_difficulty_radio = components["wizard_difficulty_radio"]
         wizard_tone_radio = components["wizard_tone_radio"]
         refresh_voices_btn = components["refresh_voices_btn"]
+        # Tabs and buttons for lazy portrait loading
+        info_tabs = components["info_tabs"]
+        refresh_suspects_btn = components["refresh_suspects_btn"]
 
         # ====== WIRE UP EVENTS ======
 
@@ -135,53 +136,6 @@ def create_app():
             accusations_html_tab,
             notebook_html_tab,
         ]
-
-        # Settings tab - keep per-session config in GameState
-        getattr(era_dropdown, "change")(
-            fn=on_config_era_change,
-            inputs=[
-                era_dropdown,
-                setting_dropdown,
-                difficulty_radio,
-                tone_radio,
-                session_id,
-            ],
-            outputs=[setting_dropdown],
-        )
-
-        getattr(setting_dropdown, "change")(
-            fn=on_config_generic_change,
-            inputs=[
-                setting_dropdown,
-                era_dropdown,
-                difficulty_radio,
-                tone_radio,
-                session_id,
-            ],
-            outputs=None,
-        )
-        getattr(difficulty_radio, "change")(
-            fn=on_config_generic_change,
-            inputs=[
-                setting_dropdown,
-                era_dropdown,
-                difficulty_radio,
-                tone_radio,
-                session_id,
-            ],
-            outputs=None,
-        )
-        getattr(tone_radio, "change")(
-            fn=on_config_generic_change,
-            inputs=[
-                setting_dropdown,
-                era_dropdown,
-                difficulty_radio,
-                tone_radio,
-                session_id,
-            ],
-            outputs=None,
-        )
 
         # ====== WIZARD EVENT HANDLERS ======
         
@@ -237,8 +191,13 @@ def create_app():
             outputs=None,
         )
         
-        # Note: Voices are fetched on-demand when START is clicked
-        # The refresh button allows manual refresh before starting
+        # Note: Voices are fetched on-demand when START is clicked.
+        # The refresh button allows manual refresh before starting.
+        getattr(refresh_voices_btn, "click")(
+            fn=on_refresh_voices,
+            inputs=[session_id],
+            outputs=None,
+        )
 
         # Start game - now with wizard outputs
         getattr(start_btn, "click")(
@@ -312,6 +271,20 @@ def create_app():
                 inputs=None,
                 outputs=[speaker_html],
             )
+
+        # Info tabs select - refresh suspects portraits on tab click (lazy loading)
+        getattr(info_tabs, "select")(
+            fn=on_suspects_tab_select,
+            inputs=[session_id],
+            outputs=[suspects_list_html_tab],
+        )
+        
+        # Manual refresh button for suspects portraits
+        getattr(refresh_suspects_btn, "click")(
+            fn=on_refresh_suspects_click,
+            inputs=[session_id],
+            outputs=[suspects_list_html_tab],
+        )
 
     return app
 

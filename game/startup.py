@@ -22,6 +22,7 @@ from game.mystery_generator import (
     generate_mystery,
     generate_mystery_premise,
     prepare_game_prompt,
+    generate_location_descriptions,
 )
 from mystery_config import create_validated_config
 from services.agent import create_game_master_agent, process_message
@@ -31,7 +32,6 @@ from game.state_manager import (
     GAME_MASTER_VOICE_ID,
     get_or_create_state,
 )
-from game.media import _prewarm_suspect_portraits, _prewarm_scene_images
 from services.game_memory import initialize_game_memory, reset_game_memory
 from services.voice_service import get_voice_service, Voice
 
@@ -428,39 +428,22 @@ system or background tasks. Stay purely in-world."""
                         assigned_count, len(full_mystery.suspects))
             
             bg_state.mystery = full_mystery
+            # Generate rich per-location visual descriptions for scene images
+            try:
+                bg_state.location_descriptions = generate_location_descriptions(
+                    full_mystery
+                )
+            except Exception as e:  # noqa: BLE001
+                logger.error(
+                    "[BG] Error generating location descriptions for session %s: %s",
+                    sess_id,
+                    e,
+                )
             bg_state.system_prompt = prepare_game_prompt(
                 full_mystery, bg_state.tone_instruction
             )
             bg_state.mystery_ready = True
             logger.info("[BG] Full mystery is ready for session %s", sess_id)
-
-            # Kick off background prewarming of suspect portraits AND scene images
-            # Both run in parallel using separate worker pools
-            try:
-                threading.Thread(
-                    target=_prewarm_suspect_portraits,
-                    args=(sess_id, full_mystery),
-                    daemon=True,
-                ).start()
-            except Exception as e2:  # noqa: BLE001
-                logger.error(
-                    "[BG] Error starting suspect portrait prewarm thread for %s: %s",
-                    sess_id,
-                    e2,
-                )
-
-            try:
-                threading.Thread(
-                    target=_prewarm_scene_images,
-                    args=(sess_id, full_mystery),
-                    daemon=True,
-                ).start()
-            except Exception as e3:  # noqa: BLE001
-                logger.error(
-                    "[BG] Error starting scene image prewarm thread for %s: %s",
-                    sess_id,
-                    e3,
-                )
         except Exception as e:
             logger.error("[BG] Error generating full mystery in background: %s", e)
 

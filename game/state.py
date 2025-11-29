@@ -32,6 +32,8 @@ class GameState:
         # The Game Master (orchestrator) owns this state and passes it to stateless suspects
         self.suspect_states: Dict[str, SuspectState] = {}
         self.current_turn: int = 0
+        # Per-location visual descriptions for scene generation (name -> rich description)
+        self.location_descriptions: Dict[str, str] = {}
         
         # Voice-First Character Generation (Session Cache)
         # Voices are fetched BEFORE character generation so LLM can create 
@@ -75,6 +77,8 @@ class GameState:
         # AI Enhancement Phase 1: Reset suspect state tracking
         self.suspect_states = {}
         self.current_turn = 0
+        # Reset location descriptions for new mystery
+        self.location_descriptions = {}
         # Note: We do NOT reset voice fields here - voices are session-cached
         # and should persist across multiple games in the same session
         # Reset setup state for new game

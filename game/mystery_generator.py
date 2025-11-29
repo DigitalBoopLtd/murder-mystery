@@ -188,6 +188,114 @@ Do NOT include any text before or after the JSON. Start with {{ and end with }}.
     return premise
 
 
+def generate_location_descriptions(mystery: Mystery) -> dict:
+    """Generate rich visual descriptions for each unique location in the mystery.
+
+    Returns a dict: {location_name: visual_description}.
+    """
+    try:
+        llm = ChatOpenAI(
+            model="gpt-4o-mini",
+            temperature=0.8,
+            api_key=os.getenv("OPENAI_API_KEY"),
+        )
+
+        # Collect unique locations from the clues
+        locations = sorted({clue.location for clue in mystery.clues})
+        if not locations:
+            return {}
+
+        # Build a block that includes clues per location so the LLM can anchor visuals
+        location_blocks = []
+        for loc in locations:
+            loc_clues = [
+                clue
+                for clue in mystery.clues
+                if clue.location == loc
+            ]
+            block_lines = [f"- {loc}:"]
+            if loc_clues:
+                for c in loc_clues:
+                    block_lines.append(
+                        f"  - Clue '{c.id}': {c.description} (significance: {c.significance})"
+                    )
+            location_blocks.append("\n".join(block_lines))
+        locations_with_clues = "\n".join(location_blocks)
+
+        prompt = ChatPromptTemplate.from_messages(
+            [
+                (
+                    "system",
+                    """You are a background concept artist for a 1990s point-and-click adventure game.
+
+Your job is to write short VISUAL DESCRIPTIONS for game locations that a painter can use
+to design unique scene art. Focus ONLY on the environment — no characters, no plot spoilers.
+
+For EACH location, write 1–2 sentences that describe:
+- Layout and geometry of the space
+- Key props, furniture, machines, or landmarks
+- Colors and lighting
+- Interior vs exterior feel
+- Whether the \"camera\" should be outside looking at an object/room, or inside a confined space
+  (e.g., \"inside an open briefcase looking out over the desk\" vs \"a briefcase sitting on the desk\").
+
+Use the CLUES for each location to decide what should be visually emphasized and whether
+the primary viewpoint is outside or inside any container (briefcase, safe, locker, car trunk, etc.).
+
+Tone: vivid but concise. Imagine you are briefing an artist.
+
+Return STRICT JSON mapping location name to description, for example:
+{
+  "Lab 1": "A narrow lab lined with humming consoles and glass sample cases, neon indicator lights reflecting off polished floors.",
+  "Security Mainframe": "A cramped control room packed with server racks and glowing monitors, cables snaking across industrial flooring."
+}
+
+Do NOT include characters or actions. Do NOT mention the murder directly.
+""",
+                ),
+                (
+                    "human",
+                    """MYSTERY SETTING:
+{setting}
+
+LOCATIONS AND THEIR CLUES:
+{locations}
+
+Return ONLY the JSON object mapping each location name to its visual description.""",
+                ),
+            ]
+        )
+
+        chain = prompt | llm
+        raw = chain.invoke(
+            {
+                "setting": mystery.setting,
+                "locations": locations_with_clues,
+            }
+        )
+
+        # Reuse markdown/JSON stripping helper
+        text = strip_markdown_json(raw)
+        data = json.loads(text)
+
+        # Ensure we only keep strings for known locations
+        result: dict = {}
+        for loc in locations:
+            desc = data.get(loc)
+            if isinstance(desc, str) and desc.strip():
+                result[loc] = desc.strip()
+
+        logger.info(
+            "Generated location descriptions for %d/%d locations",
+            len(result),
+            len(locations),
+        )
+        return result
+    except Exception as e:  # noqa: BLE001
+        logger.error("Error generating location descriptions: %s", e)
+        return {}
+
+
 def generate_mystery(
     premise: Optional[MysteryPremise] = None,
     config: Optional[MysteryConfig] = None,
@@ -606,6 +714,19 @@ No previous conversations."""
    - question: The player's question/statement
    - voice_id: The suspect's voice ID for audio
 2. SEARCH location → Describe findings, reveal clues if correct location
+   - When the player searches a NEW location (one that has not been searched yet),
+     you SHOULD call the \"describe_scene_for_image\" tool ONCE to design a vivid visual scene.
+   - Pass:
+       * location_name: the exact clue location name (e.g. \"Lab 1\", \"Security Mainframe\")
+       * clue_summary: short summary of clues tied to that location
+       * current_narration: what you are about to say about this search
+       * previous_searches: brief summary of past searches at this location (or empty)
+       * desired_view: optional hint like \"inside briefcase\", \"wide shot from doorway\"
+   - Use the tool result to guide your spoken description (environment_description, camera_position, focal_objects).
+   - At the VERY END of your response, add a single marker line on its own:
+       [SCENE_BRIEF{{...JSON from the tool result...}}]
+     where the JSON is EXACTLY what the tool returned.
+   - Do NOT explain this marker to the player. It is for the game engine only.
 3. ACCUSATION → Check if correct with evidence
 
 ## RAG MEMORY TOOLS (use to enhance gameplay)
@@ -631,9 +752,10 @@ The player can already see suspects, locations, objectives, and found clues in s
 - Do NOT list out all suspects or their roles
 - Do NOT list all locations to search  
 - Do NOT repeat the case summary or victim info
-- Keep responses focused, atmospheric, and conversational
-- When welcoming: Set the MOOD briefly (2-3 sentences), then ask what they'd like to do first
-- Be concise - no walls of text or bullet-point lists of what's available
+- Keep responses focused, atmospheric, and conversational.
+- For MOST responses (including interrogations and search results), use at most 1–2 short paragraphs (2–4 sentences, ~60–90 words total).
+- When welcoming: Set the MOOD briefly (2–3 sentences), then ask what they'd like to do first.
+- Be concise – no walls of text or bullet‑point lists of what's available.
 
 {tone_block}
 

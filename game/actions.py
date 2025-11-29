@@ -10,6 +10,7 @@ from __future__ import annotations
 import logging
 import os
 import re
+import json
 from typing import Optional, Tuple, List, Dict
 
 from services.agent import create_game_master_agent, process_message
@@ -277,6 +278,55 @@ def process_player_action(
         clean_response = re.sub(audio_marker_pattern, "", response).strip()
         logger.info("Extracted audio path from tool: %s", audio_path_from_tool)
 
+    # Extract optional scene brief marker (from describe_scene_for_image tool)
+    # Format: [SCENE_BRIEF{...json...}]
+    scene_brief = None
+    scene_pattern = r"\[SCENE_BRIEF(?P<json>\{.*?\})\]"
+    scene_match = re.search(scene_pattern, clean_response)
+    if scene_match:
+        scene_json = scene_match.group("json")
+        try:
+            scene_brief = json.loads(scene_json)
+            logger.info(
+                "[GAME] Parsed SCENE_BRIEF for location: %s",
+                scene_brief.get("location_name"),
+            )
+        except Exception as e:  # noqa: BLE001
+            logger.exception("[GAME] Failed to parse SCENE_BRIEF JSON: %s", e)
+            scene_brief = None
+
+        # Remove the scene brief marker from the text seen by the player
+        clean_response = re.sub(scene_pattern, "", clean_response).strip()
+
+        # If we successfully parsed, cache a rich description on state
+        if scene_brief:
+            loc_name = scene_brief.get("location_name")
+            env = scene_brief.get("environment_description") or ""
+            camera = scene_brief.get("camera_position") or ""
+            focal = scene_brief.get("focal_objects") or ""
+
+            parts = [env]
+            if camera:
+                parts.append(f"Camera: {camera}")
+            if focal:
+                parts.append(f"Focal objects: {focal}")
+            full_desc = " ".join(p for p in parts if p)
+
+            if loc_name and full_desc:
+                try:
+                    normalized_loc = normalize_location_name(loc_name, state)
+                except Exception:
+                    normalized_loc = loc_name
+                try:
+                    state.location_descriptions[normalized_loc] = full_desc
+                    logger.info(
+                        "[GAME] Stored scene brief for %s", normalized_loc
+                    )
+                except Exception:  # noqa: BLE001
+                    logger.exception(
+                        "[GAME] Failed to store scene brief for %s", normalized_loc
+                    )
+
     # Remove game state markers from response (SEARCHED, ACCUSATION, CLUE_FOUND)
     clean_response = clean_response_markers(clean_response)
 
@@ -340,9 +390,16 @@ def process_player_action(
             logger.info("Generating scene image for location: %s (normalized: %s)", location, normalized_location)
             service = get_image_service()
             if service and service.is_available:
-                # Use the response text as context for scene generation
-                # Clean the response to extract relevant descriptive content
-                context_text = clean_response[:500]  # Use first 500 chars as context
+                # Build rich scene context: stored location description + latest narrative
+                parts = []
+                loc_desc = getattr(state, "location_descriptions", {}).get(
+                    normalized_location, ""
+                )
+                if loc_desc:
+                    parts.append(f"Location visual description: {loc_desc}")
+                if clean_response:
+                    parts.append(clean_response[:300])
+                context_text = " ".join(parts)
                 mood = _get_scene_mood_for_state(state)
                 scene_path = service.generate_scene(
                     location_name=normalized_location,  # Use normalized name for generation

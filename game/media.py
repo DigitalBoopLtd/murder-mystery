@@ -305,7 +305,16 @@ def generate_turn_media(
         # Only generate if we don't already have this scene (check both original and normalized)
         if normalized_location not in session_images and location not in session_images:
             mystery_setting = state.mystery.setting if state.mystery else ""
-            context_text = clean_response[:500]  # Use first 500 chars as context
+            # Build rich scene context: stored location description + latest narrative
+            parts = []
+            loc_desc = getattr(state, "location_descriptions", {}).get(
+                normalized_location, ""
+            )
+            if loc_desc:
+                parts.append(f"Location visual description: {loc_desc}")
+            if clean_response:
+                parts.append(clean_response[:300])
+            context_text = " ".join(parts)
             
             if background_images:
                 logger.info(

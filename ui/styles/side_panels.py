@@ -363,6 +363,16 @@ CSS_SIDE_PANELS = """/* ========== SIDE PANELS - BASE ========== */
     border-top: 1px dashed var(--terminal-green-border-soft);
 }
 
+.suspect-relationships-label {
+    width: 100%;
+    font-family: var(--font-retro-mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--terminal-green-muted);
+    margin-bottom: 2px;
+}
+
 .rel-label {
     display: inline-block;
     font-size: 9px;

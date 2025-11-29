@@ -2,7 +2,10 @@
 
 import os
 import re
+import json
 import logging
+import time
+import threading
 from typing import Optional, Tuple, List, Dict
 
 from game.state import GameState
@@ -25,6 +28,7 @@ from game.state_manager import (
     get_suspect_voice_id,
     normalize_location_name,
 )
+from game.media import _generate_portrait_background
 from services.game_memory import get_game_memory
 
 logger = logging.getLogger(__name__)
@@ -194,6 +198,9 @@ def process_player_action(
         )
 
     # Build the message based on action type
+    # Perf: measure time spent resolving which suspect (if any) this message targets
+    t_resolve_start = time.perf_counter()
+
     if action_type == "talk" and target:
         message = f"I want to talk to {target}. Hello, {target}."
     elif action_type == "search" and target:
@@ -448,6 +455,55 @@ def process_player_action(
         clean_response = re.sub(audio_marker_pattern, "", response).strip()
         logger.info("Extracted audio path from tool: %s", audio_path_from_tool)
 
+    # Extract optional scene brief marker (from describe_scene_for_image tool)
+    # Format: [SCENE_BRIEF{...json...}]
+    scene_brief = None
+    scene_pattern = r"\[SCENE_BRIEF(?P<json>\{.*?\})\]"
+    scene_match = re.search(scene_pattern, clean_response)
+    if scene_match:
+        scene_json = scene_match.group("json")
+        try:
+            scene_brief = json.loads(scene_json)
+            logger.info(
+                "[GAME] Parsed SCENE_BRIEF for location: %s",
+                scene_brief.get("location_name"),
+            )
+        except Exception as e:  # noqa: BLE001
+            logger.exception("[GAME] Failed to parse SCENE_BRIEF JSON: %s", e)
+            scene_brief = None
+
+        # Remove the scene brief marker from the text seen by the player
+        clean_response = re.sub(scene_pattern, "", clean_response).strip()
+
+        # If we successfully parsed, cache a rich description on state
+        if scene_brief:
+            loc_name = scene_brief.get("location_name")
+            env = scene_brief.get("environment_description") or ""
+            camera = scene_brief.get("camera_position") or ""
+            focal = scene_brief.get("focal_objects") or ""
+
+            parts = [env]
+            if camera:
+                parts.append(f"Camera: {camera}")
+            if focal:
+                parts.append(f"Focal objects: {focal}")
+            full_desc = " ".join(p for p in parts if p)
+
+            if loc_name and full_desc:
+                try:
+                    normalized_loc = normalize_location_name(loc_name, state)
+                except Exception:
+                    normalized_loc = loc_name
+                try:
+                    state.location_descriptions[normalized_loc] = full_desc
+                    logger.info(
+                        "[GAME] Stored scene brief for %s", normalized_loc
+                    )
+                except Exception:  # noqa: BLE001
+                    logger.exception(
+                        "[GAME] Failed to store scene brief for %s", normalized_loc
+                    )
+
     # Remove game state markers from response (SEARCHED, ACCUSATION, CLUE_FOUND)
     clean_response = clean_response_markers(clean_response)
 
@@ -516,9 +572,16 @@ def process_player_action(
             logger.info("Generating scene image for location: %s (normalized: %s)", location, normalized_location)
             service = get_image_service()
             if service and service.is_available:
-                # Use the response text as context for scene generation
-                # Clean the response to extract relevant descriptive content
-                context_text = clean_response[:500]  # Use first 500 chars as context
+                # Build rich scene context: stored location description + latest narrative
+                parts = []
+                loc_desc = getattr(state, "location_descriptions", {}).get(
+                    normalized_location, ""
+                )
+                if loc_desc:
+                    parts.append(f"Location visual description: {loc_desc}")
+                if clean_response:
+                    parts.append(clean_response[:300])
+                context_text = " ".join(parts)
                 mood = _get_scene_mood_for_state(state)
                 scene_path = service.generate_scene(
                     location_name=normalized_location,  # Use normalized name for generation
@@ -644,6 +707,7 @@ def run_action_logic(
     Returns:
         Tuple of (clean_response, speaker_name, state, actions_dict, audio_path_from_tool)
     """
+    t_start = time.perf_counter()
     state = get_or_create_state(session_id)
 
     # If the full mystery is not ready yet, keep the player in the intro phase.
@@ -808,6 +872,18 @@ def run_action_logic(
                             )
                             break
 
+    # Perf: measure how long suspect resolution (heuristics + resolver) took
+    # (t_resolve_start is captured just before heuristics; if we didn't set it, this is a no-op)
+    try:
+        t_resolve_end = time.perf_counter()
+        if "t_resolve_start" in locals():
+            logger.info(
+                "[PERF] run_action_logic: suspect resolution took %.2fs",
+                t_resolve_end - t_resolve_start,
+            )
+    except Exception:
+        logger.exception("[PERF] Failed to log suspect resolution timing")
+
     if suspect_to_assign and not suspect_to_assign.voice_id:
         logger.info("Assigning voice on-demand for suspect: %s", suspect_to_assign.name)
         used_voice_ids = [
@@ -833,6 +909,34 @@ def run_action_logic(
                 "[GAME] Failed to update stored custom message content on state (fast path)"
             )
 
+    # Kick off background portrait generation for this suspect so it can
+    # complete while the agent + tools are running. This reduces the time
+    # we wait in Stage 2 media generation before the portrait is available.
+    if suspect_to_assign and state.mystery:
+        try:
+            session_images = mystery_images.get(session_id, {})
+            if suspect_to_assign.name not in session_images:
+                mystery_setting = state.mystery.setting if state.mystery else ""
+                logger.info(
+                    "[GAME] Pre-warming portrait in background for suspect: %s",
+                    suspect_to_assign.name,
+                )
+                threading.Thread(
+                    target=_generate_portrait_background,
+                    args=(
+                        suspect_to_assign.name,
+                        suspect_to_assign,
+                        mystery_setting,
+                        session_id,
+                    ),
+                    daemon=True,
+                ).start()
+        except Exception:
+            logger.exception(
+                "[GAME] Failed to start background portrait generation for %s",
+                getattr(suspect_to_assign, "name", "unknown"),
+            )
+
     # Get or create agent
     if not hasattr(run_action_logic, "agent"):
         run_action_logic.agent = create_game_master_agent()
@@ -840,13 +944,19 @@ def run_action_logic(
     # Update system prompt (will include newly assigned voice_id if any)
     state.system_prompt = state.get_continue_prompt()
 
-    # Process with agent
+    # Process with agent (Game Master + tools)
+    t_agent_start = time.perf_counter()
     response, speaker = process_message(
         run_action_logic.agent,
         message,
         state.system_prompt,
         session_id,
         thread_id=session_id,
+    )
+    t_agent_end = time.perf_counter()
+    logger.info(
+        "[PERF] run_action_logic: agent + tools took %.2fs",
+        t_agent_end - t_agent_start,
     )
 
     # Handle empty or placeholder responses
@@ -867,7 +977,13 @@ def run_action_logic(
             response = "You consider your next move carefully."
 
     # Parse actions
+    t_parse_start = time.perf_counter()
     actions = parse_game_actions(message, response, state)
+    t_parse_end = time.perf_counter()
+    logger.info(
+        "[PERF] run_action_logic: parse_game_actions took %.2fs",
+        t_parse_end - t_parse_start,
+    )
 
     # Also mark suspects as "talked to" based on the speaker, so even if the
     # player's wording doesn't match our text heuristics, the suspect sidebar
@@ -890,13 +1006,75 @@ def run_action_logic(
         clean_response = re.sub(audio_marker_pattern, "", response).strip()
         logger.info("Extracted audio path from tool: %s", audio_path_from_tool)
 
+    # Extract optional scene brief marker (from describe_scene_for_image tool)
+    # Format: [SCENE_BRIEF{...json...}]
+    scene_brief = None
+    scene_pattern = r"\[SCENE_BRIEF(?P<json>\{.*?\})\]"
+    scene_match = re.search(scene_pattern, clean_response)
+    if scene_match:
+        scene_json = scene_match.group("json")
+        try:
+            scene_brief = json.loads(scene_json)
+            logger.info(
+                "[GAME] Parsed SCENE_BRIEF for location: %s",
+                scene_brief.get("location_name"),
+            )
+        except Exception as e:  # noqa: BLE001
+            logger.exception("[GAME] Failed to parse SCENE_BRIEF JSON: %s", e)
+            scene_brief = None
+
+        # Remove the scene brief marker from the text seen by the player
+        clean_response = re.sub(scene_pattern, "", clean_response).strip()
+
+        # If we successfully parsed, cache a rich description on state
+        if scene_brief:
+            loc_name = scene_brief.get("location_name")
+            env = scene_brief.get("environment_description") or ""
+            camera = scene_brief.get("camera_position") or ""
+            focal = scene_brief.get("focal_objects") or ""
+
+            parts = [env]
+            if camera:
+                parts.append(f"Camera: {camera}")
+            if focal:
+                parts.append(f"Focal objects: {focal}")
+            full_desc = " ".join(p for p in parts if p)
+
+            if loc_name and full_desc:
+                try:
+                    normalized_loc = normalize_location_name(loc_name, state)
+                except Exception:
+                    normalized_loc = loc_name
+                try:
+                    state.location_descriptions[normalized_loc] = full_desc
+                    logger.info(
+                        "[GAME] Stored scene brief for %s", normalized_loc
+                    )
+                except Exception:  # noqa: BLE001
+                    logger.exception(
+                        "[GAME] Failed to store scene brief for %s", normalized_loc
+                    )
+
     # Remove game state markers from response (SEARCHED, ACCUSATION, CLUE_FOUND)
+    t_clean_start = time.perf_counter()
     clean_response = clean_response_markers(clean_response)
 
     # AI Enhancement Phase 1: Record interrogation and update emotional state
     # This must happen after we have clean_response but before storing the message
     if speaker and speaker != "Game Master":
+        t_record_start = time.perf_counter()
         _record_interrogation(state, speaker, message, clean_response)
+        t_record_end = time.perf_counter()
+        logger.info(
+            "[PERF] run_action_logic: _record_interrogation took %.2fs",
+            t_record_end - t_record_start,
+        )
+
+    t_clean_end = time.perf_counter()
+    logger.info(
+        "[PERF] run_action_logic: clean/markers + scene-brief handling took %.2fs",
+        t_clean_end - t_clean_start,
+    )
 
     # Store assistant message (text only)
     state.messages.append(
@@ -905,6 +1083,12 @@ def run_action_logic(
             "content": clean_response,
             "speaker": speaker or "Game Master",
         }
+    )
+
+    t_end = time.perf_counter()
+    logger.info(
+        "[PERF] run_action_logic: total internal time %.2fs",
+        t_end - t_start,
     )
 
     return clean_response, speaker or "Game Master", state, actions, audio_path_from_tool
