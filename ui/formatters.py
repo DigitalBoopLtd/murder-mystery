@@ -107,7 +107,8 @@ def format_suspects_list_html(
     talked_to: List[str] = None,
     loading: bool = False,
     suspect_states: Optional[Dict[str, SuspectState]] = None,
-    portrait_images: Optional[Dict[str, str]] = None
+    portrait_images: Optional[Dict[str, str]] = None,
+    layout: str = "row",
 ) -> str:
     """Format suspects list as HTML game cards with portraits.
     
@@ -117,6 +118,7 @@ def format_suspects_list_html(
         loading: Whether to show loading state
         suspect_states: Dict mapping suspect name -> SuspectState (for trust/nervousness meters)
         portrait_images: Dict mapping suspect name -> portrait image path
+        layout: "row" for horizontal layout (tabs), "column" for vertical layout (side panel)
     """
     if not mystery:
         if loading:
@@ -245,7 +247,9 @@ def format_suspects_list_html(
             </div>
         </div>''')
     
-    return f'<div class="suspects-card-grid">{"".join(cards)}</div>'
+    # Use layout class to control card arrangement
+    layout_class = "suspects-card-grid" if layout == "row" else "suspects-card-grid suspects-card-grid-column"
+    return f'<div class="{layout_class}">{"".join(cards)}</div>'
 
 
 def format_locations_html(

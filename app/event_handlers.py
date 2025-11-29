@@ -294,7 +294,7 @@ def on_start_game(sess_id, progress=gr.Progress()):
         gr.update(visible=False),  # setup_wizard - hide wizard
         # Side panels - show "loading" state, timer will update when ready
         victim_html,
-        format_suspects_list_html(None, state.suspects_talked_to, loading=True),
+        format_suspects_list_html(None, state.suspects_talked_to, loading=True, layout="column"),
         format_locations_html(None, state.searched_locations, loading=True),
         format_clues_html(state.clues_found),
         # Accusations
@@ -309,7 +309,7 @@ def on_start_game(sess_id, progress=gr.Progress()):
             state.wrong_accusations
         ),
         victim_html,
-        format_suspects_list_html(None, state.suspects_talked_to, loading=True),
+        format_suspects_list_html(None, state.suspects_talked_to, loading=True, layout="row"),
         format_locations_html(None, state.searched_locations, loading=True),
         format_clues_html(state.clues_found),
         format_accusations_html(state.wrong_accusations),
@@ -335,12 +335,23 @@ def check_mystery_ready(sess_id: str):
         # Note: Portraits may still be loading - they'll appear when user clicks Suspects tab
         logger.info("[APP] Timer: Full mystery ready, updating UI panels")
         victim_html = format_victim_scene_html(state.mystery)
-        suspects_html = format_suspects_list_html(
+        # Side panel: column layout (portrait on top)
+        suspects_html_panel = format_suspects_list_html(
             state.mystery,
             state.suspects_talked_to,
             loading=False,
             suspect_states=state.suspect_states,
-            portrait_images=mystery_images.get(sess_id, {})
+            portrait_images=mystery_images.get(sess_id, {}),
+            layout="column",
+        )
+        # Tabs: row layout (portrait on left)
+        suspects_html_tab = format_suspects_list_html(
+            state.mystery,
+            state.suspects_talked_to,
+            loading=False,
+            suspect_states=state.suspect_states,
+            portrait_images=mystery_images.get(sess_id, {}),
+            layout="row",
         )
         locations_html = format_locations_html(
             state.mystery,
@@ -358,12 +369,12 @@ def check_mystery_ready(sess_id: str):
         )
         return [
             victim_html,
-            suspects_html,
+            suspects_html_panel,  # Side panel (column layout)
             locations_html,
             # Tab components (replicated from accordions)
             dashboard_html,
             victim_html,
-            suspects_html,
+            suspects_html_tab,  # Tabs (row layout)
             locations_html,
             gr.update(active=False),  # Stop the timer
         ]
@@ -535,7 +546,8 @@ def on_custom_message(message: str, sess_id: str):
             state.mystery,
             state.suspects_talked_to,
             suspect_states=state.suspect_states,
-            portrait_images=mystery_images.get(sess_id, {})
+            portrait_images=mystery_images.get(sess_id, {}),
+            layout="column",  # Side panel: vertical layout
         ),
         format_locations_html(
             state.mystery,
@@ -761,7 +773,8 @@ def on_voice_input(audio_path: str, sess_id, progress=gr.Progress()):
             state.mystery,
             state.suspects_talked_to,
             suspect_states=state.suspect_states,
-            portrait_images=mystery_images.get(sess_id, {})
+            portrait_images=mystery_images.get(sess_id, {}),
+            layout="column",  # Side panel: vertical layout
         ),
         format_locations_html(
             state.mystery,
@@ -785,7 +798,8 @@ def on_voice_input(audio_path: str, sess_id, progress=gr.Progress()):
             state.mystery,
             state.suspects_talked_to,
             suspect_states=state.suspect_states,
-            portrait_images=mystery_images.get(sess_id, {})
+            portrait_images=mystery_images.get(sess_id, {}),
+            layout="row",  # Tabs: horizontal layout
         ),
         format_locations_html(
             state.mystery,
@@ -926,7 +940,8 @@ def on_voice_input(audio_path: str, sess_id, progress=gr.Progress()):
             state.mystery,
             state.suspects_talked_to,
             suspect_states=state.suspect_states,
-            portrait_images=mystery_images.get(sess_id, {})
+            portrait_images=mystery_images.get(sess_id, {}),
+            layout="column",  # Side panel: vertical layout
         ),
         format_locations_html(
             state.mystery,
@@ -950,7 +965,8 @@ def on_voice_input(audio_path: str, sess_id, progress=gr.Progress()):
             state.mystery,
             state.suspects_talked_to,
             suspect_states=state.suspect_states,
-            portrait_images=mystery_images.get(sess_id, {})
+            portrait_images=mystery_images.get(sess_id, {}),
+            layout="row",  # Tabs: horizontal layout
         ),
         format_locations_html(state.mystery, state.searched_locations),
         format_clues_html(state.clues_found),
@@ -1018,6 +1034,7 @@ def _refresh_suspects_list(sess_id, trigger: str):
         state.suspects_talked_to,
         loading=False,
         suspect_states=state.suspect_states,
-        portrait_images=session_images
+        portrait_images=session_images,
+        layout="row",  # Tabs: horizontal layout
     )
 

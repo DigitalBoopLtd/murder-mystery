@@ -463,12 +463,28 @@ CSS_GAME_COMPONENTS = """/* ========== BASE PANEL TITLE (fallback) ========== */
     max-width: 300px;
 }
 
-/* ========== SUSPECT CARDS LIST (TAB) ========== */
+/* ========== SUSPECT CARDS LIST (TAB & SIDE PANEL) ========== */
 .suspects-card-grid {
     display: flex;
     flex-direction: column;
     gap: 12px;
     padding: 8px;
+}
+
+/* Column layout for side panel: cards are vertical (portrait on top, info below) */
+.suspects-card-grid-column .suspect-card {
+    flex-direction: column;
+}
+
+.suspects-card-grid-column .suspect-card-portrait {
+    flex: none;
+    max-width: none;
+    width: 100%;
+    aspect-ratio: 1 / 1;
+}
+
+.suspects-card-grid-column .suspect-card-info {
+    padding: 10px;
 }
 
 .suspect-card {
