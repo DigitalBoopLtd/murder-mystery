@@ -1,5 +1,6 @@
 """Tools for the game master agent."""
 
+import json
 import logging
 import os
 import re
@@ -140,18 +141,13 @@ def describe_scene_for_image(
         'Optional: hint about camera view, e.g. "inside briefcase", "outside door, down the hallway", "overhead".',
     ] = None,
 ) -> str:
-    """Design a visual scene brief for a location image.
+    """Search a location and describe what the detective finds.
 
-    Returns STRICT JSON with:
-        - location_name: str (echo of the input location name)
-        - environment_description: str (1-2 sentences describing the environment)
-        - camera_position: str (e.g. "inside looking out", "outside wide shot", "overhead", etc.)
-        - focal_objects: str (comma-separated list of key props/objects to emphasize)
-        - prompt_hint: str (optional extra hint to pass directly to the image generator)
+    Returns a SHORT spoken narration (2-3 sentences, ~50 words) that the Game Master
+    should use VERBATIM as their response. Also includes a [SCENE_BRIEF{...}] marker
+    at the end for image generation.
 
-    The Game Master will:
-        1. Use this brief to shape their spoken narration.
-        2. Embed the JSON inside a [SCENE_BRIEF{...}] marker at the END of their response.
+    The Game Master should NOT add any additional narration – just use this output directly.
     """
     logger.info("\n%s", "=" * 60)
     logger.info("DESCRIBE_SCENE_FOR_IMAGE TOOL CALLED")
@@ -169,29 +165,28 @@ def describe_scene_for_image(
         [
             (
                 "system",
-                """You are a background concept artist and cinematic director for a 1990s point-and-click adventure game.
+                """You are a Game Master narrator for a murder mystery game, combined with a concept artist.
 
-Your job is to design a SINGLE, clear visual brief for a location scene that will be used
-for both narration and image generation.
+Your job is to:
+1. Write a SHORT spoken narration (2-3 sentences, ~50 words max) describing what the detective sees.
+2. Design a visual brief for an establishing shot image.
 
-CRITICAL:
-- Focus primarily on the environment, but you MAY include people in the scene when it makes sense.
-- Be explicit about how many people are clearly visible and where they are (e.g. "two technicians at the consoles",
-  "one silhouetted figure in the doorway", or "no one is visible, the room is empty").
-- Be very clear about whether the camera is OUTSIDE an object/room or INSIDE a confined space.
-- Use the clue summary to pick the most important props, focal objects, and any characters that should appear.
-- Keep everything consistent with the murder mystery tone and setting.
+NARRATION RULES:
+- ALWAYS write in ENGLISH, regardless of input language.
+- Be atmospheric and evocative, but VERY brief.
+- Focus on ONE key detail or clue the detective notices.
+- Do NOT give instructions, do NOT repeat the location name, do NOT summarise the case.
+- Write in second person ("You see...", "The room is...", "A faint smell of...").
 
-Return STRICT JSON ONLY with keys:
-  "location_name": string (exactly the input location_name)
-  "environment_description": string (1-2 vivid sentences describing the scene, including how many people are visible if any)
-  "camera_position": string (e.g. "inside briefcase looking out over the desk",
-                             "wide shot from doorway into the lab",
-                             "close-up on control panel", "overhead view of the poker table")
-  "focal_objects": string (comma-separated list of key objects to emphasize)
-  "prompt_hint": string (optional extra hint for the image model, may repeat details)
+Return STRICT JSON ONLY with these keys:
+  "spoken_narration": string (2-3 sentences, ~50 words max – this is what gets spoken aloud)
+  "location_name": string (echo the input)
+  "environment_description": string (1-2 sentences for the image, no people)
+  "camera_position": string (e.g. "wide shot from doorway", "close-up on desk")
+  "focal_objects": string (comma-separated key objects)
+  "prompt_hint": string (optional extra hint for image model)
 
-Do NOT wrap JSON in markdown. Do NOT include any text before or after the JSON.
+Do NOT wrap JSON in markdown. Return ONLY the JSON object.
 """,
             ),
             (
@@ -202,16 +197,16 @@ Do NOT wrap JSON in markdown. Do NOT include any text before or after the JSON.
 CLUE SUMMARY (for this location):
 {clue_summary}
 
-CURRENT NARRATION (what you are about to say about this search):
+CONTEXT FROM GAME MASTER (use to inform your narration):
 {current_narration}
 
 PREVIOUS SEARCHES AT THIS LOCATION (if any):
 {previous_searches}
 
-DESIRED VIEW (optional hint from game master):
+DESIRED VIEW (optional hint):
 {desired_view}
 
-Design ONE scene brief and return ONLY the JSON object described above.""",
+Write a short spoken narration and design ONE scene brief. Return ONLY the JSON object.""",
             ),
         ]
     )
@@ -227,9 +222,34 @@ Design ONE scene brief and return ONLY the JSON object described above.""",
         }
     )
 
-    text_response = result.content.strip() if hasattr(result, "content") else str(result).strip()
-    logger.info("Scene brief JSON (raw): %s", text_response[:300])
-    return text_response
+    raw_json = result.content.strip() if hasattr(result, "content") else str(result).strip()
+    logger.info("Scene brief JSON (raw): %s", raw_json[:300])
+
+    # Parse JSON to extract spoken_narration and build the final output
+    try:
+        data = json.loads(raw_json)
+        spoken = data.get("spoken_narration", "").strip()
+        
+        # Build scene brief (without spoken_narration) for the marker
+        scene_brief = {
+            "location_name": data.get("location_name", location_name),
+            "environment_description": data.get("environment_description", ""),
+            "camera_position": data.get("camera_position", ""),
+            "focal_objects": data.get("focal_objects", ""),
+            "prompt_hint": data.get("prompt_hint", ""),
+        }
+        scene_json = json.dumps(scene_brief)
+        
+        # Return spoken narration + scene brief marker
+        # The GM should use this verbatim as its response
+        output = f"{spoken}\n\n[SCENE_BRIEF{scene_json}]"
+        logger.info("Scene tool output: spoken=%d chars, brief=%s", len(spoken), scene_brief.get("location_name"))
+        return output
+        
+    except json.JSONDecodeError as e:
+        logger.error("Failed to parse scene brief JSON: %s", e)
+        # Fallback: return the raw JSON as before
+        return raw_json
 
 
 def enhance_text_for_speech(text: str) -> str:

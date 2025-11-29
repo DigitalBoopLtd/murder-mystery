@@ -8,6 +8,7 @@ the structured state in GameState. The Game Master uses this to:
 """
 
 import logging
+import time
 from typing import Dict, List, Optional, Tuple
 from pydantic import BaseModel, Field
 
@@ -128,14 +129,24 @@ class GameMemory:
             # Create a SHORT searchable document combining question and answer.
             # We only need a compact snippet for embeddings – full text is kept
             # in metadata for later inspection.
-            max_q = 160
-            max_a = 400
-            q_snippet = (question or "")[:max_q]
-            a_snippet = (answer or "")[:max_a]
-            if len(question or "") > max_q:
-                q_snippet += "..."
-            if len(answer or "") > max_a:
-                a_snippet += "..."
+            # Truncate at sentence/word boundary to avoid cutting mid-JSON or mid-word.
+            def smart_truncate(text: str, max_len: int) -> str:
+                if not text or len(text) <= max_len:
+                    return text or ""
+                # Try to cut at last sentence end within limit
+                snippet = text[:max_len]
+                for sep in (". ", "! ", "? ", "; "):
+                    idx = snippet.rfind(sep)
+                    if idx > max_len // 2:
+                        return snippet[: idx + 1].strip()
+                # Fall back to last space
+                idx = snippet.rfind(" ")
+                if idx > max_len // 2:
+                    return snippet[:idx].strip() + "..."
+                return snippet.strip() + "..."
+
+            q_snippet = smart_truncate(question, 160)
+            a_snippet = smart_truncate(answer, 400)
 
             doc = (
                 f"Turn {turn}: Q to {suspect}: \"{q_snippet}\" "
@@ -151,12 +162,14 @@ class GameMemory:
                 **(metadata or {})
             }
             
+            t0 = time.perf_counter()
             self.vectorstore.add_texts([doc], metadatas=[doc_metadata])
+            embed_ms = (time.perf_counter() - t0) * 1000
             self.documents.append({"text": doc, "metadata": doc_metadata})
             
             logger.info(
-                "[RAG] Indexed conversation with %s (turn %d, %d total docs)",
-                suspect, turn, len(self.documents)
+                "[RAG] [PERF] Indexed conversation with %s (turn %d, %d total docs) – embed %.0fms, doc %d chars",
+                suspect, turn, len(self.documents), embed_ms, len(doc)
             )
             return True
             
@@ -230,13 +243,18 @@ class GameMemory:
             return []
         
         try:
+            t0 = time.perf_counter()
             if filter_type:
                 results = self.vectorstore.similarity_search(
                     query, k=k, filter={"type": filter_type}
                 )
             else:
                 results = self.vectorstore.similarity_search(query, k=k)
-            
+            search_ms = (time.perf_counter() - t0) * 1000
+            logger.info(
+                "[RAG] [PERF] search() k=%d filter=%s – %.0fms, %d results",
+                k, filter_type, search_ms, len(results)
+            )
             return [(r.page_content, r.metadata) for r in results]
             
         except Exception as e:
@@ -263,8 +281,14 @@ class GameMemory:
             return []
         
         try:
+            t0 = time.perf_counter()
             results = self.vectorstore.similarity_search(
                 query, k=k, filter={"suspect": suspect}
+            )
+            search_ms = (time.perf_counter() - t0) * 1000
+            logger.info(
+                "[RAG] [PERF] search_by_suspect(%s) k=%d – %.0fms, %d results",
+                suspect, k, search_ms, len(results)
             )
             return [(r.page_content, r.metadata) for r in results]
             

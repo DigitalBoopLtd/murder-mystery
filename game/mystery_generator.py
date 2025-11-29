@@ -245,10 +245,10 @@ the primary viewpoint is outside or inside any container (briefcase, safe, locke
 Tone: vivid but concise. Imagine you are briefing an artist.
 
 Return STRICT JSON mapping location name to description, for example:
-{
+{{
   "Lab 1": "A narrow lab lined with humming consoles and glass sample cases, neon indicator lights reflecting off polished floors.",
   "Security Mainframe": "A cramped control room packed with server racks and glowing monitors, cables snaking across industrial flooring."
-}
+}}
 
 Do NOT include characters or actions. Do NOT mention the murder directly.
 """,
@@ -713,20 +713,16 @@ No previous conversations."""
      * BEHAVIORAL INSTRUCTIONS (if any - based on emotional state)
    - question: The player's question/statement
    - voice_id: The suspect's voice ID for audio
-2. SEARCH location → Describe findings, reveal clues if correct location
-   - When the player searches a NEW location (one that has not been searched yet),
-     you SHOULD call the \"describe_scene_for_image\" tool ONCE to design a vivid visual scene.
+2. SEARCH location → Call the "describe_scene_for_image" tool and USE ITS OUTPUT DIRECTLY.
    - Pass:
        * location_name: the exact clue location name (e.g. \"Lab 1\", \"Security Mainframe\")
        * clue_summary: short summary of clues tied to that location
-       * current_narration: what you are about to say about this search
+       * current_narration: brief context about what the player is looking for
        * previous_searches: brief summary of past searches at this location (or empty)
        * desired_view: optional hint like \"inside briefcase\", \"wide shot from doorway\"
-   - Use the tool result to guide your spoken description (environment_description, camera_position, focal_objects).
-   - At the VERY END of your response, add a single marker line on its own:
-       [SCENE_BRIEF{{...JSON from the tool result...}}]
-     where the JSON is EXACTLY what the tool returned.
-   - Do NOT explain this marker to the player. It is for the game engine only.
+   - The tool returns a SHORT spoken narration + a [SCENE_BRIEF{{...}}] marker.
+   - USE THE TOOL OUTPUT AS YOUR RESPONSE – do NOT rewrite or expand it.
+   - This keeps location responses concise for voice narration.
 3. ACCUSATION → Check if correct with evidence
 
 ## RAG MEMORY TOOLS (use to enhance gameplay)
@@ -749,11 +745,18 @@ Motive: {mystery.motive}
 
 ## RESPONSE STYLE - VERY IMPORTANT
 The player can already see suspects, locations, objectives, and found clues in sidebar cards on their screen.
+- ALWAYS respond in ENGLISH, regardless of what language the player uses.
 - Do NOT list out all suspects or their roles
 - Do NOT list all locations to search  
 - Do NOT repeat the case summary or victim info
 - Keep responses focused, atmospheric, and conversational.
-- For MOST responses (including interrogations and search results), use at most 1–2 short paragraphs (2–4 sentences, ~60–90 words total).
+- For TALK / INTERROGATION responses: 1 short paragraph (2–3 sentences, ~60–80 words).
+- For SEARCH / location responses:
+  * HARD LIMIT: 2–3 sentences, ~50 words max.
+  * Just describe what the detective SEES and ONE key clue or detail.
+  * Do NOT summarise the case, do NOT give instructions, do NOT repeat the location name.
+  * Example: "Dust motes drift through a shaft of light from the cracked window. A half-empty coffee mug sits beside a laptop, its screen frozen on an unfinished email."
+- For any other narration: 1 short paragraph (2–3 sentences, ~60–80 words).
 - When welcoming: Set the MOOD briefly (2–3 sentences), then ask what they'd like to do first.
 - Be concise – no walls of text or bullet‑point lists of what's available.
 

@@ -82,14 +82,33 @@ def create_game_master_agent():
         logger.info("Message types: %s", msg_types)
 
         # SPECIAL CASE: If we only have a ToolMessage, LangGraph didn't preserve full history.
-        # The ToolMessage contains the suspect's response, so return it directly.
+        # For certain tools (interrogate_suspect, describe_scene_for_image) the ToolMessage
+        # *is* the final response, so we return it directly. This ensures we use the tool's
+        # controlled output rather than letting the GM rewrite it (which often makes it verbose).
         if len(messages) == 1 and isinstance(messages[0], ToolMessage):
-            tool_content = getattr(messages[0], "content", str(messages[0]))
-            logger.warning(
-                "Only ToolMessage in state - returning tool result directly as response"
+            tool_msg = messages[0]
+            tool_name = getattr(tool_msg, "name", "") or getattr(
+                tool_msg, "tool_name", ""
             )
-            logger.info("Tool result content: %s...", tool_content[:100])
-            return {"messages": [AIMessage(content=tool_content)]}
+            tool_content = getattr(tool_msg, "content", str(tool_msg))
+
+            # Tools whose output should be used directly as the response
+            direct_output_tools = {"interrogate_suspect", "describe_scene_for_image"}
+            if tool_name in direct_output_tools:
+                logger.info(
+                    "Only ToolMessage in state for %s – returning tool result directly",
+                    tool_name,
+                )
+                logger.info("Tool result content: %s...", tool_content[:100])
+                return {"messages": [AIMessage(content=tool_content)]}
+
+            # For other tools, fall through so we can give the LLM a chance
+            # to turn the tool output into natural narration for the player.
+            logger.info(
+                "Only ToolMessage in state for tool '%s' – passing through to LLM "
+                "instead of returning raw content.",
+                tool_name or "(unknown)",
+            )
 
         # Ensure system message is present
         if not any(isinstance(msg, SystemMessage) for msg in messages):
@@ -149,20 +168,47 @@ def create_game_master_agent():
                     # CRITICAL FIX: If we can't find the matching AIMessage, LangGraph
                     # only passed the ToolMessage without full history. Convert it to
                     # a HumanMessage format the LLM can understand.
-                    logger.warning(
-                        "ToolMessage id %s has no matching AIMessage - converting",
-                        tool_call_id,
+                    tool_name = getattr(msg, "name", "") or getattr(
+                        msg, "tool_name", ""
                     )
-                    # Extract the tool result content
                     tool_content = getattr(msg, "content", str(msg))
-                    # Convert to a HumanMessage that represents the suspect's response
-                    # This allows the LLM to process it without needing the full tool call sequence
-                    suspect_response = HumanMessage(
-                        content=f"[The suspect responds:] {tool_content}"
+
+                    logger.warning(
+                        "ToolMessage id %s (tool='%s') has no matching AIMessage - "
+                        "converting for LLM consumption",
+                        tool_call_id,
+                        tool_name or "(unknown)",
                     )
-                    filtered_messages.append(suspect_response)
+
+                    if tool_name == "interrogate_suspect":
+                        # Treat as a suspect speaking directly.
+                        human_msg = HumanMessage(
+                            content=f"[The suspect responds:] {tool_content}"
+                        )
+                    elif tool_name == "describe_scene_for_image":
+                        # Treat as an internal scene brief the GM should use, not
+                        # something to read out verbatim to the player.
+                        human_msg = HumanMessage(
+                            content=(
+                                "[SCENE BRIEF FOR IMAGE GENERATION]\n"
+                                "Use this JSON to color your description of the location, "
+                                "then speak naturally to the player and append a single "
+                                "[SCENE_BRIEF{...}] marker with the SAME JSON at the very "
+                                "end of your response (on its own line).\n"
+                                f"{tool_content}"
+                            )
+                        )
+                    else:
+                        # Generic tool output – expose to the LLM as context.
+                        human_msg = HumanMessage(
+                            content=f"[Tool result from {tool_name or 'unknown_tool'}]: "
+                            f"{tool_content}"
+                        )
+
+                    filtered_messages.append(human_msg)
                     logger.info(
-                        "Converted ToolMessage to HumanMessage format: %s...",
+                        "Converted ToolMessage for tool '%s' to HumanMessage: %s...",
+                        tool_name or "(unknown)",
                         tool_content[:80],
                     )
             else:
@@ -553,14 +599,22 @@ def process_message(
                         "Got response from final state: %s...", final_response[:100]
                     )
 
-            # Also check for ToolMessage in final state if we still don't have a response
+            # Also check for ToolMessage in final state if we still don't have a response.
+            # Only do this for interrogate_suspect – other tools (like describe_scene_for_image)
+            # should not surface raw JSON/tool output to the player.
             if not final_response:
                 for msg in reversed(messages):
                     if isinstance(msg, ToolMessage):
+                        tool_name = getattr(msg, "name", "") or getattr(
+                            msg, "tool_name", ""
+                        )
+                        if tool_name != "interrogate_suspect":
+                            continue
                         tool_content = getattr(msg, "content", str(msg))
                         final_response = tool_content
                         logger.info(
-                            "Using ToolMessage from final state: %s...",
+                            "Using ToolMessage from final state for '%s': %s...",
+                            tool_name,
                             tool_content[:100],
                         )
                         break

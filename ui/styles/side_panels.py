@@ -125,6 +125,10 @@ CSS_SIDE_PANELS = """/* ========== SIDE PANELS - BASE ========== */
     z-index: 20;
 }
 
+.transcript-panel .html-container .suspects-list .suspect-cards-grid .suspect-card {
+    flex-direction: column !important;
+}
+
 .side-column-left .side-panel .block,
 .side-column-left .side-panel .prose,
 .side-column-right .side-panel .block,

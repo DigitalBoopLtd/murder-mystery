@@ -37,7 +37,7 @@ Painterly digital art with rich saturated colors and dramatic chiaroscuro lighti
 Hand-painted aesthetic with visible brushwork texture, slightly stylized proportions.
 Cinematic composition with clear focal point, atmospheric depth and layered elements.
 Moody and mysterious atmosphere with environmental storytelling details.
-First-person detective POV, as if standing in the doorway surveying the scene.
+First-person detective POV, surveying the scene or a close-up of a key object.  Do not show the detective in the image.
 Include period-appropriate props, furniture, and environmental details that tell a story.
 People: follow the scene description carefully — some shots may be empty, others may show a few background characters.
 No text, no words, no letters, no writing, no labels, no captions, no signage, no signs.
@@ -359,12 +359,20 @@ No text, no words, no letters, no writing, no labels, no captions, no name tags.
             logger.error(f"Error generating scene for {location_name}: {e}")
             return None
 
-    def generate_title_card(self, title: str, setting: str) -> Optional[str]:
+    def generate_title_card(
+        self,
+        title: str,
+        setting: str,
+        victim_name: Optional[str] = None,
+        victim_background: Optional[str] = None,
+    ) -> Optional[str]:
         """Generate an atmospheric opening scene image for the mystery.
 
         Args:
             title: Mystery title (used only as semantic context, not rendered as text)
             setting: Setting description for the scene
+            victim_name: Name of the murder victim (to show in the scene)
+            victim_background: Brief description of the victim
 
         Returns:
             Path to generated image, or None on error
@@ -373,13 +381,26 @@ No text, no words, no letters, no writing, no labels, no captions, no name tags.
             logger.warning("Image client not available")
             return None
 
+        # Build victim description for the scene
+        victim_desc = ""
+        if victim_name:
+            victim_desc = f"""
+The scene shows the murder victim, {victim_name}, lying dead at the crime scene.
+The body is posed dramatically but tastefully – this is a mystery, not horror.
+"""
+            if victim_background:
+                # Extract any visual hints from background (e.g., profession, age)
+                victim_desc += f"Victim context: {victim_background[:150]}\n"
+
         # We describe this as an opening scene rather than a title card to
         # avoid encouraging any rendered text in the image.
-        prompt = f"""Opening scene for a murder mystery.
+        prompt = f"""Opening scene for a murder mystery – the discovery of the body.
 The case is called "{title}", but do NOT draw or write the title or ANY text in the image.
 Setting: {setting}
+{victim_desc}
 {SCENE_ART_STYLE}
-Ominous, foreboding, sets the mood for a murder mystery.
+Ominous, foreboding, dramatic crime scene discovery moment.
+Show the victim's body in the scene – this is the moment the murder is discovered.
 No text, no words, no letters, no writing, no labels, no captions, no signage, no title.
 Atmospheric scene only, no text overlay.
 """
@@ -498,10 +519,16 @@ def generate_title_card_on_demand(mystery) -> Optional[str]:
         logger.warning("Image service not available for opening scene generation")
         return None
     
-    logger.info("Generating opening scene image on-demand...")
+    # Extract victim info
+    victim_name = getattr(mystery.victim, "name", None) if hasattr(mystery, "victim") else None
+    victim_background = getattr(mystery.victim, "background", None) if hasattr(mystery, "victim") else None
+    
+    logger.info("Generating opening scene image on-demand (with victim: %s)...", victim_name)
     path = service.generate_title_card(
         title=f"The Murder of {mystery.victim.name}",
-        setting=mystery.setting
+        setting=mystery.setting,
+        victim_name=victim_name,
+        victim_background=victim_background,
     )
     
     if path:
@@ -554,13 +581,17 @@ def generate_all_mystery_images(
             ))
     
     if generate_title:
-        # Add opening scene task
+        # Add opening scene task (with victim in the scene)
+        victim_name = getattr(mystery.victim, "name", None) if hasattr(mystery, "victim") else None
+        victim_bg = getattr(mystery.victim, "background", None) if hasattr(mystery, "victim") else None
         tasks.append((
             "_opening_scene",
             "opening_scene",
-            lambda: service.generate_title_card(
+            lambda vn=victim_name, vb=victim_bg: service.generate_title_card(
                 title=f"The Murder of {mystery.victim.name}", 
-                setting=mystery.setting
+                setting=mystery.setting,
+                victim_name=vn,
+                victim_background=vb,
             )
         ))
     
