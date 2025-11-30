@@ -1,98 +1,152 @@
-"""Image Agent - MCP Client for Image Generation.
+"""MCP client for image generation.
 
-This agent/client calls the Image MCP Server for image generation.
-It's used both in the app AND as a hackathon demo showing MCP composition.
+This module provides an MCP client that connects to the image generator
+MCP server for generating character portraits, scenes, and title cards.
 
-Usage in app:
-    from services.image_agent import ImageAgent
-    
-    agent = ImageAgent()
-    path = await agent.generate_portrait("Holmes", "Detective", "Analytical")
+The MCP server handles:
+1. Prompt enhancement (via GPT-4o-mini)
+2. Image generation (via HuggingFace/Z-Image-Turbo)
+3. Image caching
 
-Usage for demo (reading MCP Resources):
-    stats = await agent.get_cache_stats()  # images://stats
-    styles = await agent.get_available_styles()  # images://styles
-
-Parallel generation:
-    paths = await agent.generate_portraits_parallel([
-        {"name": "John", "role": "Butler", "personality": "Nervous"},
-        {"name": "Mary", "role": "Maid", "personality": "Secretive"},
-    ])
+Using MCP allows for:
+- True parallel image generation via concurrent tool calls
+- Decoupled image generation from the main app
+- "MCP in Action" hackathon track qualification
 """
 
 import os
 import sys
 import asyncio
-import json
 import logging
 from typing import Optional, Dict, Any, List
-
-# Add parent for imports
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
 
-# Try MCP imports
+# Check for MCP SDK availability
 try:
     from mcp import ClientSession, StdioServerParameters
     from mcp.client.stdio import stdio_client
     MCP_AVAILABLE = True
+    logger.info("[MCP-IMG] MCP SDK available")
 except ImportError:
     MCP_AVAILABLE = False
-    logger.warning("MCP SDK not available - agent will use direct calls")
+    ClientSession = None
+    StdioServerParameters = None
+    stdio_client = None
+    logger.warning("[MCP-IMG] MCP SDK not installed. Run: pip install mcp")
+
+
+@dataclass
+class ImageResult:
+    """Result from image generation."""
+    path: Optional[str]
+    success: bool
+    error: Optional[str] = None
 
 
 class ImageAgent:
-    """MCP Client/Agent for the Image Generator Server.
+    """MCP client for the image generator server.
     
-    Used in the app for image generation AND for hackathon demo.
+    Connects to the murder-mystery-images MCP server to generate
+    portraits, scenes, and title cards.
     """
     
-    def __init__(self, max_workers: int = 4):
-        self.project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        self.max_workers = max_workers
+    def __init__(self):
+        self._session: Optional[ClientSession] = None
+        self._api_key_openai = os.getenv("OPENAI_API_KEY", "")
+        self._api_key_hf = os.getenv("HF_TOKEN", "")
+    
+    @property
+    def is_available(self) -> bool:
+        """Check if MCP client can be used."""
+        return MCP_AVAILABLE and bool(self._api_key_openai) and bool(self._api_key_hf)
+    
+    def _get_server_params(self) -> Optional[Any]:
+        """Get server parameters for the image generator MCP server."""
+        if not MCP_AVAILABLE:
+            return None
         
-    def _get_server_params(self) -> "StdioServerParameters":
-        """Get MCP server parameters."""
+        # Get the project root directory
+        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        venv_python = os.path.join(project_root, "venv", "bin", "python")
+        
+        # Use the venv python if available, otherwise fall back to sys.executable
+        python_path = venv_python if os.path.isfile(venv_python) else sys.executable
+        
+        # Build environment with required API keys
+        # Set PYTHONPATH to include project root so the module can be found
+        existing_pythonpath = os.environ.get("PYTHONPATH", "")
+        pythonpath = f"{project_root}:{existing_pythonpath}" if existing_pythonpath else project_root
+        
+        env = {
+            "OPENAI_API_KEY": self._api_key_openai,
+            "HF_TOKEN": self._api_key_hf,
+            "PATH": os.environ.get("PATH", ""),
+            "PYTHONPATH": pythonpath,
+            "ENHANCE_PROMPTS": os.getenv("ENHANCE_PROMPTS", "true"),
+        }
+        # Pass through any other relevant env vars
+        for key in ["HOME", "USER", "TMPDIR"]:
+            if key in os.environ:
+                env[key] = os.environ[key]
+        
+        logger.info("[MCP-IMG] Using Python: %s", python_path)
+        logger.info("[MCP-IMG] Project root: %s", project_root)
+        
         return StdioServerParameters(
-            command=sys.executable,
+            command=python_path,
             args=["-m", "mcp_servers.image_generator"],
-            cwd=self.project_root,
-            env={
-                **os.environ,
-                "PYTHONPATH": self.project_root,
-            }
+            env=env,
         )
     
-    async def _call_tool(self, tool_name: str, arguments: Dict[str, Any]) -> str:
-        """Call a tool on the Image MCP server."""
-        if not MCP_AVAILABLE:
-            raise RuntimeError("MCP SDK not installed")
+    async def _call_tool(self, tool_name: str, arguments: Dict[str, Any]) -> Optional[str]:
+        """Call a tool on the MCP server and return the result.
         
-        async with stdio_client(self._get_server_params()) as (read, write):
-            async with ClientSession(read, write) as session:
-                await session.initialize()
-                result = await session.call_tool(tool_name, arguments=arguments)
-                if result.content:
-                    return result.content[0].text
-                return ""
-    
-    async def _read_resource(self, uri: str) -> str:
-        """Read a resource from the Image MCP server."""
-        if not MCP_AVAILABLE:
-            raise RuntimeError("MCP SDK not installed")
+        Args:
+            tool_name: Name of the tool to call
+            arguments: Tool arguments
+            
+        Returns:
+            Result string (usually a file path) or None on error
+        """
+        server_params = self._get_server_params()
+        if not server_params:
+            logger.error("[MCP-IMG] Failed to get server parameters")
+            return None
         
-        async with stdio_client(self._get_server_params()) as (read, write):
-            async with ClientSession(read, write) as session:
-                await session.initialize()
-                result = await session.read_resource(uri)
-                if result.contents:
-                    return result.contents[0].text
-                return "{}"
-    
-    # =========================================================================
-    # SINGLE IMAGE GENERATION (MCP Tools)
-    # =========================================================================
+        try:
+            logger.info("[MCP-IMG] Connecting to image generator server...")
+            
+            async with stdio_client(server_params) as (read, write):
+                async with ClientSession(read, write) as session:
+                    # Initialize the session
+                    await session.initialize()
+                    logger.info("[MCP-IMG] Session initialized")
+                    
+                    # Call the tool
+                    logger.info("[MCP-IMG] Calling tool: %s", tool_name)
+                    result = await session.call_tool(tool_name, arguments=arguments)
+                    
+                    # Parse response
+                    if result and hasattr(result, 'content'):
+                        for item in result.content:
+                            if hasattr(item, 'text'):
+                                text = item.text.strip()
+                                # Check if it's an error
+                                if text.startswith("Error:"):
+                                    logger.error("[MCP-IMG] Tool error: %s", text)
+                                    return None
+                                # Return the path
+                                logger.info("[MCP-IMG] Tool result: %s", text[:100])
+                                return text
+                    
+                    logger.warning("[MCP-IMG] No valid response from tool")
+                    return None
+                    
+        except Exception as e:
+            logger.error("[MCP-IMG] Tool call failed: %s", e, exc_info=True)
+            return None
     
     async def generate_portrait(
         self,
@@ -100,303 +154,248 @@ class ImageAgent:
         role: str,
         personality: str,
         gender: str = "person",
-        setting: str = ""
-    ) -> str:
-        """Generate a character portrait.
+        setting: str = "",
+    ) -> Optional[str]:
+        """Generate a character portrait via MCP.
         
-        Returns the file path to the generated image.
+        Args:
+            name: Character name
+            role: Character role
+            personality: Personality traits
+            gender: Gender for visual description
+            setting: Setting context for costume
+            
+        Returns:
+            Path to generated image or None
         """
-        return await self._call_tool("generate_character_portrait", {
-            "name": name,
-            "role": role,
-            "personality": personality,
-            "gender": gender,
-            "setting": setting
-        })
+        logger.info("[MCP-IMG] Generating portrait for %s via MCP", name)
+        return await self._call_tool(
+            "generate_character_portrait",
+            {
+                "name": name,
+                "role": role,
+                "personality": personality,
+                "gender": gender,
+                "setting": setting,
+            }
+        )
     
     async def generate_scene(
         self,
         location: str,
         setting: str,
         mood: str = "mysterious",
-        context: str = ""
-    ) -> str:
-        """Generate a scene/location image.
+        context: str = "",
+    ) -> Optional[str]:
+        """Generate a scene/location image via MCP.
         
-        Returns the file path to the generated image.
+        Args:
+            location: Location name
+            setting: Broader setting context
+            mood: Scene mood
+            context: Additional context
+            
+        Returns:
+            Path to generated image or None
         """
-        return await self._call_tool("generate_scene", {
-            "location": location,
-            "setting": setting,
-            "mood": mood,
-            "context": context
-        })
+        logger.info("[MCP-IMG] Generating scene for %s via MCP", location)
+        return await self._call_tool(
+            "generate_scene",
+            {
+                "location": location,
+                "setting": setting,
+                "mood": mood,
+                "context": context,
+            }
+        )
     
     async def generate_title_card(
         self,
         title: str,
         setting: str,
         victim_name: str = "",
-        victim_background: str = ""
-    ) -> str:
-        """Generate an atmospheric title card.
-        
-        Returns the file path to the generated image.
-        """
-        return await self._call_tool("generate_title_card", {
-            "title": title,
-            "setting": setting,
-            "victim_name": victim_name,
-            "victim_background": victim_background
-        })
-    
-    # =========================================================================
-    # PARALLEL IMAGE GENERATION
-    # =========================================================================
-    
-    async def generate_portraits_parallel(
-        self,
-        characters: List[Dict[str, Any]]
-    ) -> Dict[str, str]:
-        """Generate multiple character portraits in parallel.
+        victim_background: str = "",
+    ) -> Optional[str]:
+        """Generate a title card/opening scene via MCP.
         
         Args:
-            characters: List of dicts with keys: name, role, personality, gender, setting
+            title: Mystery title
+            setting: Setting description
+            victim_name: Victim's name
+            victim_background: Victim background info
             
         Returns:
-            Dict mapping character name to image path
+            Path to generated image or None
         """
-        async def generate_one(char: dict) -> tuple:
-            name = char.get("name", "Unknown")
-            try:
-                path = await self.generate_portrait(
-                    name=name,
-                    role=char.get("role", ""),
-                    personality=char.get("personality", ""),
-                    gender=char.get("gender", "person"),
-                    setting=char.get("setting", "")
-                )
-                logger.info(f"[ImageAgent] Generated portrait for {name}: {path}")
-                return (name, path)
-            except Exception as e:
-                logger.error(f"[ImageAgent] Failed to generate portrait for {name}: {e}")
-                return (name, None)
-        
-        tasks = [generate_one(char) for char in characters]
-        results = await asyncio.gather(*tasks)
-        return {name: path for name, path in results if path}
-    
-    async def generate_scenes_parallel(
-        self,
-        scenes: List[Dict[str, Any]]
-    ) -> Dict[str, str]:
-        """Generate multiple scene images in parallel.
-        
-        Args:
-            scenes: List of dicts with keys: location, setting, mood, context
-            
-        Returns:
-            Dict mapping location name to image path
-        """
-        async def generate_one(scene: dict) -> tuple:
-            location = scene.get("location", "Unknown")
-            try:
-                path = await self.generate_scene(
-                    location=location,
-                    setting=scene.get("setting", ""),
-                    mood=scene.get("mood", "mysterious"),
-                    context=scene.get("context", "")
-                )
-                logger.info(f"[ImageAgent] Generated scene for {location}: {path}")
-                return (location, path)
-            except Exception as e:
-                logger.error(f"[ImageAgent] Failed to generate scene for {location}: {e}")
-                return (location, None)
-        
-        tasks = [generate_one(scene) for scene in scenes]
-        results = await asyncio.gather(*tasks)
-        return {loc: path for loc, path in results if path}
-    
-    # =========================================================================
-    # MCP RESOURCE QUERIES (for demo/hackathon)
-    # =========================================================================
-    
-    async def get_cache_stats(self) -> Dict:
-        """Get image cache statistics via MCP Resource."""
-        result = await self._read_resource("images://stats")
-        return json.loads(result)
+        logger.info("[MCP-IMG] Generating title card via MCP")
+        return await self._call_tool(
+            "generate_title_card",
+            {
+                "title": title,
+                "setting": setting,
+                "victim_name": victim_name,
+                "victim_background": victim_background,
+            }
+        )
     
     async def list_cached_images(self, limit: int = 10) -> List[Dict]:
-        """List cached images via MCP Tool."""
-        result = await self._call_tool("list_cached_images", {"limit": limit})
-        data = json.loads(result)
-        return data.get("images", [])
-    
-    async def get_available_styles(self) -> Dict:
-        """Get available art styles via MCP Resource."""
-        result = await self._read_resource("images://styles")
-        return json.loads(result)
-    
-    # =========================================================================
-    # MYSTERY-LEVEL GENERATION (for app integration)
-    # =========================================================================
-    
-    async def generate_all_mystery_images(
-        self,
-        mystery,
-        setting: str
-    ) -> Dict[str, str]:
-        """Generate all images for a mystery in parallel.
+        """List cached images via MCP.
         
-        Args:
-            mystery: Mystery object with suspects and victim
-            setting: Setting description
-            
         Returns:
-            Dict mapping names/locations to image paths
+            List of cached image info dicts
         """
-        results = {}
+        import json
         
-        # Prepare character data
-        characters = []
-        for suspect in mystery.suspects:
-            characters.append({
-                "name": suspect.name,
-                "role": suspect.role,
-                "personality": suspect.personality,
-                "gender": getattr(suspect, "gender", "person"),
-                "setting": setting
-            })
-        
-        # Prepare title card task
-        title_card_task = self.generate_title_card(
-            title=f"The Murder of {mystery.victim.name}",
-            setting=setting,
-            victim_name=mystery.victim.name,
-            victim_background=mystery.victim.background
-        )
-        
-        # Generate all in parallel
-        portrait_task = self.generate_portraits_parallel(characters)
-        
-        # Wait for both
-        portraits, title_path = await asyncio.gather(portrait_task, title_card_task)
-        
-        results.update(portraits)
-        if title_path:
-            results["_title_card"] = title_path
-        
-        return results
+        result = await self._call_tool("list_cached_images", {"limit": limit})
+        if result:
+            try:
+                data = json.loads(result)
+                return data.get("images", [])
+            except json.JSONDecodeError:
+                pass
+        return []
 
 
 # =============================================================================
-# SYNC WRAPPERS (for use in non-async code)
+# SYNCHRONOUS WRAPPERS
 # =============================================================================
+
+def _run_async(coro):
+    """Run an async coroutine in a new event loop."""
+    try:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        return loop.run_until_complete(coro)
+    finally:
+        loop.close()
+
 
 def generate_portrait_sync(
     name: str,
     role: str,
     personality: str,
     gender: str = "person",
-    setting: str = ""
+    setting: str = "",
 ) -> Optional[str]:
-    """Synchronous wrapper for single portrait generation."""
-    async def _run():
-        agent = ImageAgent()
-        return await agent.generate_portrait(name, role, personality, gender, setting)
+    """Synchronous wrapper for portrait generation.
     
-    try:
-        return asyncio.run(_run())
-    except Exception as e:
-        logger.error(f"[ImageAgent] Portrait generation failed: {e}")
+    Args:
+        name: Character name
+        role: Character role  
+        personality: Personality traits
+        gender: Gender for visual description
+        setting: Setting context
+        
+    Returns:
+        Path to generated image or None
+    """
+    agent = ImageAgent()
+    if not agent.is_available:
+        logger.warning("[MCP-IMG] MCP not available for portrait generation")
         return None
+    
+    return _run_async(agent.generate_portrait(
+        name=name,
+        role=role,
+        personality=personality,
+        gender=gender,
+        setting=setting,
+    ))
 
 
 def generate_scene_sync(
     location: str,
     setting: str,
     mood: str = "mysterious",
-    context: str = ""
+    context: str = "",
 ) -> Optional[str]:
-    """Synchronous wrapper for single scene generation."""
-    async def _run():
-        agent = ImageAgent()
-        return await agent.generate_scene(location, setting, mood, context)
+    """Synchronous wrapper for scene generation.
     
-    try:
-        return asyncio.run(_run())
-    except Exception as e:
-        logger.error(f"[ImageAgent] Scene generation failed: {e}")
-        return None
-
-
-def generate_all_images_sync(mystery, setting: str) -> Dict[str, str]:
-    """Synchronous wrapper for parallel image generation."""
-    async def _run():
-        agent = ImageAgent()
-        return await agent.generate_all_mystery_images(mystery, setting)
-    
-    try:
-        return asyncio.run(_run())
-    except Exception as e:
-        logger.error(f"[ImageAgent] Batch generation failed: {e}")
-        return {}
-
-
-# =============================================================================
-# DEMO
-# =============================================================================
-
-async def demo():
-    """Demo the Image Agent."""
-    print("\n" + "=" * 60)
-    print("🎨 IMAGE AGENT DEMO")
-    print("=" * 60)
-    print("\nThis demonstrates MCP tool composition for image generation.\n")
-    
-    if not MCP_AVAILABLE:
-        print("❌ MCP SDK not installed. Run: pip install mcp")
-        return
-    
+    Args:
+        location: Location name
+        setting: Broader setting context
+        mood: Scene mood
+        context: Additional context
+        
+    Returns:
+        Path to generated image or None
+    """
     agent = ImageAgent()
+    if not agent.is_available:
+        logger.warning("[MCP-IMG] MCP not available for scene generation")
+        return None
     
-    # Check cache stats
-    print("📊 Cache Statistics:")
-    try:
-        stats = await agent.get_cache_stats()
-        print(f"   Total images: {stats.get('total_images', 0)}")
-        print(f"   Cache size: {stats.get('total_size_mb', 0)} MB")
-        print(f"   Location: {stats.get('cache_directory', 'unknown')}")
-    except Exception as e:
-        print(f"   Error: {e}")
-    
-    # List cached images
-    print("\n📁 Recent Cached Images:")
-    try:
-        images = await agent.list_cached_images(5)
-        if images:
-            for img in images:
-                print(f"   • {img['key']} ({img['size_kb']}KB)")
-        else:
-            print("   (no cached images)")
-    except Exception as e:
-        print(f"   Error: {e}")
-    
-    # Show available styles
-    print("\n🎭 Available Art Styles:")
-    try:
-        styles = await agent.get_available_styles()
-        for key, style in styles.get("styles", {}).items():
-            print(f"   • {style['name']}: {style['description'][:50]}...")
-    except Exception as e:
-        print(f"   Error: {e}")
-    
-    print("\n" + "=" * 60)
-    print("💡 To generate an image, use:")
-    print("   path = await agent.generate_portrait('Name', 'Role', 'Traits')")
-    print("=" * 60)
+    return _run_async(agent.generate_scene(
+        location=location,
+        setting=setting,
+        mood=mood,
+        context=context,
+    ))
 
 
-if __name__ == "__main__":
-    asyncio.run(demo())
+def generate_title_card_sync(
+    title: str,
+    setting: str,
+    victim_name: str = "",
+    victim_background: str = "",
+) -> Optional[str]:
+    """Synchronous wrapper for title card generation.
+    
+    Args:
+        title: Mystery title
+        setting: Setting description
+        victim_name: Victim's name
+        victim_background: Victim background info
+        
+    Returns:
+        Path to generated image or None
+    """
+    agent = ImageAgent()
+    if not agent.is_available:
+        logger.warning("[MCP-IMG] MCP not available for title card generation")
+        return None
+    
+    return _run_async(agent.generate_title_card(
+        title=title,
+        setting=setting,
+        victim_name=victim_name,
+        victim_background=victim_background,
+    ))
 
+
+# =============================================================================
+# CHECK AVAILABILITY
+# =============================================================================
+
+def check_mcp_image_availability() -> Dict[str, Any]:
+    """Check MCP image generation availability.
+    
+    Returns:
+        Dict with availability info
+    """
+    api_key_openai = bool(os.getenv("OPENAI_API_KEY"))
+    api_key_hf = bool(os.getenv("HF_TOKEN"))
+    
+    return {
+        "available": MCP_AVAILABLE and api_key_openai and api_key_hf,
+        "sdk_installed": MCP_AVAILABLE,
+        "openai_key_set": api_key_openai,
+        "hf_token_set": api_key_hf,
+        "message": (
+            "MCP image generation ready" if MCP_AVAILABLE and api_key_openai and api_key_hf
+            else "MCP SDK not installed (pip install mcp)" if not MCP_AVAILABLE
+            else "Missing OPENAI_API_KEY" if not api_key_openai
+            else "Missing HF_TOKEN"
+        )
+    }
+
+
+# Log availability on module load
+if MCP_AVAILABLE:
+    status = check_mcp_image_availability()
+    if status["available"]:
+        logger.info("[MCP-IMG] ✅ MCP image generation ready")
+    else:
+        logger.warning("[MCP-IMG] ⚠️ MCP SDK loaded but missing keys: %s", status["message"])
+else:
+    logger.info("[MCP-IMG] MCP SDK not available")

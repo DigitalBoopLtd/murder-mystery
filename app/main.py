@@ -4,11 +4,15 @@ A reimagined interface that prioritizes voice output with streaming captions,
 styled like classic adventure games (Monkey Island, Day of the Tentacles, Gabriel Knight, etc.)
 """
 
+# IMPORTANT: Load environment variables FIRST, before any other imports
+# This ensures USE_MCP and other env vars are available when modules load
+from dotenv import load_dotenv
+load_dotenv()
+
 import os
 import threading
 from typing import Dict, List
 import gradio as gr
-from dotenv import load_dotenv
 from openai import OpenAI
 
 try:
@@ -19,7 +23,7 @@ except ImportError:
     ELEVENLABS_AVAILABLE = False
     ElevenLabs = None
 
-# Import modular components
+# Import modular components (AFTER load_dotenv so env vars are available)
 from services.tts_service import init_tts_service
 from services.perf_tracker import perf, get_perf_summary
 from game.state_manager import init_game_handlers, mystery_images
@@ -37,9 +41,6 @@ from app.event_handlers import (
     on_suspects_tab_select,
     on_refresh_suspects_click,
 )
-
-# Load environment variables
-load_dotenv()
 
 # Logging - set up early
 import logging

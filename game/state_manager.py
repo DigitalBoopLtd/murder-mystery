@@ -44,6 +44,8 @@ class AccusationOutput:
     suspect_name: str
     is_correct: bool
     narrative: str
+    has_sufficient_evidence: bool = False  # True if player found enough clues
+    clues_found_count: int = 0  # Number of clues found when accusation was made
 
 
 @dataclass

@@ -38,6 +38,73 @@ logger = logging.getLogger(__name__)
 
 
 # ============================================================================
+# Accusation Detection Helper
+# ============================================================================
+
+
+def _detect_accusation_intent(message: str, state: GameState) -> Optional[str]:
+    """Detect if the player is making an accusation and extract the suspect name.
+    
+    Returns the suspect name if an accusation is detected, None otherwise.
+    """
+    if not state.mystery:
+        return None
+    
+    message_lower = message.lower()
+    
+    # Keywords that indicate accusation intent
+    accusation_keywords = [
+        "i accuse",
+        "you are the murderer",
+        "you are the killer", 
+        "you killed",
+        "you did it",
+        "you're the murderer",
+        "you're the killer",
+        "it was you",
+        "you committed the murder",
+        "you are guilty",
+        "i think you murdered",
+        "i think you killed",
+        "the murderer is",
+        "the killer is",
+        "guilty of murder",
+        "committed this murder",
+    ]
+    
+    has_accusation_keyword = any(kw in message_lower for kw in accusation_keywords)
+    
+    if not has_accusation_keyword:
+        return None
+    
+    # Check if a suspect name is mentioned or if we're talking to someone
+    for suspect in state.mystery.suspects:
+        suspect_lower = suspect.name.lower()
+        name_parts = suspect_lower.split()
+        
+        # Check full name
+        if suspect_lower in message_lower:
+            logger.info("[ACCUSE] Detected accusation against: %s (full name match)", suspect.name)
+            return suspect.name
+        
+        # Check any significant name part (2+ chars)
+        for part in name_parts:
+            if len(part) >= 3 and part in message_lower:
+                logger.info("[ACCUSE] Detected accusation against: %s (name part '%s')", suspect.name, part)
+                return suspect.name
+    
+    # If message uses "you" (second person), try to find the last suspect talked to
+    second_person_words = ["you", "you're", "your"]
+    if any(word in message_lower.split() for word in second_person_words):
+        last_speaker = _get_last_suspect_speaker(state)
+        if last_speaker:
+            logger.info("[ACCUSE] Detected accusation using 'you' - inferring target: %s", last_speaker)
+            return last_speaker
+    
+    return None
+
+
+# ============================================================================
 # Scene Brief Processing Helper
 # ============================================================================
 
@@ -286,6 +353,32 @@ def process_player_action(
 
     # Store player message
     state.messages.append({"role": "user", "content": message, "speaker": "You"})
+    
+    # ========== ACCUSATION DETECTION ==========
+    # Detect accusations and rewrite message to be explicit so LLM routes to make_accusation tool
+    # This prevents "I accuse you" from being routed to interrogate_suspect
+    accused_suspect = None
+    if state.mystery:  # Only check for accusations if mystery is loaded
+        if action_type == "accuse" and target:
+            # Explicit accuse action - find the suspect name
+            for s in state.mystery.suspects:
+                if s.name.lower() == target.lower() or target.lower() in s.name.lower():
+                    accused_suspect = s.name
+                    break
+            if not accused_suspect:
+                accused_suspect = target  # Use the target as-is if not found
+        elif action_type == "custom" and custom_message:
+            # Check custom messages for accusation intent
+            accused_suspect = _detect_accusation_intent(message, state)
+    
+    if accused_suspect:
+        # Rewrite message to be explicit about accusation intent for the LLM
+        original_message = message
+        message = f"[FORMAL ACCUSATION] I formally accuse {accused_suspect} of the murder! Use the make_accusation tool. Original statement: {original_message}"
+        logger.info("[GAME] Detected accusation against %s - rewrote message for agent", accused_suspect)
+        # Update the stored player message
+        if state.messages:
+            state.messages[-1]["content"] = original_message  # Keep original for display
 
     # Assign voice on-demand before processing if talking to a suspect
     # This ensures the system prompt includes the voice_id for the tool
@@ -543,13 +636,53 @@ def process_player_action(
         _process_scene_brief(scene_brief_dict, state)
     
     # Merge tool store actions into parsed actions
+    # Tool store values take precedence over parser-detected values
     if tool_store.location_searched:
-        actions["location_searched"] = tool_store.location_searched
+        tool_location = tool_store.location_searched
+        parser_location = actions.get("location_searched")
+        
+        # If parser detected a different location, replace it in state.searched_locations
+        if parser_location and parser_location != tool_location:
+            if parser_location in state.searched_locations:
+                state.searched_locations.remove(parser_location)
+                logger.info("[GAME] Replaced parser location '%s' with tool location '%s'", 
+                           parser_location, tool_location)
+        
+        # Ensure the tool store location is in searched_locations
+        if tool_location not in state.searched_locations:
+            state.searched_locations.append(tool_location)
+        
+        actions["location_searched"] = tool_location
+    
     if tool_store.clue_found:
         actions["clue_found"] = tool_store.clue_found
     if tool_store.accusation:
         actions["accusation"] = tool_store.accusation.suspect_name
         actions["accusation_correct"] = tool_store.accusation.is_correct
+        actions["accusation_has_evidence"] = tool_store.accusation.has_sufficient_evidence
+        
+        # Apply accusation result to game state
+        # Only count accusations that had sufficient evidence
+        if tool_store.accusation.has_sufficient_evidence:
+            if tool_store.accusation.is_correct:
+                state.won = True
+                state.game_over = True
+                logger.info("✅ CORRECT ACCUSATION with evidence! Player wins!")
+            else:
+                state.wrong_accusations += 1
+                logger.info(
+                    "❌ Wrong accusation: %s (attempt %d/3)",
+                    tool_store.accusation.suspect_name,
+                    state.wrong_accusations
+                )
+                if state.wrong_accusations >= 3:
+                    state.game_over = True
+                    logger.info("💀 3 wrong accusations - GAME OVER!")
+        else:
+            logger.info(
+                "⚠️ Accusation rejected - insufficient evidence (%d clues found)",
+                tool_store.accusation.clues_found_count
+            )
     
     # Clean up any leftover markers from response (legacy support)
     clean_response = clean_response_markers(clean_response)
@@ -798,6 +931,31 @@ def run_action_logic(
 
     # Store player message
     state.messages.append({"role": "user", "content": message, "speaker": "You"})
+    
+    # ========== ACCUSATION DETECTION ==========
+    # Detect accusations and rewrite message to be explicit so LLM routes to make_accusation tool
+    accused_suspect = None
+    if state.mystery:  # Only check for accusations if mystery is loaded
+        if action_type == "accuse" and target:
+            # Explicit accuse action - find the suspect name
+            for s in state.mystery.suspects:
+                if s.name.lower() == target.lower() or target.lower() in s.name.lower():
+                    accused_suspect = s.name
+                    break
+            if not accused_suspect:
+                accused_suspect = target
+        elif action_type == "custom" and custom_message:
+            # Check custom messages for accusation intent
+            accused_suspect = _detect_accusation_intent(message, state)
+    
+    if accused_suspect:
+        # Rewrite message to be explicit about accusation intent for the LLM
+        original_message = message
+        message = f"[FORMAL ACCUSATION] I formally accuse {accused_suspect} of the murder! Use the make_accusation tool. Original statement: {original_message}"
+        logger.info("[GAME] Detected accusation against %s - rewrote message for agent", accused_suspect)
+        # Update the stored player message
+        if state.messages:
+            state.messages[-1]["content"] = original_message  # Keep original for display
 
     # Assign voice on-demand before processing if talking to a suspect
     suspect_to_assign = None
@@ -1095,13 +1253,53 @@ def run_action_logic(
         _process_scene_brief(scene_brief_dict, state)
     
     # Merge tool store actions into parsed actions
+    # Tool store values take precedence over parser-detected values
     if tool_store.location_searched:
-        actions["location_searched"] = tool_store.location_searched
+        tool_location = tool_store.location_searched
+        parser_location = actions.get("location_searched")
+        
+        # If parser detected a different location, replace it in state.searched_locations
+        if parser_location and parser_location != tool_location:
+            if parser_location in state.searched_locations:
+                state.searched_locations.remove(parser_location)
+                logger.info("[GAME] Replaced parser location '%s' with tool location '%s'", 
+                           parser_location, tool_location)
+        
+        # Ensure the tool store location is in searched_locations
+        if tool_location not in state.searched_locations:
+            state.searched_locations.append(tool_location)
+        
+        actions["location_searched"] = tool_location
+    
     if tool_store.clue_found:
         actions["clue_found"] = tool_store.clue_found
     if tool_store.accusation:
         actions["accusation"] = tool_store.accusation.suspect_name
         actions["accusation_correct"] = tool_store.accusation.is_correct
+        actions["accusation_has_evidence"] = tool_store.accusation.has_sufficient_evidence
+        
+        # Apply accusation result to game state
+        # Only count accusations that had sufficient evidence
+        if tool_store.accusation.has_sufficient_evidence:
+            if tool_store.accusation.is_correct:
+                state.won = True
+                state.game_over = True
+                logger.info("✅ CORRECT ACCUSATION with evidence! Player wins!")
+            else:
+                state.wrong_accusations += 1
+                logger.info(
+                    "❌ Wrong accusation: %s (attempt %d/3)",
+                    tool_store.accusation.suspect_name,
+                    state.wrong_accusations
+                )
+                if state.wrong_accusations >= 3:
+                    state.game_over = True
+                    logger.info("💀 3 wrong accusations - GAME OVER!")
+        else:
+            logger.info(
+                "⚠️ Accusation rejected - insufficient evidence (%d clues found)",
+                tool_store.accusation.clues_found_count
+            )
 
     # Remove game state markers from response (SEARCHED, ACCUSATION, CLUE_FOUND)
     t_clean_start = time.perf_counter()

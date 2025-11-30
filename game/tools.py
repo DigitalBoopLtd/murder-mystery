@@ -655,6 +655,10 @@ class AccusationToolOutput(BaseModel):
     dramatic_response: str = Field(description="Dramatic 2-3 sentence Game Master response")
 
 
+# Minimum clues required before an accusation is considered valid
+MIN_CLUES_FOR_VALID_ACCUSATION = 2
+
+
 @tool
 def make_accusation(
     suspect_name: Annotated[str, "The full name of the suspect being accused of the murder"],
@@ -670,9 +674,10 @@ def make_accusation(
     - "X must be guilty"
     
     This tool:
-    1. Checks if the accusation is correct against the actual murderer
-    2. Updates the game state (wrong accusations count, win/lose)
-    3. Returns a dramatic response for the Game Master to deliver
+    1. Checks if the player has gathered enough evidence (minimum clues found)
+    2. If insufficient evidence, the accusation is rejected (doesn't count toward 3 strikes)
+    3. If sufficient evidence, checks if the accusation is correct
+    4. Returns a dramatic response for the Game Master to deliver
     
     Returns only the narrative. Structured data is stored in ToolOutputStore.
     """
@@ -688,7 +693,13 @@ def make_accusation(
     state = get_game_state()
     store = get_tool_output_store()
     
-    # Check if accusation is correct
+    # Check evidence: how many clues has the player found?
+    clues_found_count = len(state.clue_ids_found) if state else 0
+    has_sufficient_evidence = clues_found_count >= MIN_CLUES_FOR_VALID_ACCUSATION
+    
+    logger.info("Evidence check: %d clues found (need %d)", clues_found_count, MIN_CLUES_FOR_VALID_ACCUSATION)
+    
+    # Check if accusation is correct (only matters if they have evidence)
     is_correct = False
     if state and state.mystery:
         for s in state.mystery.suspects:
@@ -705,28 +716,50 @@ def make_accusation(
     
     structured_llm = llm.with_structured_output(AccusationToolOutput)
     
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", """You are the Game Master for a murder mystery game. The player has made a FORMAL ACCUSATION.
+    # Generate different response based on evidence status
+    if has_sufficient_evidence:
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", """You are the Game Master for a murder mystery game. The player has made a FORMAL ACCUSATION with evidence to back it up.
 
 Generate a DRAMATIC response that:
 1. Acknowledges their accusation with gravitas
-2. References any evidence they provided
+2. References their evidence gathering
 3. Builds tension before the reveal
 4. Ends on a cliffhanger (the actual result will be shown by the game)
 
 Keep it SHORT (2-3 sentences) for voice narration. Be theatrical!"""),
-        ("human", """Player formally accuses: {suspect_name}
+            ("human", """Player formally accuses: {suspect_name}
 Their reasoning: {evidence}
+Clues they've gathered: {clue_count}
 
 Generate the dramatic Game Master response.""")
-    ])
+        ])
+    else:
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", """You are the Game Master for a murder mystery game. The player has made an accusation BUT HASN'T GATHERED ENOUGH EVIDENCE YET.
+
+Generate a response that:
+1. Acknowledges their suspicion
+2. Explains that they need more evidence before making a formal accusation
+3. Encourages them to investigate more - search locations and talk to suspects
+4. This accusation does NOT count against their 3 strikes
+
+Keep it SHORT (2-3 sentences) for voice narration. Be firm but encouraging."""),
+            ("human", """Player tried to accuse: {suspect_name}
+Their reasoning: {evidence}
+Clues found so far: {clue_count} (need at least {min_clues})
+
+Generate the Game Master response rejecting this premature accusation.""")
+        ])
     
     chain = prompt | structured_llm
     
     try:
         result: AccusationToolOutput = chain.invoke({
             "suspect_name": suspect_name,
-            "evidence": evidence_summary or "Gut instinct - no specific evidence cited"
+            "evidence": evidence_summary or "Gut instinct - no specific evidence cited",
+            "clue_count": clues_found_count,
+            "min_clues": MIN_CLUES_FOR_VALID_ACCUSATION,
         })
         
         # Store structured data in ToolOutputStore (no regex markers!)
@@ -734,9 +767,14 @@ Generate the dramatic Game Master response.""")
             suspect_name=suspect_name,
             is_correct=is_correct,
             narrative=result.dramatic_response,
+            has_sufficient_evidence=has_sufficient_evidence,
+            clues_found_count=clues_found_count,
         )
         
-        logger.info("Accusation stored: suspect=%s, correct=%s", suspect_name, is_correct)
+        logger.info(
+            "Accusation stored: suspect=%s, correct=%s, has_evidence=%s, clues=%d",
+            suspect_name, is_correct, has_sufficient_evidence, clues_found_count
+        )
         
         # Return ONLY the narrative - no markers needed!
         return result.dramatic_response
@@ -744,12 +782,19 @@ Generate the dramatic Game Master response.""")
     except Exception as e:
         logger.error("Structured output failed: %s", e)
         # Fallback - still store basic info
+        if has_sufficient_evidence:
+            narrative = f"You accuse {suspect_name} of the murder!"
+        else:
+            narrative = f"You suspect {suspect_name}, but you need more evidence before making a formal accusation. Keep investigating!"
+        
         store.accusation = AccusationOutput(
             suspect_name=suspect_name,
             is_correct=is_correct,
-            narrative=f"You accuse {suspect_name} of the murder!"
+            narrative=narrative,
+            has_sufficient_evidence=has_sufficient_evidence,
+            clues_found_count=clues_found_count,
         )
-        return f"You accuse {suspect_name} of the murder!"
+        return narrative
 
 
 def get_all_tools() -> List:
