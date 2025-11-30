@@ -120,11 +120,8 @@ class GameState:
         """Mark a suspect as talked to.
         
         NOTE: Locations are NOT bulk-unlocked here. Each location is revealed
-        individually through suspect interrogation based on:
-        - High trust (>= 65)
-        - High nervousness (>= 75)  
-        - Catching them in a contradiction
-        - 5+ conversations with that suspect (requires sustained engagement)
+        individually through suspect interrogation based on a SINGLE criterion:
+        - High trust with that suspect (see should_reveal_location in game.tools)
         """
         if suspect_name not in self.suspects_talked_to:
             self.suspects_talked_to.append(suspect_name)
@@ -572,21 +569,32 @@ BEHAVIORAL INSTRUCTIONS (pass to tool):
             
             # CRITICAL: Split clues into discovered vs undiscovered
             # - Discovered: show full details (player earned this info)
-            # - Undiscovered: show ONLY location name (so GM knows where to send player)
-            discovered_clues = []
-            undiscovered_locations = []
+            # - Locations: ONLY show locations the player has UNLOCKED via suspects
+            discovered_clues: List[str] = []
             for c in self.mystery.clues:
                 if c.id in self.clue_ids_found:
-                    discovered_clues.append(f'- ✓ "{c.id}": {c.description} [Found at: {c.location}]')
-                else:
-                    # Only show location, not what's there
-                    undiscovered_locations.append(f'- "{c.location}" (searchable)')
+                    discovered_clues.append(
+                        f'- ✓ "{c.id}": {c.description} [Found at: {c.location}]'
+                    )
+
+            # Locations shown to the GM are ONLY those the player has unlocked
+            # via suspect interrogation (state.unlocked_locations).
+            unlocked_locations_list: List[str] = []
+            for loc in self.unlocked_locations:
+                unlocked_locations_list.append(f'- "{loc}" (searchable)')
             
             clue_section = ""
             if discovered_clues:
-                clue_section += "## DISCOVERED EVIDENCE\n" + "\n".join(discovered_clues) + "\n\n"
-            if undiscovered_locations:
-                clue_section += "## SEARCHABLE LOCATIONS (clue details hidden until searched)\n" + "\n".join(undiscovered_locations)
+                clue_section += (
+                    "## DISCOVERED EVIDENCE\n"
+                    + "\n".join(discovered_clues)
+                    + "\n\n"
+                )
+            if unlocked_locations_list:
+                clue_section += (
+                    "## UNLOCKED LOCATIONS (clue details hidden until searched)\n"
+                    + "\n".join(unlocked_locations_list)
+                )
 
             tone_block = ""
             if self.tone_instruction:

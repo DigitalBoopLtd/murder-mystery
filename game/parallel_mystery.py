@@ -321,8 +321,11 @@ CHARACTER RULES FOR THE GUILTY:
   1. A clue at a location (physical evidence they were elsewhere)
   2. Another suspect's testimony contradicting their claim
 - If they claim someone can corroborate, that person should NOT actually confirm it
-- Their secret relates to their guilt but doesn't directly confess
-- Their "clue_they_know" should be misleading or deflecting
+- Their SECRET must be a damaging observation or claim about ANOTHER SUSPECT
+  * Example: They \"secretly\" saw another suspect near the murder scene, or overheard a threat
+  * This secret should make that OTHER suspect look more guilty and shift suspicion away from them
+  * The claim can be a lie or a twisted half-truth, but it MUST fit the overall case details
+- Their "clue_they_know" should be misleading or deflecting (it points AWAY from their own guilt)
 
 ALIBI CREATION (GUILTY):
 - Create a specific alibi with exact time/place that COVERS the murder time
@@ -335,7 +338,12 @@ ALIBI CREATION (GUILTY):
 This suspect is INNOCENT but should still seem suspicious.
 
 CHARACTER RULES FOR THE INNOCENT:
-- Give them their OWN secret unrelated to the murder
+- Their SECRET should be a truthful thing they know or saw that touches the case
+  * Often this is something incriminating or awkward about another suspect (e.g. a heated argument, a suspicious meeting)
+  * It MUST be TRUE in the mystery world and ideally corroborated by EITHER:
+    - a clue, OR
+    - another suspect's structured_alibi / witness statement
+- Their secret should NOT directly solve the case on its own, but it should be a real puzzle piece the detective can cross‑check
 - Their alibi is TRUE - they were where they say they were
 - structured_alibi.is_truthful MUST be True
 - Their alibi can be verified by another suspect OR was alone
