@@ -1072,4 +1072,203 @@ CSS_GAME_COMPONENTS = """/* ========== BASE PANEL TITLE (fallback) ========== */
     color: var(--terminal-green-muted);
     margin-top: 4px;
 }
+
+/* ========== CASE FILE (TOP TAB) ========== */
+.case-file-root {
+    font-family: var(--font-body);
+    color: var(--text-primary);
+}
+
+.case-file-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border-dark);
+    background: rgba(0, 10, 20, 0.9);
+}
+
+.case-file-title-block {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.case-file-division {
+    font-family: var(--font-retro-mono);
+    font-size: 11px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--terminal-green-muted);
+}
+
+.case-file-title {
+    font-family: var(--font-retro-mono);
+    font-size: 16px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--terminal-green);
+}
+
+.case-file-meta {
+    font-size: 11px;
+    text-align: right;
+    color: var(--text-secondary);
+}
+
+.case-file-meta-value {
+    font-family: var(--font-retro-mono);
+    color: var(--terminal-green);
+}
+
+.case-file-status {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 10px;
+    font-family: var(--font-retro-mono);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+}
+
+.case-file-status-open {
+    border: 1px solid var(--accent-orange);
+    color: var(--accent-orange);
+}
+
+.case-file-status-solved {
+    border: 1px solid var(--terminal-green);
+    color: var(--terminal-green);
+}
+
+.case-file-status-failed {
+    border: 1px solid var(--accent-red);
+    color: var(--accent-red);
+}
+
+.case-file-body {
+    background: radial-gradient(circle at top, rgba(0, 60, 40, 0.25), transparent 55%),
+                radial-gradient(circle at bottom, rgba(0, 0, 40, 0.25), transparent 55%),
+                var(--bg-panel);
+    padding: 16px;
+}
+
+.case-file-section {
+    margin-bottom: 18px;
+}
+
+.case-file-section-title {
+    font-family: var(--font-retro-mono);
+    font-size: 12px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--terminal-green-accent);
+    border-bottom: 1px solid var(--border-dark);
+    padding-bottom: 6px;
+    margin-bottom: 10px;
+}
+
+.case-file-victim-grid {
+    display: grid;
+    grid-template-columns: minmax(80px, 120px) 1fr;
+    gap: 4px 10px;
+    font-size: 13px;
+}
+
+.case-file-victim-label {
+    font-family: var(--font-retro-mono);
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    font-size: 11px;
+}
+
+.case-file-victim-value {
+    color: var(--text-primary);
+}
+
+.case-file-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+
+.case-file-table th {
+    text-align: left;
+    padding: 8px 10px;
+    font-family: var(--font-retro-mono);
+    font-size: 11px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+    border-bottom: 1px solid var(--border-dark);
+}
+
+.case-file-table td {
+    padding: 8px 10px;
+    border-bottom: 1px solid rgba(0, 80, 80, 0.5);
+}
+
+.case-file-cell-name {
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.case-file-cell-role {
+    color: var(--text-secondary);
+}
+
+.case-file-cell-status {
+    font-size: 12px;
+}
+
+.case-file-cell-empty {
+    text-align: center;
+    padding: 16px 8px;
+    font-style: italic;
+    color: var(--text-secondary);
+}
+
+.case-file-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 12px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border-dark);
+    font-size: 12px;
+}
+
+.case-file-stamp {
+    display: inline-block;
+    padding: 4px 10px;
+    border: 1px solid var(--accent-red);
+    color: var(--accent-red);
+    font-family: var(--font-retro-mono);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    transform: rotate(-3deg);
+}
+
+.case-file-footer-right {
+    text-align: right;
+    color: var(--text-secondary);
+}
+
+.case-file-empty {
+    text-align: center;
+    padding: 32px 16px;
+    color: var(--terminal-green-muted);
+    font-size: 14px;
+}
+
+.case-file-empty-icon {
+    font-size: 32px;
+    margin-bottom: 8px;
+}
+
+.case-file-empty-text {
+    max-width: 360px;
+    margin: 0 auto;
+}
 """

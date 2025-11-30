@@ -10,17 +10,17 @@ CSS_INPUT_BAR = """/* ========== STICKY RECORD BUTTON ========== */
     display: flex !important;
     justify-content: center !important;
     align-items: center !important;
-    padding: 20px !important;
-    background: rgba(10, 10, 10, 0.98) !important;
-    border-top: 2px solid var(--terminal-green, #00cc66) !important;
-    backdrop-filter: blur(12px) !important;
-    -webkit-backdrop-filter: blur(12px) !important;
+    padding: 10px 12px !important;
+    background: rgba(10, 10, 10, 0.96) !important;
+    border-top: 1px solid var(--terminal-green, #00cc66) !important;
+    backdrop-filter: blur(8px) !important;
+    -webkit-backdrop-filter: blur(8px) !important;
 }
 
 /* Mobile - add safe area padding for notch devices */
 @media (max-width: 900px) {
     #sticky-record-bar {
-        padding-bottom: calc(24px + env(safe-area-inset-bottom)) !important;
+        padding-bottom: calc(14px + env(safe-area-inset-bottom)) !important;
     }
 }
 
@@ -61,80 +61,79 @@ CSS_INPUT_BAR = """/* ========== STICKY RECORD BUTTON ========== */
 #sticky-record-bar button[aria-label*="ecord"],
 #sticky-record-bar button:not(.icon-button):not(.settings-button) {
     position: relative !important;
-    display: flex !important;
+    display: flex;
     align-items: center !important;
     justify-content: center !important;
-    width: 72px !important;
-    height: 72px !important;
-    min-width: 72px !important;
-    min-height: 72px !important;
-    max-width: 72px !important;
-    max-height: 72px !important;
+    width: 56px !important;
+    height: 56px !important;
+    min-width: 56px !important;
+    min-height: 56px !important;
+    max-width: 56px !important;
+    max-height: 56px !important;
     border-radius: 50% !important;
     background: var(--terminal-green, #00cc66) !important;
-    border: 2px solid rgba(255, 255, 255, 0.4) !important;
+    border: 2px solid rgba(255, 255, 255, 0.35) !important;
     cursor: pointer !important;
     transition: transform 0.15s ease-out !important;
     margin: 0 auto !important;
-    color: transparent !important; /* hide any built-in text */
 }
 
 #sticky-record-bar button.record-button:hover,
 #sticky-record-bar button[aria-label*="ecord"]:hover,
 #sticky-record-bar button:not(.icon-button):not(.settings-button):hover {
-    transform: scale(1.06) !important;
+    transform: scale(1.03) !important;
 }
 
-/* Recording state - change color only (no shadows) */
+/* Recording state - change color only */
 #sticky-record-bar button[aria-label*="top"],
 #sticky-record-bar button.recording {
     background: #e74c3c !important;
     border-color: rgba(255, 120, 120, 0.8) !important;
 }
 
-/* Hide the default SVG icon so we can use our own */
-#sticky-record-bar button svg {
+/* Hide extra control buttons (keep only main record/stop) */
+.stop-button,
+.pause-button,
+#stop-paused,
+.resume-button {
     display: none !important;
 }
 
-/* Custom microphone icon (change content to use your own) */
-#sticky-record-bar button.record-button::before,
-#sticky-record-bar button[aria-label*="ecord"]::before,
-#sticky-record-bar button:not(.icon-button):not(.settings-button)::before {
-    content: "🎙";  /* Custom mic icon */
-    font-size: 32px;
-    line-height: 1;
-    color: #000000;
+/* Use the built-in microphone / stop SVG icon, but scale it down a bit */
+#sticky-record-bar button svg {
+    width: 18px !important;
+    height: 18px !important;
+    color: #000000 !important;
+    fill: currentColor !important;
 }
 
-/* Mobile - larger button + icon */
+/* Mobile - slightly larger button + icon */
 @media (max-width: 900px) {
     #sticky-record-bar button.record-button,
     #sticky-record-bar button[aria-label*="ecord"],
     #sticky-record-bar button:not(.icon-button):not(.settings-button) {
-        width: 80px !important;
-        height: 80px !important;
-        min-width: 80px !important;
-        min-height: 80px !important;
-        max-width: 80px !important;
-        max-height: 80px !important;
+        width: 64px !important;
+        height: 64px !important;
+        min-width: 64px !important;
+        min-height: 64px !important;
+        max-width: 64px !important;
+        max-height: 64px !important;
     }
     
-    #sticky-record-bar button.record-button::before,
-    #sticky-record-bar button[aria-label*="ecord"]::before,
-    #sticky-record-bar button:not(.icon-button):not(.settings-button)::before {
-        font-size: 36px;
+    #sticky-record-bar button svg {
+        width: 20px !important;
+        height: 20px !important;
     }
 }
 
 /* ===== PAGE PADDING ===== */
 .gradio-container {
-    padding-bottom: 120px !important;
+    padding-bottom: 100px !important;
 }
 
 @media (max-width: 900px) {
     .gradio-container {
-        padding-bottom: 140px !important;
+        padding-bottom: 120px !important;
     }
 }
 

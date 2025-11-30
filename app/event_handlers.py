@@ -20,6 +20,7 @@ from ui.formatters import (
     format_dashboard_html,
     format_accusations_tab_html,
     format_timeline_html,
+    format_case_file_html,
 )
 from ui.case_board import build_case_board
 from services.api_keys import set_session_key, get_session_keys, has_required_keys
@@ -428,6 +429,15 @@ def check_mystery_ready(sess_id: str):
             discovered_timeline=state.discovered_timeline,
             suspect_states=state.suspect_states,
         )
+        case_file_html = format_case_file_html(
+            state.mystery,
+            suspects_talked_to=state.suspects_talked_to,
+            suspect_states=state.suspect_states,
+            clues_found=state.clues_found,
+            wrong_accusations=state.wrong_accusations,
+            game_over=state.game_over,
+            won=state.won,
+        )
         return [
             portrait_update,  # Opening scene image
             victim_html,
@@ -438,8 +448,9 @@ def check_mystery_ready(sess_id: str):
             victim_html,
             suspects_html_tab,  # Tabs (row layout)
             locations_html,
-            case_board,  # Case board (info tabs/mobile)
-            case_board,  # Case board (main tab)
+            case_board,        # Case board (info tabs/mobile)
+            case_board,        # Case board (main tab)
+            case_file_html,    # Case File (main tab)
             gr.update(active=False),  # Stop the timer
         ]
     else:
@@ -464,11 +475,12 @@ def check_mystery_ready(sess_id: str):
                 gr.update(),  # locations_html - no change
                 # Tab components
                 gr.update(),  # dashboard_html_tab
-                gr.update(),
+                gr.update(),  # victim_scene_html_tab
                 suspects_preview_tab,  # suspects tab - show previews early!
-                gr.update(),
+                gr.update(),  # locations_html_tab
                 gr.update(),  # case_board (info tabs) - no change yet
                 gr.update(),  # case_board (main tab) - no change yet
+                gr.update(),  # case_file_html_main - no change yet
                 gr.update(active=True),  # Keep timer running
             ]
         
@@ -479,11 +491,12 @@ def check_mystery_ready(sess_id: str):
             gr.update(),  # locations_html - no change
             # Tab components - no change
             gr.update(),  # dashboard_html_tab
-            gr.update(),
-            gr.update(),
-            gr.update(),
+            gr.update(),  # victim_scene_html_tab
+            gr.update(),  # suspects_list_html_tab
+            gr.update(),  # locations_html_tab
             gr.update(),  # case_board (info tabs) - no change
             gr.update(),  # case_board (main tab) - no change
+            gr.update(),  # case_file_html_main - no change
             gr.update(active=True),  # Keep timer running
         ]
 
@@ -722,7 +735,7 @@ def on_voice_input(audio_path: str, sess_id, progress=gr.Progress()):
     Stage 2 (slow): Generate TTS audio + images, yield final update with audio
     """
     if not audio_path:
-        yield [gr.update()] * 18  # Must match game_outputs count
+        yield [gr.update()] * 19  # Must match game_outputs count
         return
 
     # Normalize session id so it matches what on_start_game used
@@ -734,12 +747,12 @@ def on_voice_input(audio_path: str, sess_id, progress=gr.Progress()):
         state_before, "premise_setting", None
     ):
         logger.warning("[APP] Voice input received but no game started yet")
-        yield [gr.update()] * 18  # Must match game_outputs count
+        yield [gr.update()] * 19  # Must match game_outputs count
         return
 
     # Show progress indicator while processing
     progress(0, desc="🗣️ Transcribing...")
-    yield [gr.update()] * 18  # Must match game_outputs count
+    yield [gr.update()] * 19  # Must match game_outputs count
 
     # Store previous state to detect what changed
     # IMPORTANT: Make copies of the lists since state is mutated in place
@@ -766,7 +779,7 @@ def on_voice_input(audio_path: str, sess_id, progress=gr.Progress()):
     logger.info("[PERF] Transcription took %.2fs", t1 - t0)
 
     if not text.strip():
-        yield [gr.update()] * 18  # Must match game_outputs count
+        yield [gr.update()] * 19  # Must match game_outputs count
         return
 
     # Infer high-level action type from the transcribed text
@@ -946,6 +959,15 @@ def on_voice_input(audio_path: str, sess_id, progress=gr.Progress()):
             suspect_states=state.suspect_states,
         )),
         case_board,  # Same board for main tab
+        format_case_file_html(
+            state.mystery,
+            suspects_talked_to=state.suspects_talked_to,
+            suspect_states=state.suspect_states,
+            clues_found=state.clues_found,
+            wrong_accusations=state.wrong_accusations,
+            game_over=state.game_over,
+            won=state.won,
+        ),
     ]
 
     # ========== STAGE 2: SLOW - Generate audio + images ==========
@@ -1136,6 +1158,15 @@ def on_voice_input(audio_path: str, sess_id, progress=gr.Progress()):
             suspect_states=state.suspect_states,
         )),
         case_board,  # Same board for main tab
+        format_case_file_html(
+            state.mystery,
+            suspects_talked_to=state.suspects_talked_to,
+            suspect_states=state.suspect_states,
+            clues_found=state.clues_found,
+            wrong_accusations=state.wrong_accusations,
+            game_over=state.game_over,
+            won=state.won,
+        ),
     ]
 
 

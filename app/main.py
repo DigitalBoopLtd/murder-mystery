@@ -168,6 +168,7 @@ def create_app():
         accusations_html_tab = components["accusations_html_tab"]
         timeline_html_tab = components["timeline_html_tab"]
         timeline_html_main = components["timeline_html_main"]  # Main tab version
+        case_file_html_main = components["case_file_html_main"]  # Case File (main tab)
         case_board_plot = components["case_board_plot"]  # Visual conspiracy board (info tabs/mobile)
         case_board_plot_main = components["case_board_plot_main"]  # Visual conspiracy board (main tab)
         reveal_status_textbox = components["reveal_status_textbox"]
@@ -220,6 +221,7 @@ def create_app():
             timeline_html_tab,
             case_board_plot,  # Visual conspiracy board (info tabs/mobile)
             case_board_plot_main,  # Visual conspiracy board (main tab)
+            case_file_html_main,  # Case File (main tab)
         ]
 
         # ====== WIZARD EVENT HANDLERS ======
@@ -340,8 +342,9 @@ def create_app():
                 victim_scene_html_tab,
                 suspects_list_html_tab,
                 locations_html_tab,
-                case_board_plot,  # Update case board as mystery loads (info tabs/mobile)
-                case_board_plot_main,  # Update case board (main tab)
+                case_board_plot,         # Case board (info tabs/mobile)
+                case_board_plot_main,    # Case board (main tab)
+                case_file_html_main,     # Case File (main tab)
                 mystery_check_timer,
             ],
         )

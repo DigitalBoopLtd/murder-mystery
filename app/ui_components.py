@@ -289,6 +289,22 @@ def create_ui_components() -> dict:
                         clues_html = gr.HTML("<em>No clues yet...</em>")
 
 
+        # ----- CASE FILE TAB -----
+        with gr.Tab("📋 Case File", elem_classes="case-file-tab"):
+            with gr.Column(elem_classes="case-file-column"):
+                gr.Markdown("### 📋 Official Case File")
+                gr.Markdown(
+                    "Police-style case summary showing victim information and current persons of interest.\n"
+                    "**Updates automatically as you discover clues and interrogate suspects.**"
+                )
+                case_file_html_main = gr.HTML(
+                    '<div class="case-file-empty">'
+                    '<div class="case-file-empty-icon">📁</div>'
+                    '<div class="case-file-empty-text">Start a mystery to generate the official case file.</div>'
+                    "</div>",
+                    elem_classes="case-file-main",
+                )
+
         # ----- CASE BOARD TAB -----
         with gr.Tab("📋 Case Board", elem_classes="case-board-tab"):
             with gr.Column(elem_classes="case-board-column"):
@@ -302,7 +318,7 @@ def create_ui_components() -> dict:
                     label="Case Board",
                     elem_classes="case-board-plot-main",
                 )
-
+        
         # ----- TIMELINE TAB -----
         with gr.Tab("🕐 Timeline", elem_classes="timeline-tab"):
             with gr.Column(elem_classes="timeline-column"):
@@ -440,6 +456,7 @@ def create_ui_components() -> dict:
         "accusations_html_tab": accusations_html_tab,
         "timeline_html_tab": timeline_html_tab,
         "timeline_html_main": timeline_html_main,  # Main tab version
+        "case_file_html_main": case_file_html_main,  # Case File (main tab)
         "case_board_plot": case_board_plot,  # Visual conspiracy board (info tabs/mobile)
         "case_board_plot_main": case_board_plot_main,  # Visual conspiracy board (main tab)
         "reveal_status_textbox": reveal_status_textbox,

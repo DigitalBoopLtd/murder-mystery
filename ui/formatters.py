@@ -60,6 +60,184 @@ def format_victim_scene_html(mystery) -> str:
     """
 
 
+def format_case_file_html(
+    mystery,
+    suspects_talked_to: Optional[List[str]] = None,
+    suspect_states: Optional[Dict[str, SuspectState]] = None,
+    clues_found: Optional[List[str]] = None,
+    wrong_accusations: int = 0,
+    game_over: bool = False,
+    won: bool = False,
+) -> str:
+    """Format an 'official case file' overview as HTML for the Case File tab.
+
+    This is a high-level, spoiler-safe summary:
+    - Uses only public mystery data (no murderer / secrets)
+    - Shows victim info and list of suspects with simple status chips
+    """
+    suspects_talked_to = suspects_talked_to or []
+    suspect_states = suspect_states or {}
+    clues_found = clues_found or []
+
+    if not mystery:
+        return """
+        <div class="case-file-root">
+            <div class="case-file-header">
+                <div class="case-file-title-block">
+                    <div class="case-file-division">HOMICIDE DIVISION</div>
+                    <div class="case-file-title">OFFICIAL CASE FILE</div>
+                </div>
+                <div class="case-file-meta">
+                    <div>Case #: <span class="case-file-meta-value">MYS-????</span></div>
+                    <div>Status: <span class="case-file-status case-file-status-open">PENDING</span></div>
+                </div>
+            </div>
+            <div class="case-file-body">
+                <div class="case-file-empty">
+                    <div class="case-file-empty-icon">📁</div>
+                    <div class="case-file-empty-text">Start a mystery to generate the official case file.</div>
+                </div>
+            </div>
+        </div>
+        """
+
+    victim = getattr(mystery, "victim", None)
+    murder_method = getattr(mystery, "murder_method", None)
+
+    victim_name = getattr(victim, "name", "Unknown")
+    victim_background = getattr(victim, "background", "") or ""
+
+    # Murder details (safe: no murderer identity)
+    cause_of_death = ""
+    location_found = ""
+    if murder_method:
+        weapon = getattr(murder_method, "weapon", "") or ""
+        tod = getattr(murder_method, "time_of_death", "") or ""
+        lod = getattr(murder_method, "location_of_murder", "") or ""
+        parts = []
+        if weapon:
+            parts.append(weapon)
+        if tod:
+            parts.append(tod)
+        cause_of_death = " • ".join(parts)
+        location_found = lod
+    else:
+        # Fallback to high-level mystery fields
+        cause_of_death = mystery.weapon if getattr(mystery, "weapon", None) else ""
+        location_found = mystery.setting if getattr(mystery, "setting", None) else ""
+
+    # Case status
+    if not game_over:
+        status_label = "OPEN"
+        status_class = "case-file-status-open"
+    elif won:
+        status_label = "CLOSED – SOLVED"
+        status_class = "case-file-status-solved"
+    else:
+        status_label = "CLOSED – FAILED"
+        status_class = "case-file-status-failed"
+
+    # Build suspect rows
+    suspect_rows: List[str] = []
+    suspects = getattr(mystery, "suspects", []) or []
+
+    for s in suspects:
+        name = getattr(s, "name", "Unknown")
+        role = getattr(s, "role", "Unknown")
+        state = suspect_states.get(name)
+
+        # Simple, non-spoilery status
+        if state and state.contradictions_caught > 0:
+            status_text = "🔴 Prime Suspect"
+        elif name in suspects_talked_to:
+            status_text = "🟡 Person of Interest"
+        else:
+            status_text = "⚪ Not Yet Interrogated"
+
+        suspect_rows.append(
+            f"""
+            <tr>
+                <td class="case-file-cell-name">{name}</td>
+                <td class="case-file-cell-role">{role}</td>
+                <td class="case-file-cell-status">{status_text}</td>
+            </tr>
+            """
+        )
+
+    suspects_html = (
+        "".join(suspect_rows)
+        if suspect_rows
+        else """
+        <tr>
+            <td colspan="3" class="case-file-cell-empty">
+                No suspects have been generated yet.
+            </td>
+        </tr>
+        """
+    )
+
+    clues_count = len(clues_found)
+
+    return f"""
+    <div class="case-file-root">
+        <div class="case-file-header">
+            <div class="case-file-title-block">
+                <div class="case-file-division">HOMICIDE DIVISION</div>
+                <div class="case-file-title">OFFICIAL CASE FILE</div>
+            </div>
+            <div class="case-file-meta">
+                <div>Case #: <span class="case-file-meta-value">MYS-2025-001</span></div>
+                <div>Status: <span class="case-file-status {status_class}">{status_label}</span></div>
+            </div>
+        </div>
+
+        <div class="case-file-body">
+            <div class="case-file-section">
+                <div class="case-file-section-title">VICTIM INFORMATION</div>
+                <div class="case-file-victim-grid">
+                    <div class="case-file-victim-label">Name:</div>
+                    <div class="case-file-victim-value">{victim_name}</div>
+                    <div class="case-file-victim-label">Background:</div>
+                    <div class="case-file-victim-value">{victim_background}</div>
+                    <div class="case-file-victim-label">Cause / Method:</div>
+                    <div class="case-file-victim-value">{cause_of_death or "Unknown"}</div>
+                    <div class="case-file-victim-label">Location:</div>
+                    <div class="case-file-victim-value">{location_found or "Unknown"}</div>
+                </div>
+            </div>
+
+            <div class="case-file-section">
+                <div class="case-file-section-title">
+                    PERSONS OF INTEREST ({len(suspects)})
+                </div>
+                <table class="case-file-table">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Role</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {suspects_html}
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="case-file-footer">
+                <div class="case-file-footer-left">
+                    <div class="case-file-stamp">CONFIDENTIAL</div>
+                </div>
+                <div class="case-file-footer-right">
+                    <div>Clues logged: <strong>{clues_count}</strong></div>
+                    <div>Wrong accusations: <strong>{wrong_accusations}/3</strong></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    """
+
+
 def format_clues_html(clues: List[str]) -> str:
     """Format found clues as HTML."""
     if not clues:
