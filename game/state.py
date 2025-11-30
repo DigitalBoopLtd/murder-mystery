@@ -372,10 +372,20 @@ class GameState:
         return "\n".join(history_lines)
 
     def get_continue_prompt(self) -> str:
-        """Get the system prompt for continuing an existing game."""
+        """Get the system prompt for continuing an existing game.
+        
+        IMPORTANT: This prompt is carefully structured to HIDE information
+        the player hasn't discovered yet. The GM only sees:
+        - Undiscovered clue LOCATIONS (not descriptions)
+        - Discovered clue FULL details
+        - Suspect public info (role, personality, alibi)
+        - Suspect secrets are passed to the interrogate tool, NOT shown here
+        """
         # If we have a mystery, include suspect profiles so they're always accessible
         if self.mystery:
             # Build enhanced suspect profiles with conversation history and emotional state
+            # NOTE: We do NOT include secrets or clue_they_know in the visible prompt
+            # Those are passed directly to the interrogate_suspect tool to guide roleplay
             suspect_profiles_list = []
             for s in self.mystery.suspects:
                 # Get emotional state and history from Game Master's memory
@@ -383,16 +393,13 @@ class GameState:
                 conversation_history = self.format_conversation_history(s.name)
                 emotional_instructions = self.get_emotional_instructions(s.name)
                 
+                # Only include guilt flag for tool usage (not displayed to player)
                 profile = f"""
 ### {s.name}
 Role: {s.role}
 Personality: {s.personality}
 Alibi: "{s.alibi}"
-Secret: {s.secret}
-Will share if asked: {s.clue_they_know}
-Guilty: {s.isGuilty}
-Voice ID: {s.voice_id or 'None'}{f'''
-Murder details: Used {self.mystery.weapon} because {self.mystery.motive}''' if s.isGuilty else ''}
+Voice ID: {s.voice_id or 'None'}
 
 EMOTIONAL STATE (pass to tool):
 - Trust: {suspect_state.trust}%
@@ -411,12 +418,24 @@ BEHAVIORAL INSTRUCTIONS (pass to tool):
             suspect_list = "\n".join(
                 [f"- {s.name} ({s.role})" for s in self.mystery.suspects]
             )
-            clue_list = "\n".join(
-                [
-                    f'- "{c.id}": {c.description} [Location: {c.location}]'
-                    for c in self.mystery.clues
-                ]
-            )
+            
+            # CRITICAL: Split clues into discovered vs undiscovered
+            # - Discovered: show full details (player earned this info)
+            # - Undiscovered: show ONLY location name (so GM knows where to send player)
+            discovered_clues = []
+            undiscovered_locations = []
+            for c in self.mystery.clues:
+                if c.id in self.clue_ids_found:
+                    discovered_clues.append(f'- ✓ "{c.id}": {c.description} [Found at: {c.location}]')
+                else:
+                    # Only show location, not what's there
+                    undiscovered_locations.append(f'- "{c.location}" (searchable)')
+            
+            clue_section = ""
+            if discovered_clues:
+                clue_section += "## DISCOVERED EVIDENCE\n" + "\n".join(discovered_clues) + "\n\n"
+            if undiscovered_locations:
+                clue_section += "## SEARCHABLE LOCATIONS (clue details hidden until searched)\n" + "\n".join(undiscovered_locations)
 
             tone_block = ""
             if self.tone_instruction:
@@ -424,6 +443,14 @@ BEHAVIORAL INSTRUCTIONS (pass to tool):
 
 ## TONE
 {self.tone_instruction}
+"""
+            
+            # Build progress summary
+            progress_summary = f"""
+## INVESTIGATION PROGRESS
+- Clues found: {len(self.clue_ids_found)}/{len(self.mystery.clues)}
+- Suspects interviewed: {len(self.suspects_talked_to)}/{len(self.mystery.suspects)}
+- Wrong accusations: {self.wrong_accusations}/3
 """
 
             return f"""You are the Game Master for an ongoing murder mystery game.
@@ -434,65 +461,61 @@ BEHAVIORAL INSTRUCTIONS (pass to tool):
 ## VICTIM
 {self.mystery.victim.name}: {self.mystery.victim.background}
 
-## SUSPECTS
+## SUSPECTS (public info only)
 {suspect_list}
 
-## CLUES (reveal when player searches correct location)
-{clue_list}
+{clue_section}
 
-## SUSPECT PROFILES (use when calling Interrogate Suspect tool)
+{progress_summary}
+
+## SUSPECT PROFILES (for interrogate_suspect tool)
 {suspect_profiles}
 
 ## YOUR ROLE AS GAME MASTER
 
-You are intelligent and can understand player intent. Handle these actions:
+CRITICAL RULE: You can ONLY reveal information the player has EARNED through investigation!
+- Clues are only revealed when the player SEARCHES the correct location
+- Suspect secrets emerge through INTERROGATION, not narration
+- Do NOT summarize case details the player hasn't discovered
+
+Handle these actions:
 
 ### 1. TALKING TO SUSPECTS
-When a player wants to talk to someone (e.g., "talk to the butler", "ask Victoria about the murder"):
-- Figure out which suspect they mean from context (role, name, or description)
-- If ambiguous, ASK for clarification: "Do you want to speak with Victoria Matrix or Evelyn Cipher?"
-- Call the "interrogate_suspect" tool with the full suspect name and their complete profile
+When a player wants to talk to someone:
+- Call "interrogate_suspect" tool with suspect name and profile
+- The tool handles what the suspect reveals based on trust/nervousness
+- Do NOT reveal suspect secrets in your narration - let them emerge through dialogue
 
 ### 2. SEARCHING LOCATIONS  
-When a player wants to search/examine/investigate somewhere:
-- Match their description to a clue location (e.g., "check the desk" → "Dr. Hologram's laptop")
-- If ambiguous, ASK: "Would you like to search the office or the server room?"
-- Include this EXACT marker in your response: [SEARCHED:Location Name]
-- Describe findings atmospherically and reveal any clues at that location
+When a player searches somewhere:
+- Find the matching location from SEARCHABLE LOCATIONS
+- Call "describe_scene_for_image" with just the location_name
+- The tool automatically looks up clues and generates the correct response
+- Use the tool's output VERBATIM (it includes all necessary markers)
 
 ### 3. ACCUSATIONS
-When a player accuses someone:
-- Include marker: [ACCUSATION:Suspect Name]
-- Check against the murderer and respond appropriately
+When player formally accuses someone:
+- Call "make_accusation" tool with suspect name
+- Only for FINAL accusations, not theorizing
 
-### IMPORTANT MARKERS (include in your response for game tracking):
-- [SEARCHED:exact location name] - when player searches a location
-- [ACCUSATION:suspect name] - when player makes an accusation
-- [CLUE_FOUND:clue_id] - when revealing a clue from a searched location
-
-### RAG MEMORY TOOLS (use to enhance gameplay)
-- "search_past_statements" → When player references something said earlier
-- "find_contradictions" → When checking if a suspect contradicted themselves
-- "get_cross_references" → When confronting a suspect with what others said
+### IMPORTANT MARKERS:
+- [SEARCHED:exact location name] - when player searches
+- [CLUE_FOUND:clue_id] - when revealing a clue
 
 ## GAME RULES  
 - 3 wrong accusations = lose
 - Win = name murderer + provide evidence
-- Never reveal murderer until correct accusation
+- NEVER reveal murderer, weapon, or motive until correct accusation
+- NEVER reveal clue details until player searches that location
+- NEVER reveal suspect secrets - let them emerge through interrogation
 
 {tone_block}
 
-## SECRET (NEVER REVEAL)
-Murderer: {self.mystery.murderer}
-Weapon: {self.mystery.weapon}
-Motive: {self.mystery.motive}
-
 ## RESPONSE STYLE
-Player sees suspects, locations, clues in sidebar cards.
-- Don't list what's in the UI
 - Keep responses atmospheric and conversational
 - Be concise - 2-4 paragraphs max
 - ASK for clarification rather than guessing wrong
+- Build suspense, don't spoil the mystery!
 
 Continue the investigation based on the player's message."""
         else:

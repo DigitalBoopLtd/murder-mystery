@@ -86,6 +86,61 @@ def create_game_master_agent():
         msg_types = [type(m).__name__ for m in messages]
         logger.info("Message types: %s", msg_types)
 
+        # FIX: Handle incomplete tool calls from corrupted checkpoints
+        # OpenAI requires that AIMessage with tool_calls must be followed by ToolMessages
+        # If we find an AIMessage with tool_calls but no following ToolMessage, we need to
+        # either remove it or add placeholder responses
+        cleaned_messages = []
+        for i, msg in enumerate(messages):
+            if isinstance(msg, AIMessage) and hasattr(msg, "tool_calls") and msg.tool_calls:
+                # Check if the next messages are ToolMessages for these tool_calls
+                tool_call_ids = set()
+                for tc in msg.tool_calls:
+                    tc_id = tc.get("id") if isinstance(tc, dict) else getattr(tc, "id", None)
+                    if tc_id:
+                        tool_call_ids.add(tc_id)
+                
+                # Look for responding ToolMessages
+                responded_ids = set()
+                for j in range(i + 1, len(messages)):
+                    next_msg = messages[j]
+                    if isinstance(next_msg, ToolMessage):
+                        tc_id = getattr(next_msg, "tool_call_id", None)
+                        if tc_id in tool_call_ids:
+                            responded_ids.add(tc_id)
+                    elif isinstance(next_msg, (HumanMessage, AIMessage)):
+                        # Stop looking once we hit a non-ToolMessage
+                        break
+                
+                missing_ids = tool_call_ids - responded_ids
+                if missing_ids:
+                    logger.warning(
+                        "Found AIMessage with %d incomplete tool_calls (missing responses for: %s) - adding placeholder responses",
+                        len(missing_ids), missing_ids
+                    )
+                    # Add the AI message
+                    cleaned_messages.append(msg)
+                    # Add placeholder ToolMessages for missing responses
+                    for tc in msg.tool_calls:
+                        tc_id = tc.get("id") if isinstance(tc, dict) else getattr(tc, "id", None)
+                        tc_name = tc.get("name") if isinstance(tc, dict) else getattr(tc, "name", "unknown")
+                        if tc_id in missing_ids:
+                            placeholder = ToolMessage(
+                                content=f"[Tool '{tc_name}' did not complete - please try again]",
+                                tool_call_id=tc_id,
+                                name=tc_name
+                            )
+                            cleaned_messages.append(placeholder)
+                            logger.info("Added placeholder ToolMessage for incomplete call %s", tc_id)
+                else:
+                    cleaned_messages.append(msg)
+            else:
+                cleaned_messages.append(msg)
+        
+        if len(cleaned_messages) != len(messages):
+            logger.info("Cleaned message list: %d -> %d messages", len(messages), len(cleaned_messages))
+            messages = cleaned_messages
+
         # SPECIAL CASE: If we only have a ToolMessage, LangGraph didn't preserve full history.
         # For certain tools (interrogate_suspect, describe_scene_for_image) the ToolMessage
         # *is* the final response, so we return it directly. This ensures we use the tool's

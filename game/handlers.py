@@ -27,12 +27,73 @@ from game.state_manager import (
     get_or_create_state,
     get_suspect_voice_id,
     normalize_location_name,
+    set_current_session,
 )
 from game.media import _generate_portrait_background
 from services.game_memory import get_game_memory
 from services.perf_tracker import perf
 
 logger = logging.getLogger(__name__)
+
+
+# ============================================================================
+# Scene Brief Processing Helper
+# ============================================================================
+
+
+def _process_scene_brief(scene_brief: dict, state: GameState) -> str:
+    """Process a scene brief and cache the description on state.
+    
+    Handles both new clue-focused format and legacy format.
+    Returns the full description string for logging.
+    """
+    loc_name = scene_brief.get("location_name")
+    
+    # New clue-focused format
+    clue_focus = scene_brief.get("clue_focus") or ""
+    camera_angle = scene_brief.get("camera_angle") or ""
+    lighting = scene_brief.get("lighting_mood") or ""
+    background = scene_brief.get("background_hint") or ""
+    prompt_hint = scene_brief.get("prompt_hint") or ""
+    
+    # Legacy format support
+    env = scene_brief.get("environment_description") or ""
+    camera = scene_brief.get("camera_position") or camera_angle
+    focal = scene_brief.get("focal_objects") or clue_focus
+
+    # Build description prioritizing clue-focused format
+    parts = []
+    if clue_focus:
+        parts.append(f"Focus: {clue_focus}")
+    if camera_angle:
+        parts.append(f"Shot: {camera_angle}")
+    if lighting:
+        parts.append(f"Lighting: {lighting}")
+    if background:
+        parts.append(f"Background: {background}")
+    # Fallback to legacy fields
+    if not parts and env:
+        parts.append(env)
+        if camera:
+            parts.append(f"Camera: {camera}")
+        if focal:
+            parts.append(f"Focal: {focal}")
+    if prompt_hint:
+        parts.append(prompt_hint)
+    full_desc = " | ".join(p for p in parts if p)
+
+    if loc_name and full_desc:
+        try:
+            normalized_loc = normalize_location_name(loc_name, state)
+        except Exception:
+            normalized_loc = loc_name
+        try:
+            state.location_descriptions[normalized_loc] = full_desc
+            logger.info("[GAME] Stored scene brief for %s: %s", normalized_loc, full_desc[:100])
+        except Exception:  # noqa: BLE001
+            logger.exception("[GAME] Failed to store scene brief for %s", normalized_loc)
+    
+    return full_desc
 
 
 # ============================================================================
@@ -478,32 +539,7 @@ def process_player_action(
 
         # If we successfully parsed, cache a rich description on state
         if scene_brief:
-            loc_name = scene_brief.get("location_name")
-            env = scene_brief.get("environment_description") or ""
-            camera = scene_brief.get("camera_position") or ""
-            focal = scene_brief.get("focal_objects") or ""
-
-            parts = [env]
-            if camera:
-                parts.append(f"Camera: {camera}")
-            if focal:
-                parts.append(f"Focal objects: {focal}")
-            full_desc = " ".join(p for p in parts if p)
-
-            if loc_name and full_desc:
-                try:
-                    normalized_loc = normalize_location_name(loc_name, state)
-                except Exception:
-                    normalized_loc = loc_name
-                try:
-                    state.location_descriptions[normalized_loc] = full_desc
-                    logger.info(
-                        "[GAME] Stored scene brief for %s", normalized_loc
-                    )
-                except Exception:  # noqa: BLE001
-                    logger.exception(
-                        "[GAME] Failed to store scene brief for %s", normalized_loc
-                    )
+            _process_scene_brief(scene_brief, state)
 
     # Remove game state markers from response (SEARCHED, ACCUSATION, CLUE_FOUND)
     clean_response = clean_response_markers(clean_response)
@@ -709,6 +745,10 @@ def run_action_logic(
         Tuple of (clean_response, speaker_name, state, actions_dict, audio_path_from_tool)
     """
     t_start = time.perf_counter()
+    
+    # Set current session for tool context (tools can access state securely)
+    set_current_session(session_id)
+    
     state = get_or_create_state(session_id)
 
     # If the full mystery is not ready yet, keep the player in the intro phase.
@@ -1034,32 +1074,7 @@ def run_action_logic(
 
         # If we successfully parsed, cache a rich description on state
         if scene_brief:
-            loc_name = scene_brief.get("location_name")
-            env = scene_brief.get("environment_description") or ""
-            camera = scene_brief.get("camera_position") or ""
-            focal = scene_brief.get("focal_objects") or ""
-
-            parts = [env]
-            if camera:
-                parts.append(f"Camera: {camera}")
-            if focal:
-                parts.append(f"Focal objects: {focal}")
-            full_desc = " ".join(p for p in parts if p)
-
-            if loc_name and full_desc:
-                try:
-                    normalized_loc = normalize_location_name(loc_name, state)
-                except Exception:
-                    normalized_loc = loc_name
-                try:
-                    state.location_descriptions[normalized_loc] = full_desc
-                    logger.info(
-                        "[GAME] Stored scene brief for %s", normalized_loc
-                    )
-                except Exception:  # noqa: BLE001
-                    logger.exception(
-                        "[GAME] Failed to store scene brief for %s", normalized_loc
-                    )
+            _process_scene_brief(scene_brief, state)
 
     # Remove game state markers from response (SEARCHED, ACCUSATION, CLUE_FOUND)
     t_clean_start = time.perf_counter()

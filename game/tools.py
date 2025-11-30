@@ -25,39 +25,60 @@ _audio_alignment_cache = {}
 
 @tool
 def interrogate_suspect(
-    suspect_name: Annotated[str, "The name of the suspect to interrogate"],
-    suspect_profile: Annotated[
+    suspect_name: Annotated[str, "The full name of the suspect to interrogate"],
+    player_question: Annotated[str, "The player's question or statement to the suspect"],
+    emotional_context: Annotated[
         str,
-        "Full profile including: static info (role, personality, alibi, secret, "
-        "clue_they_know, isGuilty), EMOTIONAL STATE (trust %, nervousness %), "
-        "CONVERSATION HISTORY (past exchanges), and BEHAVIORAL INSTRUCTIONS",
-    ],
-    player_question: Annotated[
-        str, "The player's question or statement to the suspect"
-    ],
-    voice_id: Annotated[Optional[str], "Optional ElevenLabs voice ID for TTS"] = None,
+        "Current emotional state and conversation history: trust %, nervousness %, past exchanges"
+    ] = "",
 ) -> str:
     """Interrogate Suspect - Use when player wants to talk to a suspect.
-
-    You MUST include in your request:
-    1) Suspect's name
-    2) Their FULL profile including:
-       - Static info: role, personality, alibi, secret, what they know, isGuilty
-       - EMOTIONAL STATE: trust %, nervousness %, contradictions caught
-       - CONVERSATION HISTORY: all previous exchanges with this suspect
-       - BEHAVIORAL INSTRUCTIONS: how to behave based on emotional state
-    3) Player's question
-    4) Optionally, their voice_id for audio generation
     
-    The tool needs all this info to roleplay correctly and consistently."""
+    Just provide:
+    1) suspect_name - full name (the tool looks up their secrets internally)
+    2) player_question - what the player said
+    3) emotional_context - current trust/nervousness and conversation history
+    
+    The tool has secure access to suspect secrets and will roleplay correctly.
+    You do NOT need to include secrets or guilt - the tool handles that privately."""
 
     logger.info("\n%s", "=" * 60)
     logger.info("INTERROGATE_SUSPECT TOOL CALLED")
     logger.info("Suspect: %s", suspect_name)
     logger.info("Player question: %s", player_question)
-    logger.info("Profile length: %d chars", len(suspect_profile))
-    logger.info("Voice ID: %s", voice_id)
+    logger.info("Emotional context: %s", emotional_context[:200] if emotional_context else "None")
     logger.info("%s\n", "=" * 60)
+    
+    # Look up suspect from game state (secure access to hidden info)
+    from game.state_manager import get_game_state
+    state = get_game_state()
+    
+    suspect = None
+    voice_id = None
+    if state and state.mystery:
+        for s in state.mystery.suspects:
+            if s.name.lower() == suspect_name.lower() or suspect_name.lower() in s.name.lower():
+                suspect = s
+                voice_id = s.voice_id
+                break
+    
+    if not suspect:
+        logger.warning("Suspect not found: %s", suspect_name)
+        return f"I'm sorry, I couldn't find a suspect named {suspect_name}."
+    
+    # Build the FULL profile internally (including secrets the GM shouldn't narrate)
+    full_profile = f"""
+Name: {suspect.name}
+Role: {suspect.role}
+Personality: {suspect.personality}
+Alibi: "{suspect.alibi}"
+Secret (protect this): {suspect.secret}
+Info to share if trust is high: {suspect.clue_they_know}
+Guilty: {suspect.isGuilty}
+{"Murder details (NEVER confess): Used " + state.mystery.weapon + " because " + state.mystery.motive if suspect.isGuilty else ""}
+
+{emotional_context}
+"""
 
     llm = ChatOpenAI(
         model="gpt-4o", temperature=0.8, api_key=os.getenv("OPENAI_API_KEY")
@@ -87,11 +108,9 @@ CONSISTENCY RULES (CRITICAL):
 - Reference past conversations naturally: "As I told you before...", "I already mentioned..."
 
 EMOTIONAL STATE RULES:
-- Your profile includes EMOTIONAL STATE (trust %, nervousness %)
 - Low trust (<30%): Be defensive, give short answers, act suspicious of the detective
-- High trust (>70%): Be more open, consider sharing secrets if pressed
+- High trust (>70%): Be more open, consider sharing your "info to share" if pressed
 - High nervousness (>70%): Show stress - speak faster, fidget, might slip up
-- If BEHAVIORAL INSTRUCTIONS are provided, follow them
 
 Suspect Profile:
 {suspect_profile}""",
@@ -103,15 +122,15 @@ Suspect Profile:
     chain = prompt | llm
 
     response = chain.invoke(
-        {"suspect_profile": suspect_profile, "player_question": player_question}
+        {"suspect_profile": full_profile, "player_question": player_question}
     )
 
     text_response = response.content
 
-    # Generate audio if voice_id is provided
+    # Generate audio if voice_id is available
     audio_path = None
     if voice_id:
-        audio_path = generate_suspect_audio(text_response, voice_id, suspect_name)
+        audio_path = generate_suspect_audio(text_response, voice_id, suspect.name)
 
     # Return response with audio path marker if audio was generated
     if audio_path:
@@ -123,37 +142,68 @@ Suspect Profile:
 
 @tool
 def describe_scene_for_image(
-    location_name: Annotated[str, "Exact name of the location being searched"],
-    clue_summary: Annotated[
-        str,
-        "Short summary of clues at this location and why it matters in the case",
-    ],
-    current_narration: Annotated[
-        str,
-        "What you (the Game Master) are about to narrate about this search action"
-    ],
-    previous_searches: Annotated[
-        str,
-        "Brief log of any previous searches at this location in this session (or empty string)"
-    ],
-    desired_view: Annotated[
-        Optional[str],
-        'Optional: hint about camera view, e.g. "inside briefcase", "outside door, down the hallway", "overhead".',
-    ] = None,
+    location_name: Annotated[str, "Name of the location being searched (matches a SEARCHABLE LOCATION)"],
 ) -> str:
-    """Search a location and describe what the detective finds.
+    """Search a location and reveal what the detective finds there.
 
-    Returns a SHORT spoken narration (2-3 sentences, ~50 words) that the Game Master
-    should use VERBATIM as their response. Also includes a [SCENE_BRIEF{...}] marker
-    at the end for image generation.
-
-    The Game Master should NOT add any additional narration – just use this output directly.
+    Just provide the location_name - the tool looks up clue details internally.
+    
+    The image will focus on the CLUE ITSELF (not just the location):
+    - Close-up for documents, objects, and traces
+    - Wide shot only for environment/scene clues
+    
+    Returns narration + [SCENE_BRIEF{...}] marker for image generation.
+    Also includes [SEARCHED:location] and [CLUE_FOUND:id] markers.
     """
     logger.info("\n%s", "=" * 60)
     logger.info("DESCRIBE_SCENE_FOR_IMAGE TOOL CALLED")
     logger.info("Location: %s", location_name)
-    logger.info("Desired view: %s", desired_view or "None")
     logger.info("%s\n", "=" * 60)
+    
+    # Look up clue from game state (secure access)
+    from game.state_manager import get_game_state
+    state = get_game_state()
+    
+    clue = None
+    clue_description = "an empty area"
+    clue_id = None
+    clue_type = "environment"
+    # Use exact clue location for consistent image mapping
+    exact_location = location_name
+    
+    if state and state.mystery:
+        # Find matching clue by location (fuzzy match)
+        location_lower = location_name.lower()
+        for c in state.mystery.clues:
+            if c.location.lower() in location_lower or location_lower in c.location.lower():
+                clue = c
+                clue_description = c.description
+                clue_id = c.id
+                # Use the EXACT clue location name for consistent caching
+                exact_location = c.location
+                # Infer clue type from description
+                desc_lower = c.description.lower()
+                if any(w in desc_lower for w in ["letter", "note", "document", "paper", "file", "email", "message"]):
+                    clue_type = "document"
+                elif any(w in desc_lower for w in ["blood", "stain", "fingerprint", "footprint", "residue", "mark"]):
+                    clue_type = "trace"
+                elif any(w in desc_lower for w in ["room", "scene", "area", "space", "position"]):
+                    clue_type = "environment"
+                else:
+                    clue_type = "object"
+                logger.info("Matched location '%s' -> exact clue location '%s'", location_name, exact_location)
+                break
+    
+    logger.info("Found clue: %s (type: %s) at '%s'", clue_id or "none", clue_type, exact_location)
+    
+    # Determine optimal camera angle based on clue type
+    camera_guidance = {
+        "document": "extreme close-up, document filling frame, dramatic lighting from above",
+        "object": "close-up on the object, shallow depth of field, mysterious lighting",
+        "trace": "macro close-up, forensic detail visible, stark lighting",
+        "environment": "wide establishing shot, atmospheric, the scene tells a story"
+    }
+    suggested_camera = camera_guidance.get(clue_type, camera_guidance["object"])
 
     llm = ChatOpenAI(
         model="gpt-4o-mini",
@@ -165,48 +215,55 @@ def describe_scene_for_image(
         [
             (
                 "system",
-                """You are a Game Master narrator for a murder mystery game, combined with a concept artist.
+                """You are a Game Master narrator + concept artist for a murder mystery game.
 
 Your job is to:
-1. Write a SHORT spoken narration (2-3 sentences, ~50 words max) describing what the detective sees.
-2. Design a visual brief for an establishing shot image.
+1. Write SHORT spoken narration (2-3 sentences, ~50 words) about finding the CLUE
+2. Design an image brief that FOCUSES ON THE CLUE, not the location
+
+IMAGE COMPOSITION RULES:
+- The CLUE is the HERO of the image - it should be the visual focus
+- The location provides atmospheric BACKGROUND, not the main subject
+- Use the suggested camera angle for this clue type
+- Think like a film director: what shot reveals this evidence dramatically?
+
+CAMERA ANGLE GUIDANCE:
+- DOCUMENT clues: Extreme close-up, text partially visible, dramatic top lighting
+- OBJECT clues: Close-up with shallow depth of field, object isolated, moody lighting  
+- TRACE clues: Macro/forensic style, details crisp, clinical lighting
+- ENVIRONMENT clues: Wide shot, room tells a story, atmospheric
 
 NARRATION RULES:
-- ALWAYS write in ENGLISH, regardless of input language.
-- Be atmospheric and evocative, but VERY brief.
-- Focus on ONE key detail or clue the detective notices.
-- Do NOT give instructions, do NOT repeat the location name, do NOT summarise the case.
-- Write in second person ("You see...", "The room is...", "A faint smell of...").
+- ALWAYS write in ENGLISH
+- Focus on the DISCOVERY moment - what the detective notices
+- Be atmospheric but brief
+- Write in second person ("You notice...", "Something catches your eye...")
 
-Return STRICT JSON ONLY with these keys:
-  "spoken_narration": string (2-3 sentences, ~50 words max – this is what gets spoken aloud)
-  "location_name": string (echo the input)
-  "environment_description": string (1-2 sentences for the image, no people)
-  "camera_position": string (e.g. "wide shot from doorway", "close-up on desk")
-  "focal_objects": string (comma-separated key objects)
-  "prompt_hint": string (optional extra hint for image model)
+Return STRICT JSON ONLY:
+  "spoken_narration": string (2-3 sentences about finding this clue)
+  "location_name": string (for background context)
+  "clue_focus": string (what the image should focus on - the clue itself)
+  "camera_angle": string (specific shot type: close-up, macro, wide, etc.)
+  "lighting_mood": string (dramatic, forensic, atmospheric, etc.)
+  "background_hint": string (location details visible in background, blurred)
+  "prompt_hint": string (additional image generation hints)
 
 Do NOT wrap JSON in markdown. Return ONLY the JSON object.
 """,
             ),
             (
                 "human",
-                """LOCATION NAME:
-{location_name}
+                """LOCATION (background): {location_name}
 
-CLUE SUMMARY (for this location):
-{clue_summary}
+CLUE FOUND (image focus): {clue_description}
 
-CONTEXT FROM GAME MASTER (use to inform your narration):
-{current_narration}
+CLUE TYPE: {clue_type}
 
-PREVIOUS SEARCHES AT THIS LOCATION (if any):
-{previous_searches}
+SUGGESTED CAMERA: {suggested_camera}
 
-DESIRED VIEW (optional hint):
-{desired_view}
+PREVIOUS SEARCHES: {previous_searches}
 
-Write a short spoken narration and design ONE scene brief. Return ONLY the JSON object.""",
+Design an image that dramatically reveals this CLUE with the location as background context.""",
             ),
         ]
     )
@@ -214,11 +271,11 @@ Write a short spoken narration and design ONE scene brief. Return ONLY the JSON 
     chain = prompt | llm
     result = chain.invoke(
         {
-            "location_name": location_name,
-            "clue_summary": clue_summary,
-            "current_narration": current_narration,
-            "previous_searches": previous_searches or "",
-            "desired_view": desired_view or "",
+            "location_name": exact_location,  # Use exact clue location for consistent mapping
+            "clue_description": clue_description,
+            "clue_type": clue_type,
+            "suggested_camera": suggested_camera,
+            "previous_searches": "",  # Could be enhanced to check state.searched_locations
         }
     )
 
@@ -230,26 +287,35 @@ Write a short spoken narration and design ONE scene brief. Return ONLY the JSON 
         data = json.loads(raw_json)
         spoken = data.get("spoken_narration", "").strip()
         
-        # Build scene brief (without spoken_narration) for the marker
+        # Build scene brief focused on the CLUE (not just the location)
+        # Use exact_location for consistent image cache mapping
         scene_brief = {
-            "location_name": data.get("location_name", location_name),
-            "environment_description": data.get("environment_description", ""),
-            "camera_position": data.get("camera_position", ""),
-            "focal_objects": data.get("focal_objects", ""),
+            "location_name": exact_location,  # Exact clue location for cache consistency
+            "clue_focus": data.get("clue_focus", clue_description),
+            "camera_angle": data.get("camera_angle", suggested_camera),
+            "lighting_mood": data.get("lighting_mood", "dramatic"),
+            "background_hint": data.get("background_hint", ""),
             "prompt_hint": data.get("prompt_hint", ""),
         }
         scene_json = json.dumps(scene_brief)
         
-        # Return spoken narration + scene brief marker
-        # The GM should use this verbatim as its response
-        output = f"{spoken}\n\n[SCENE_BRIEF{scene_json}]"
-        logger.info("Scene tool output: spoken=%d chars, brief=%s", len(spoken), scene_brief.get("location_name"))
+        # Build output with all necessary markers (use exact_location for consistency)
+        markers = [f"[SEARCHED:{exact_location}]"]
+        if clue_id:
+            markers.append(f"[CLUE_FOUND:{clue_id}]")
+        
+        # Return spoken narration + markers + scene brief marker
+        output = f"{spoken}\n\n{' '.join(markers)}\n[SCENE_BRIEF{scene_json}]"
+        logger.info("Scene tool output: spoken=%d chars, clue=%s", len(spoken), clue_id or "none")
         return output
         
     except json.JSONDecodeError as e:
         logger.error("Failed to parse scene brief JSON: %s", e)
-        # Fallback: return the raw JSON as before
-        return raw_json
+        # Fallback with basic markers (use exact_location for consistency)
+        markers = f"[SEARCHED:{exact_location}]"
+        if clue_id:
+            markers += f" [CLUE_FOUND:{clue_id}]"
+        return f"You search {exact_location} carefully. {markers}"
 
 
 def enhance_text_for_speech(text: str) -> str:
@@ -594,12 +660,83 @@ def get_investigation_hint(
     return "INVESTIGATION HINTS:\n\n• " + "\n• ".join(hints)
 
 
+@tool
+def make_accusation(
+    suspect_name: Annotated[str, "The full name of the suspect being accused of the murder"],
+    evidence_summary: Annotated[str, "Brief summary of evidence or reasoning the player cited"] = "",
+) -> str:
+    """Make Accusation - Use when the player accuses a suspect of being the murderer.
+    
+    Call this tool when the player says things like:
+    - "I accuse X of the murder"
+    - "X is the killer" / "X did it"
+    - "I think X is the murderer"
+    - "It was X all along"
+    - "X must be guilty"
+    
+    This tool:
+    1. Checks if the accusation is correct against the actual murderer
+    2. Updates the game state (wrong accusations count, win/lose)
+    3. Returns a dramatic response for the Game Master to deliver
+    
+    IMPORTANT: Only call this for FINAL ACCUSATIONS, not casual suspicions.
+    If the player is just theorizing, respond conversationally instead.
+    """
+    logger.info("\n" + "=" * 60)
+    logger.info("🎯 MAKE_ACCUSATION TOOL CALLED")
+    logger.info("Accused: %s", suspect_name)
+    logger.info("Evidence: %s", evidence_summary[:200] if evidence_summary else "None cited")
+    logger.info("=" * 60 + "\n")
+    
+    # Generate dramatic accusation response with marker for parser
+    llm = ChatOpenAI(
+        model="gpt-4o-mini", 
+        temperature=0.8, 
+        api_key=os.getenv("OPENAI_API_KEY")
+    )
+    
+    prompt = ChatPromptTemplate.from_messages([
+        ("system", """You are the Game Master for a murder mystery game. The player has made a FORMAL ACCUSATION.
+
+Generate a DRAMATIC response that:
+1. Acknowledges their accusation with gravitas
+2. References any evidence they provided
+3. Builds tension before the reveal
+4. Ends on a cliffhanger (the actual result will be shown by the game)
+
+Keep it SHORT (2-3 sentences) for voice narration. Be theatrical!
+
+CRITICAL: You MUST include this exact marker in your response: [ACCUSATION:{suspect_name}]
+This marker is how the game system tracks the accusation. Put it at the start of your response."""),
+        ("human", """Player formally accuses: {suspect_name}
+Their reasoning: {evidence}
+
+Generate the dramatic Game Master response. Start with the [ACCUSATION:{suspect_name}] marker.""")
+    ])
+    
+    chain = prompt | llm
+    response = chain.invoke({
+        "suspect_name": suspect_name,
+        "evidence": evidence_summary or "Gut instinct - no specific evidence cited"
+    })
+    
+    result = response.content.strip()
+    
+    # Ensure the accusation marker is present (failsafe)
+    marker = f"[ACCUSATION:{suspect_name}]"
+    if marker not in result and "[ACCUSATION:" not in result:
+        result = f"{marker} {result}"
+    
+    logger.info("Accusation response generated: %s...", result[:150])
+    return result
+
+
 def get_all_tools() -> List:
     """Get all tools for the game master agent.
     
     Returns a list of all available tools, including RAG tools if available.
     """
-    tools = [interrogate_suspect, describe_scene_for_image]
+    tools = [interrogate_suspect, describe_scene_for_image, make_accusation]
     
     # Add RAG tools if memory is available
     memory = get_game_memory()

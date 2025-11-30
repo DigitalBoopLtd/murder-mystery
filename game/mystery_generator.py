@@ -657,13 +657,22 @@ def assign_voices_to_mystery(mystery: Mystery) -> Mystery:
 def prepare_game_prompt(
     mystery: Mystery, tone_instruction: Optional[str] = None
 ) -> str:
-    """Prepare the system prompt for the game master."""
+    """Prepare the system prompt for the game master.
+    
+    IMPORTANT: This prompt is carefully structured to HIDE information
+    the player hasn't discovered yet. The GM only sees:
+    - Clue LOCATIONS (not descriptions) - so they know where to direct searches
+    - Suspect public info (role, personality, alibi)
+    - Suspect secrets are accessed by tools internally, NOT shown here
+    """
     suspect_list = "\n".join([f"- {s.name} ({s.role})" for s in mystery.suspects])
-    clue_list = "\n".join(
-        [f'- "{c.id}": {c.description} [Location: {c.location}]' for c in mystery.clues]
+    
+    # Only show locations, NOT clue descriptions (to prevent early reveals)
+    location_list = "\n".join(
+        [f'- "{c.location}" (searchable)' for c in mystery.clues]
     )
 
-    # Build suspect profiles with initial emotional state (game start)
+    # Build suspect profiles WITHOUT secrets (secrets accessed by tool internally)
     suspect_profiles = "\n".join(
         [
             f"""
@@ -671,18 +680,14 @@ def prepare_game_prompt(
 Role: {s.role}
 Personality: {s.personality}
 Alibi: "{s.alibi}"
-Secret: {s.secret}
-Will share if asked: {s.clue_they_know}
-Guilty: {s.isGuilty}
-Voice ID: {s.voice_id or 'None'}{f'''
-Murder details: Used {mystery.weapon} because {mystery.motive}''' if s.isGuilty else ''}
+Voice ID: {s.voice_id or 'None'}
 
-EMOTIONAL STATE (initial - pass to tool):
+EMOTIONAL STATE (initial):
 - Trust: 50%
 - Nervousness: 30%
 - Contradictions caught: 0
 
-CONVERSATION HISTORY (pass to tool):
+CONVERSATION HISTORY:
 No previous conversations."""
             for s in mystery.suspects
         ]
@@ -704,66 +709,61 @@ No previous conversations."""
 ## VICTIM
 {mystery.victim.name}: {mystery.victim.background}
 
-## SUSPECTS
+## SUSPECTS (public info only)
 {suspect_list}
 
-## CLUES (reveal when player searches correct location)
-{clue_list}
+## SEARCHABLE LOCATIONS (clue details hidden until searched)
+{location_list}
 
-## SUSPECT PROFILES (use when calling Interrogate Suspect tool)
+## SUSPECT PROFILES (for interrogate_suspect tool)
 {suspect_profiles}
 
 ## YOUR ROLE
-1. TALK to suspect → MUST call "interrogate_suspect" tool with:
-   - name: Suspect's full name
-   - profile: Include ALL of the following in the profile string:
-     * Static info (role, personality, alibi, secret, clue_they_know, isGuilty)
-     * EMOTIONAL STATE (trust %, nervousness %, contradictions caught)
-     * CONVERSATION HISTORY (all previous exchanges with this suspect)
-     * BEHAVIORAL INSTRUCTIONS (if any - based on emotional state)
-   - question: The player's question/statement
-   - voice_id: The suspect's voice ID for audio
-2. SEARCH location → Call the "describe_scene_for_image" tool and USE ITS OUTPUT DIRECTLY.
-   - Pass:
-       * location_name: the exact clue location name (e.g. \"Lab 1\", \"Security Mainframe\")
-       * clue_summary: short summary of clues tied to that location
-       * current_narration: brief context about what the player is looking for
-       * previous_searches: brief summary of past searches at this location (or empty)
-       * desired_view: optional hint like \"inside briefcase\", \"wide shot from doorway\"
-   - The tool returns a SHORT spoken narration + a [SCENE_BRIEF{{...}}] marker.
-   - USE THE TOOL OUTPUT AS YOUR RESPONSE – do NOT rewrite or expand it.
-   - This keeps location responses concise for voice narration.
-3. ACCUSATION → Check if correct with evidence
 
-## RAG MEMORY TOOLS (use to enhance gameplay)
+CRITICAL RULE: You can ONLY reveal information the player has EARNED through investigation!
+- Clues are revealed when the player SEARCHES the correct location
+- Suspect secrets emerge through INTERROGATION, not narration  
+- Do NOT summarize case details the player hasn't discovered
+
+### 1. TALKING TO SUSPECTS
+When a player wants to talk to someone:
+- Call "interrogate_suspect" with:
+  * suspect_name: full name
+  * player_question: what the player said
+  * emotional_context: current trust/nervousness and conversation summary
+- The tool has secure access to suspect secrets and will roleplay correctly
+- Do NOT reveal secrets in your narration - let them emerge through dialogue
+
+### 2. SEARCHING LOCATIONS
+When a player searches somewhere:
+- Call "describe_scene_for_image" with just the location_name
+- The tool looks up clues and generates narration + image brief
+- USE THE TOOL OUTPUT VERBATIM (includes all necessary markers)
+
+### 3. ACCUSATIONS
+When player formally accuses someone:
+- Call "make_accusation" with suspect name
+- Only for FINAL accusations, not theorizing
+
+## RAG MEMORY TOOLS
 - "search_past_statements" → When player references something said earlier
-- "find_contradictions" → When checking if a suspect contradicted themselves
+- "find_contradictions" → When checking if a suspect contradicted themselves  
 - "get_cross_references" → When confronting a suspect with what others said
-
-CRITICAL: For ANY talk/interrogate request, you MUST use the interrogate_suspect tool.
-CRITICAL: Always include the FULL profile with emotional state and conversation history!
 
 ## GAME RULES
 - 3 wrong accusations = lose
 - Win = name murderer + provide evidence  
-- Never reveal murderer until correct accusation
-
-## SECRET (NEVER REVEAL)
-Murderer: {mystery.murderer}
-Weapon: {mystery.weapon}
-Motive: {mystery.motive}
+- NEVER reveal murderer, weapon, or motive until correct accusation
+- NEVER reveal clue details until player searches that location
+- NEVER reveal suspect secrets - let them emerge through interrogation
 
 ## RESPONSE STYLE - VERY IMPORTANT
-The player can already see suspects, locations, objectives, and found clues in sidebar cards on their screen.
-- ALWAYS respond in ENGLISH, regardless of what language the player uses.
-- Do NOT list out all suspects or their roles
-- Do NOT list all locations to search  
-- Do NOT repeat the case summary or victim info
-- Keep responses focused, atmospheric, and conversational.
-- For TALK / INTERROGATION responses: 1 short paragraph (2–3 sentences, ~60–80 words).
-- For SEARCH / location responses:
-  * HARD LIMIT: 2–3 sentences, ~50 words max.
-  * Just describe what the detective SEES and ONE key clue or detail.
+The player can see suspects, locations, and found clues in sidebar cards.
+- ALWAYS respond in ENGLISH
+- Do NOT list out suspects, locations, or case summary
+- Keep responses focused, atmospheric, and conversational
+- TALK responses: 1 short paragraph (~60-80 words)
+- SEARCH responses: 2-3 sentences (~50 words max) - just what they SEE
   * Do NOT summarise the case, do NOT give instructions, do NOT repeat the location name.
   * Example: "Dust motes drift through a shaft of light from the cracked window. A half-empty coffee mug sits beside a laptop, its screen frozen on an unfinished email."
 - For any other narration: 1 short paragraph (2–3 sentences, ~60–80 words).

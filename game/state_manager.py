@@ -70,6 +70,34 @@ def _get_scene_mood_for_state(state: GameState) -> str:
     return "mysterious"
 
 
+# Thread-local storage for current session context
+_current_session_id: Optional[str] = None
+
+
+def set_current_session(session_id: str):
+    """Set the current session ID for tool context."""
+    global _current_session_id
+    _current_session_id = session_id
+
+
+def get_game_state() -> Optional[GameState]:
+    """Get the current game state for tool access.
+    
+    Returns the state for the current session, or the most recent state if none set.
+    Tools use this to securely access game data without exposing it in prompts.
+    """
+    # First try the explicitly set current session
+    if _current_session_id and _current_session_id in game_states:
+        return game_states[_current_session_id]
+    
+    # Fall back to most recent state (usually just one active game)
+    if game_states:
+        # Return the most recently accessed state
+        return list(game_states.values())[-1]
+    
+    return None
+
+
 def get_or_create_state(session_id: str) -> GameState:
     """Get or create game state for session."""
     if session_id not in game_states:
