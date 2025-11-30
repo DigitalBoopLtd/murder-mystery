@@ -44,6 +44,67 @@ CSS_CENTER_STAGE = """/* ========== MAIN LAYOUT ========== */
         display: block !important;
         margin-top: 16px;
     }
+
+    /* Tabs: icon-only labels on mobile to save space */
+    .main-tabs [role="tab"],
+    .info-tabs [role="tab"] {
+        font-size: 0 !important;          /* hide text label */
+        padding-inline: 8px !important;
+        min-width: 0 !important;
+    }
+
+    .main-tabs [role="tab"]::before,
+    .info-tabs [role="tab"]::before {
+        font-size: 18px !important;
+        line-height: 1;
+        display: inline-block;
+    }
+
+    /* Main top-level tabs icons by position */
+    .main-tabs [role="tab"]:nth-of-type(1)::before { /* Game */
+        content: "🎮";
+    }
+    .main-tabs [role="tab"]:nth-of-type(2)::before { /* Case File */
+        content: "📋";
+    }
+    .main-tabs [role="tab"]:nth-of-type(3)::before { /* Case Board */
+        content: "📋";
+    }
+    .main-tabs [role="tab"]:nth-of-type(4)::before { /* Timeline */
+        content: "🕐";
+    }
+    .main-tabs [role="tab"]:nth-of-type(5)::before { /* Settings */
+        content: "🔑";
+    }
+    .main-tabs [role="tab"]:nth-of-type(6)::before { /* Debug */
+        content: "🐞";
+    }
+
+    /* Bottom info tabs icons by position */
+    .info-tabs [role="tab"]:nth-of-type(1)::before { /* Dashboard */
+        content: "📊";
+    }
+    .info-tabs [role="tab"]:nth-of-type(2)::before { /* Case Details */
+        content: "🧳";
+    }
+    .info-tabs [role="tab"]:nth-of-type(3)::before { /* Suspects */
+        content: "🎭";
+    }
+    .info-tabs [role="tab"]:nth-of-type(4)::before { /* Locations */
+        content: "📍";
+    }
+    .info-tabs [role="tab"]:nth-of-type(5)::before { /* Clues Found */
+        content: "🔎";
+    }
+    .info-tabs [role="tab"]:nth-of-type(6)::before { /* Accusations */
+        content: "⚖️";
+    }
+    .info-tabs [role="tab"]:nth-of-type(7)::before { /* Timeline */
+        content: "🕐";
+    }
+    .info-tabs [role="tab"]:nth-of-type(8)::before { /* Case Board */
+        content: "📋";
+    }
     
     /* Make the CRT stage more compact on mobile */
     .center-column > .gr-group {

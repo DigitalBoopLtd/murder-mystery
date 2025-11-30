@@ -32,8 +32,8 @@ def create_ui_components() -> dict:
     # Inject CSS and favicon
     gr.HTML(f"<style>{RETRO_CSS}</style>{favicon_html}")
 
-    # Session state
-    session_id = gr.State(lambda: str(uuid.uuid4()))
+    # Session state - stable UUID string per browser session
+    session_id = gr.State(str(uuid.uuid4()))
 
     # ====== TITLE BAR ======
     with gr.Row(elem_classes="title-bar"):
@@ -42,7 +42,7 @@ def create_ui_components() -> dict:
         )
 
     # ====== MAIN LAYOUT AND DEBUG ======
-    with gr.Tabs(elem_classes="main-tabs"):
+    with gr.Tabs(elem_classes="main-tabs") as main_tabs:
         # ----- GAME TAB (DEFAULT) -----
         with gr.Tab("Game"):
             # ====== MAIN LAYOUT ======
@@ -183,11 +183,6 @@ def create_ui_components() -> dict:
                         
                         # Buttons row
                         with gr.Row(elem_classes="wizard-buttons"):
-                            refresh_voices_btn = gr.Button(
-                                "↻ Refresh Voices",
-                                elem_classes="wizard-secondary-btn",
-                                size="sm",
-                            )
                             start_btn = gr.Button(
                                 "🚀 START MYSTERY",
                                 elem_classes="start-button wizard-primary-btn",
@@ -438,6 +433,7 @@ def create_ui_components() -> dict:
     # Return all components as a dictionary
     return {
         "session_id": session_id,
+        "main_tabs": main_tabs,
         "speaker_html": speaker_html,
         "audio_output": audio_output,
         "portrait_image": portrait_image,
@@ -481,7 +477,6 @@ def create_ui_components() -> dict:
         "elevenlabs_key_status": elevenlabs_key_status,
         "save_keys_btn": save_keys_btn,
         "keys_status_html": keys_status_html,
-        "refresh_voices_btn": refresh_voices_btn,
         # Tabs for select events (lazy portrait loading)
         "info_tabs": info_tabs,
         "suspects_tab": suspects_tab,

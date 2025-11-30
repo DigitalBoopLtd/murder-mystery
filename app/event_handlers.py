@@ -167,6 +167,43 @@ def on_start_game(sess_id, progress=gr.Progress()):
     sess_id = normalize_session_id(sess_id)
     state = get_or_create_state(sess_id)
 
+    # Before doing anything expensive, make sure we have the keys we need.
+    # This prevents confusing OpenAI auth errors when the user hasn't set a key.
+    can_play, missing = has_required_keys(sess_id)
+    if not can_play:
+        # Use the status tracker overlay for a clear, in-world message.
+        missing_str = ", ".join(missing)
+        progress(0, desc="⚠️ Missing API keys")
+        progress(
+            1.0,
+            desc=f"⚠️ Cannot start mystery – need: {missing_str}. "
+                 "Open the 🔑 Settings tab to enter your keys.",
+        )
+        # Do NOT mark the game as started; leave wizard visible.
+        # Return no-op updates for all outputs.
+        return [
+            gr.update(),  # game_started_marker
+            gr.update(),  # speaker_html
+            gr.update(),  # audio_output
+            gr.update(),  # portrait_image
+            gr.update(),  # input_row
+            gr.update(),  # victim_scene_html
+            gr.update(),  # suspects_list_html
+            gr.update(),  # locations_html
+            gr.update(),  # clues_html
+            gr.update(),  # accusations_html
+            gr.update(),  # dashboard_html_tab
+            gr.update(),  # victim_scene_html_tab
+            gr.update(),  # suspects_list_html_tab
+            gr.update(),  # locations_html_tab
+            gr.update(),  # clues_html_tab
+            gr.update(),  # accusations_html_tab
+            gr.update(),  # timeline_html_tab
+            gr.update(),  # case_board_plot
+            gr.update(),  # case_board_plot_main
+            gr.update(),  # mystery_check_timer
+        ]
+
     # Stage descriptions for progress bar
     stage_descriptions = {
         "voices": "🎭 Preparing voice actors...",
@@ -1326,4 +1363,17 @@ def _format_key_status(status: str) -> str:
         return f'<span class="key-status key-ok">{status}</span>'
     else:  # Environment
         return f'<span class="key-status key-env">{status}</span>'
+
+
+def choose_initial_tab(sess_id: str):
+    """On page load, pick which main tab should be active.
+
+    If required keys are missing, send player to the 🔑 Settings tab first.
+    Otherwise, land on the Game tab.
+    """
+    sess_id = normalize_session_id(sess_id)
+    can_play, _missing = has_required_keys(sess_id)
+    # These values must match the tab labels defined in ui_components.py
+    target = "Game" if can_play else "🔑 Settings"
+    return gr.update(value=target)
 

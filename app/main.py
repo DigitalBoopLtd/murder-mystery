@@ -42,6 +42,7 @@ from app.event_handlers import (
     on_refresh_suspects_click,
     on_save_api_keys,
     check_api_keys_status,
+    choose_initial_tab,
 )
 
 # Logging - set up early
@@ -150,6 +151,7 @@ def create_app():
 
         # Extract components for easier access
         session_id = components["session_id"]
+        main_tabs = components["main_tabs"]
         speaker_html = components["speaker_html"]
         audio_output = components["audio_output"]
         portrait_image = components["portrait_image"]
@@ -193,7 +195,6 @@ def create_app():
         elevenlabs_key_status = components["elevenlabs_key_status"]
         save_keys_btn = components["save_keys_btn"]
         keys_status_html = components["keys_status_html"]
-        refresh_voices_btn = components["refresh_voices_btn"]
         # Tabs and buttons for lazy portrait loading
         info_tabs = components["info_tabs"]
         refresh_suspects_btn = components["refresh_suspects_btn"]
@@ -291,15 +292,14 @@ def create_app():
             inputs=[session_id],
             outputs=[openai_key_status, elevenlabs_key_status, keys_status_html],
         )
-        
-        # Note: Voices are fetched on-demand when START is clicked.
-        # The refresh button allows manual refresh before starting.
-        getattr(refresh_voices_btn, "click")(
-            fn=on_refresh_voices,
-            inputs=[session_id],
-            outputs=None,
-        )
 
+        # Decide which main tab should be active on load (API Keys first if missing)
+        getattr(app, "load")(
+            fn=choose_initial_tab,
+            inputs=[session_id],
+            outputs=[main_tabs],
+        )
+        
         # Start game - show game_started_marker (CSS sibling selector hides wizard)
         getattr(start_btn, "click")(
             fn=on_start_game,

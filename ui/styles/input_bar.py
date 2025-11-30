@@ -76,6 +76,7 @@ CSS_INPUT_BAR = """/* ========== STICKY RECORD BUTTON ========== */
     cursor: pointer !important;
     transition: transform 0.15s ease-out !important;
     margin: 0 auto !important;
+    font-size: 0 !important; /* hide built-in text like 'Record' */
 }
 
 #sticky-record-bar button.record-button:hover,
@@ -91,20 +92,49 @@ CSS_INPUT_BAR = """/* ========== STICKY RECORD BUTTON ========== */
     border-color: rgba(255, 120, 120, 0.8) !important;
 }
 
-/* Hide extra control buttons (keep only main record/stop) */
-.stop-button,
+/* Hide extra control buttons (keep record + stop) */
 .pause-button,
 #stop-paused,
 .resume-button {
     display: none !important;
 }
 
-/* Use the built-in microphone / stop SVG icon, but scale it down a bit */
-#sticky-record-bar button svg {
-    width: 18px !important;
-    height: 18px !important;
-    color: #000000 !important;
-    fill: currentColor !important;
+/* Stop button styling */
+#sticky-record-bar .stop-button {
+    position: relative !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    width: 40px !important;
+    height: 40px !important;
+    min-width: 40px !important;
+    min-height: 40px !important;
+    max-width: 40px !important;
+    max-height: 40px !important;
+    border-radius: 50% !important;
+    background: #e74c3c !important;
+    border: 2px solid rgba(255, 255, 255, 0.4) !important;
+    cursor: pointer !important;
+    margin-left: 10px !important;
+    font-size: 0 !important;  /* hide 'Stop' text */
+}
+
+#sticky-record-bar .stop-button::before {
+    content: "■";
+    font-size: 14px;
+    line-height: 1;
+    color: #000000;
+}
+
+/* Use any custom microphone icon via pseudo-element (optional) */
+/* If you want a mic emoji, uncomment the content line below. */
+#sticky-record-bar button.record-button::before,
+#sticky-record-bar button[aria-label*="ecord"]::before,
+#sticky-record-bar button:not(.icon-button):not(.settings-button)::before {
+    /* content: "🎤"; */
+    font-size: 18px;
+    line-height: 1;
+    color: #000000;
 }
 
 /* Mobile - slightly larger button + icon */
@@ -120,9 +150,19 @@ CSS_INPUT_BAR = """/* ========== STICKY RECORD BUTTON ========== */
         max-height: 64px !important;
     }
     
-    #sticky-record-bar button svg {
-        width: 20px !important;
-        height: 20px !important;
+    #sticky-record-bar button.record-button::before,
+    #sticky-record-bar button[aria-label*="ecord"]::before,
+    #sticky-record-bar button:not(.icon-button):not(.settings-button)::before {
+        font-size: 20px;
+    }
+
+    #sticky-record-bar .stop-button {
+        width: 48px !important;
+        height: 48px !important;
+        min-width: 48px !important;
+        min-height: 48px !important;
+        max-width: 48px !important;
+        max-height: 48px !important;
     }
 }
 

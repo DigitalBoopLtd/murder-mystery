@@ -642,19 +642,30 @@ You may have said something about this before - stay consistent:
             logger.info("📅 [TIMELINE] Added alibi claim for %s: %s", suspect.name, alibi.location_claimed)
         
         # Add witness statements to timeline
-        if suspect.witness_statements:
-            for ws in suspect.witness_statements:
-                if ws.claim and suspect_state and len(suspect_state.conversations) <= 2:
-                    # Add witness sighting on early conversations
-                    state.add_timeline_event(
-                        time_slot=ws.time_of_sighting or "Around 9 PM",
-                        event_type="witness_sighting",
-                        description=f"{suspect.name} says: \"{ws.claim}\"",
-                        suspect_name=ws.subject,
-                        source=f"Witness: {suspect.name}",
-                        is_verified=ws.is_truthful,
-                    )
-                    logger.info("📅 [TIMELINE] Added witness sighting by %s about %s", suspect.name, ws.subject)
+        # NOTE:
+        # Previously we pushed ALL witness_statements here as soon as you talked
+        # to a suspect, even if the GM hadn't actually mentioned them yet.
+        # That made it look like characters had "already revealed" information
+        # the player never heard, which is confusing and spoiler‑y.
+        #
+        # For now we disable auto‑logging of witness statements. They'll only
+        # show up in the timeline when we explicitly log them from the
+        # conversation flow (a future refinement can detect when a specific
+        # claim was actually spoken this turn).
+        #
+        # if suspect.witness_statements:
+        #     for ws in suspect.witness_statements:
+        #         if ws.claim and suspect_state and len(suspect_state.conversations) <= 2:
+        #             # Add witness sighting on early conversations
+        #             state.add_timeline_event(
+        #                 time_slot=ws.time_of_sighting or "Around 9 PM",
+        #                 event_type="witness_sighting",
+        #                 description=f"{suspect.name} says: \"{ws.claim}\"",
+        #                 suspect_name=ws.subject,
+        #                 source=f"Witness: {suspect.name}",
+        #                 is_verified=ws.is_truthful,
+        #             )
+        #             logger.info("📅 [TIMELINE] Added witness sighting by %s about %s", suspect.name, ws.subject)
 
     # =========================================================================
     # PERFORMANCE SUMMARY
