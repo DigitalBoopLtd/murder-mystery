@@ -2,6 +2,14 @@
 
 Uses HuggingFace Inference API with fal-ai provider for fast generation.
 Styled to look like 90s point-and-click adventure games (Monkey Island, Day of the Tentacle, Gabriel Knight, etc.)
+
+Supports two modes:
+1. Direct mode (default): Uses prompt_enhancer directly + HuggingFace API
+2. MCP mode (USE_MCP=true): Uses MCP server for parallel image generation
+
+Prompts are enhanced using LLM (GPT-4o-mini) to generate detailed visual descriptions
+optimized for Z-Image-Turbo, which works best with long, detailed prompts and ignores
+negative prompts (guidance_scale=0.0).
 """
 
 import os
@@ -9,39 +17,46 @@ import re
 import logging
 import hashlib
 import tempfile
+import asyncio
 from typing import Optional, Dict
 from dataclasses import dataclass
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from huggingface_hub import InferenceClient
+
+from services.prompt_enhancer import (
+    enhance_character_prompt,
+    enhance_scene_prompt,
+    enhance_title_card_prompt,
+)
+
+# Check if MCP mode is enabled
+USE_MCP = os.getenv("USE_MCP", "false").lower() == "true"
+
+# Initialize MCP variables (will be set if MCP is available)
+MCP_AVAILABLE = False
+MCPImageClient = None
+mcp_generate_portrait = None
+mcp_generate_scene = None
+
+if USE_MCP:
+    try:
+        from services.mcp_image_client import (
+            MCPImageClient as _MCPImageClient,
+            generate_portrait_sync as _mcp_generate_portrait,
+            generate_scene_sync as _mcp_generate_scene,
+        )
+        MCPImageClient = _MCPImageClient
+        mcp_generate_portrait = _mcp_generate_portrait
+        mcp_generate_scene = _mcp_generate_scene
+        MCP_AVAILABLE = True
+    except ImportError:
+        USE_MCP = False
 
 logger = logging.getLogger(__name__)
 
 # Directory for caching generated images
 IMAGE_CACHE_DIR = os.path.join(tempfile.gettempdir(), "murder_mystery_images")
 os.makedirs(IMAGE_CACHE_DIR, exist_ok=True)
-
-# Art style prompt suffix for consistent 90s adventure game aesthetic
-ART_STYLE = """
-Style: 1990s point-and-click adventure game art, like Monkey Island, Day of the Tentacle or Gabriel Knight.
-Painterly pixel art aesthetic, slightly exaggerated features, rich colors, 
-dramatic lighting, hand-painted look, vintage video game portrait.
-Framing: varied close-up and medium shots — sometimes head-and-shoulders, sometimes waist-up or three-quarter body.
-Camera: mix of straight-on, three-quarter, and slight profile angles; character not always perfectly centered, occasional head tilt or lean.
-Background: clear sense of location behind the character, simplified but colorful, not just a flat color.
-No text, no words, no letters, no writing, no labels, no captions.
-"""
-
-SCENE_ART_STYLE = """
-Style: 1990s point-and-click adventure game background art, like Monkey Island, Day of the Tentacle, Gabriel Knight, or The Dig.
-Painterly digital art with rich saturated colors and dramatic chiaroscuro lighting.
-Hand-painted aesthetic with visible brushwork texture, slightly stylized proportions.
-Cinematic composition with clear focal point, atmospheric depth and layered elements.
-Moody and mysterious atmosphere with environmental storytelling details.
-First-person detective POV, surveying the scene or a close-up of a key object.  Do not show the detective in the image.
-Include period-appropriate props, furniture, and environmental details that tell a story.
-People: follow the scene description carefully — some shots may be empty, others may show a few background characters.
-No text, no words, no letters, no writing, no labels, no captions, no signage, no signs.
-"""
 
 
 @dataclass
@@ -132,15 +147,18 @@ class ImageService:
             logger.warning("Image client not available")
             return None
 
-        # Build character description prompt
         gender_str = gender if gender else "person"
 
-        prompt = f"""Portrait of {name}, a {gender_str} who is a {role}.
-Personality: {personality}.
-{f'Setting: {setting_context}.' if setting_context else ''}
-{ART_STYLE}
-No text, no words, no letters, no writing, no labels, no captions, no name tags.
-"""
+        # Use LLM to enhance prompt with detailed visual description
+        prompt = enhance_character_prompt(
+            name=name,
+            role=role,
+            personality=personality,
+            gender=gender_str,
+            setting=setting_context or ""
+        )
+        
+        logger.info(f"[IMG] Enhanced portrait prompt for {name}: {len(prompt)} chars")
 
         cache_key = self._get_cache_key(prompt)
 
@@ -151,45 +169,15 @@ No text, no words, no letters, no writing, no labels, no captions, no name tags.
 
         try:
             logger.info(f"Generating portrait for {name}...")
-            # Comprehensive negative prompt to prevent any text in images
-            negative_prompt = (
-                "text, words, letters, writing, labels, captions, "
-                "name tags, titles, signage, signs, typography, subtitles, "
-                "text overlay, watermark, logo, alphabet, symbols, "
-                "numbers, digits, text on image, written text, printed text, "
-                "handwritten text, calligraphy, font, typeface, lettering, "
-                "speech bubble text, comic text, subtitle text, caption text, title text, "
-                "nameplate, placard, signboard, billboard, poster text, label text, "
-                "badge text, tag text, watermark text, copyright text, signature text"
-            )
 
-            # Use Tongyi-MAI/Z-Image-Turbo for fast image generation
-            models_to_try = [
-                "Tongyi-MAI/Z-Image-Turbo",
-            ]
-            
-            image = None
-            last_error = None
-            for model in models_to_try:
-                try:
-                    logger.info(f"Trying model: {model}")
-                    # Force 16:9 aspect ratio for all portraits
-                    image = self.client.text_to_image(
-                        prompt,
-                        model=model,
-                        negative_prompt=negative_prompt,
-                        width=1024,
-                        height=576,
-                    )
-                    logger.info(f"Successfully generated with {model}")
-                    break
-                except Exception as e:
-                    logger.warning(f"Model {model} failed: {e}")
-                    last_error = e
-                    continue
-            
-            if image is None:
-                raise Exception(f"All models failed. Last error: {last_error}")
+            # Z-Image-Turbo ignores negative prompts (guidance_scale=0.0)
+            # so we rely entirely on the enhanced positive prompt
+            image = self.client.text_to_image(
+                prompt,
+                model="Tongyi-MAI/Z-Image-Turbo",
+                width=1024,
+                height=576,
+            )
 
             path = self._save_to_cache(image, cache_key)
             logger.info(f"Generated portrait for {name}: {path}")
@@ -221,85 +209,22 @@ No text, no words, no letters, no writing, no labels, no captions, no name tags.
             logger.warning("Image client not available")
             return None
 
-        # Extract era/period from setting description for period-accurate props
-        era_hints = []
-        setting_lower = setting_description.lower()
-        if any(x in setting_lower for x in ["1920", "20s", "prohibition", "jazz age", "gatsby"]):
-            era_hints.append("1920s Art Deco era")
-        elif any(x in setting_lower for x in ["1930", "30s", "depression", "noir"]):
-            era_hints.append("1930s noir era")
-        elif any(x in setting_lower for x in ["1940", "40s", "war", "wartime"]):
-            era_hints.append("1940s wartime era")
-        elif any(x in setting_lower for x in ["1950", "50s", "atomic", "post-war"]):
-            era_hints.append("1950s mid-century era")
-        elif any(x in setting_lower for x in ["victorian", "1880", "1890", "19th century"]):
-            era_hints.append("Victorian era, gas lamps and ornate furniture")
-        elif any(x in setting_lower for x in ["medieval", "castle", "manor"]):
-            era_hints.append("Medieval or Gothic era")
-        elif any(x in setting_lower for x in ["modern", "contemporary", "2000", "2010", "2020"]):
-            era_hints.append("Modern contemporary era")
-        
-        # Determine if likely interior or exterior
-        location_lower = location_name.lower()
-        is_interior = any(x in location_lower for x in [
-            "room", "office", "study", "library", "kitchen", "bedroom", "bathroom",
-            "hall", "chamber", "tent", "workshop", "shed", "cabin", "suite",
-            "parlor", "lounge", "bar", "cellar", "attic", "closet", "pantry"
-        ])
-        is_exterior = any(x in location_lower for x in [
-            "garden", "yard", "street", "dock", "pier", "forest", "woods",
-            "beach", "park", "courtyard", "terrace", "balcony", "roof", "path"
-        ])
-        
-        # Build rich descriptive prompt
-        prompt_parts = [
-            f"Scene: {location_name}",
-        ]
-        
-        # Add era context
-        if era_hints:
-            prompt_parts.append(f"Era: {era_hints[0]}")
-        
-        # Add setting context
-        prompt_parts.append(f"Setting: {setting_description}")
-        
-        # Add interior/exterior guidance
-        if is_interior:
-            prompt_parts.append("Interior scene with detailed furnishings, props, and atmospheric lighting through windows or lamps.")
-        elif is_exterior:
-            prompt_parts.append("Exterior scene with environmental details, natural lighting, and atmospheric weather effects.")
-        else:
-            prompt_parts.append("Atmospheric scene with period-appropriate details and dramatic lighting.")
-        
-        # Add mood
-        mood_descriptions = {
-            "mysterious": "Mysterious and foreboding atmosphere with deep shadows and hidden corners",
-            "tense": "Tense atmosphere, something feels wrong, unsettling lighting",
-            "peaceful": "Deceptively peaceful atmosphere, calm before the storm",
-            "dark": "Dark and ominous, danger lurking in shadows",
-            "dramatic": "Dramatically lit with strong contrast, theatrical staging",
-        }
-        mood_desc = mood_descriptions.get(mood, f"{mood} atmosphere")
-        prompt_parts.append(f"Mood: {mood_desc}")
-        
-        # Add context from game response if provided
+        # Clean context if provided
+        clean_context = ""
         if context:
-            # Clean context - remove markdown and emotional tags
             clean_context = context.replace("**", "").replace("*", "")
             clean_context = re.sub(r"\[.*?\]", "", clean_context)  # Remove [excited], etc.
-            # Extract descriptive phrases about the location
-            clean_context = clean_context[:300].strip()
-            if clean_context:
-                prompt_parts.append(f"Scene details: {clean_context}")
-        
-        # Add style guide
-        prompt_parts.append(SCENE_ART_STYLE)
-        prompt_parts.append(
-            "No text, no words, no letters, no writing, no labels, "
-            "no captions, no signage, no signs, no people, no characters."
+            clean_context = clean_context[:500].strip()
+
+        # Use LLM to enhance prompt with detailed visual description
+        prompt = enhance_scene_prompt(
+            location=location_name,
+            setting=setting_description,
+            mood=mood,
+            context=clean_context
         )
         
-        prompt = "\n".join(prompt_parts)
+        logger.info(f"[IMG] Enhanced scene prompt for {location_name}: {len(prompt)} chars")
 
         cache_key = self._get_cache_key(prompt)
 
@@ -310,46 +235,16 @@ No text, no words, no letters, no writing, no labels, no captions, no name tags.
             return cached
 
         try:
-            logger.info(f"Generating scene for {location_name} with context...")
-            # Comprehensive negative prompt to prevent any text in images
-            negative_prompt = (
-                "text, words, letters, writing, labels, captions, signage, signs, typography, "
-                "subtitles, text overlay, watermark, logo, street signs, shop signs, billboards, "
-                "alphabet, characters, symbols, numbers, digits, text on image, written text, "
-                "printed text, handwritten text, calligraphy, font, typeface, lettering, "
-                "inscription, engraving, text banner, speech bubble text, comic text, "
-                "subtitle text, caption text, title text, nameplate, placard, signboard, "
-                "billboard text, poster text, label text, badge text, tag text, "
-                "watermark text, copyright text, signature text, store signs, "
-                "building signs, door signs, window signs, neon signs with text"
+            logger.info(f"Generating scene for {location_name}...")
+
+            # Z-Image-Turbo ignores negative prompts (guidance_scale=0.0)
+            # so we rely entirely on the enhanced positive prompt
+            image = self.client.text_to_image(
+                prompt,
+                model="Tongyi-MAI/Z-Image-Turbo",
+                width=1024,
+                height=576,
             )
-            # Use Tongyi-MAI/Z-Image-Turbo for fast image generation
-            models_to_try = [
-                "Tongyi-MAI/Z-Image-Turbo",
-            ]
-            
-            image = None
-            last_error = None
-            for model in models_to_try:
-                try:
-                    logger.info(f"Trying model: {model}")
-                    # Force 16:9 aspect ratio for all location scenes
-                    image = self.client.text_to_image(
-                        prompt,
-                        model=model,
-                        negative_prompt=negative_prompt,
-                        width=1024,
-                        height=576,
-                    )
-                    logger.info(f"Successfully generated with {model}")
-                    break
-                except Exception as e:
-                    logger.warning(f"Model {model} failed: {e}")
-                    last_error = e
-                    continue
-            
-            if image is None:
-                raise Exception(f"All models failed. Last error: {last_error}")
 
             path = self._save_to_cache(image, cache_key)
             logger.info(f"Generated scene for {location_name}: {path}")
@@ -365,14 +260,16 @@ No text, no words, no letters, no writing, no labels, no captions, no name tags.
         setting: str,
         victim_name: Optional[str] = None,
         victim_background: Optional[str] = None,
+        fast_mode: bool = False,
     ) -> Optional[str]:
         """Generate an atmospheric opening scene image for the mystery.
 
         Args:
             title: Mystery title (used only as semantic context, not rendered as text)
             setting: Setting description for the scene
-            victim_name: Name of the murder victim (to show in the scene)
+            victim_name: Name of the murder victim (used for context, not shown)
             victim_background: Brief description of the victim
+            fast_mode: If True, skip LLM prompt enhancement for faster generation
 
         Returns:
             Path to generated image, or None on error
@@ -381,30 +278,17 @@ No text, no words, no letters, no writing, no labels, no captions, no name tags.
             logger.warning("Image client not available")
             return None
 
-        # Build victim description for the scene.
-        # We use the victim's details ONLY as atmospheric context, not to show the body.
-        victim_desc = ""
-        if victim_name:
-            victim_desc = f"""
-The scene subtly reflects the life and personality of the victim, {victim_name}, through personal items and environmental details.
-Do NOT show any dead body, violence, or explicit depiction of the crime itself.
-"""
-            if victim_background:
-                # Extract any visual hints from background (e.g., profession, age)
-                victim_desc += f"Victim context: {victim_background[:150]}\n"
-
-        # We describe this as an opening scene rather than a title card to
-        # avoid encouraging any rendered text in the image.
-        prompt = f"""Opening scene for a murder mystery – an atmospheric view of the location shortly after the crime.
-The case is called "{title}", but do NOT draw or write the title or ANY text in the image.
-Setting: {setting}
-{victim_desc}
-{SCENE_ART_STYLE}
-Ominous, foreboding mood focused on the environment and clues, not on the body.
-Do NOT show the victim's body or any graphic depiction of the crime.
-No text, no words, no letters, no writing, no labels, no captions, no signage, no title.
-Atmospheric scene only, no text overlay.
-"""
+        # Use LLM to enhance prompt with detailed visual description
+        # fast_mode=True skips the LLM call for ~6s faster generation
+        prompt = enhance_title_card_prompt(
+            title=title,
+            setting=setting,
+            victim_name=victim_name,
+            victim_background=victim_background,
+            fast_mode=fast_mode
+        )
+        
+        logger.info(f"[IMG] Title card prompt ({('fast' if fast_mode else 'enhanced')}): {len(prompt)} chars")
 
         cache_key = self._get_cache_key(prompt)
 
@@ -414,45 +298,15 @@ Atmospheric scene only, no text overlay.
 
         try:
             logger.info(f"Generating opening scene image...")
-            # Comprehensive negative prompt to prevent any text in images
-            negative_prompt = (
-                "text, words, letters, writing, labels, captions, title text, signage, signs, "
-                "typography, subtitles, text overlay, watermark, logo, title card text, "
-                "movie title, game title, alphabet, characters, symbols, numbers, digits, "
-                "text on image, written text, printed text, handwritten text, calligraphy, "
-                "font, typeface, lettering, inscription, engraving, text banner, "
-                "speech bubble text, comic text, subtitle text, caption text, "
-                "nameplate, placard, signboard, billboard text, poster text, label text, "
-                "badge text, tag text, watermark text, copyright text, signature text, "
-                "title overlay, title card overlay, game title overlay, movie title overlay"
+
+            # Z-Image-Turbo ignores negative prompts (guidance_scale=0.0)
+            # so we rely entirely on the enhanced positive prompt
+            image = self.client.text_to_image(
+                prompt,
+                model="Tongyi-MAI/Z-Image-Turbo",
+                width=1024,
+                height=576,
             )
-            # Use Tongyi-MAI/Z-Image-Turbo for fast image generation
-            models_to_try = [
-                "Tongyi-MAI/Z-Image-Turbo",
-            ]
-            
-            image = None
-            last_error = None
-            for model in models_to_try:
-                try:
-                    logger.info(f"Trying model: {model}")
-                    # Force 16:9 aspect ratio for the opening scene image
-                    image = self.client.text_to_image(
-                        prompt,
-                        model=model,
-                        negative_prompt=negative_prompt,
-                        width=1024,
-                        height=576,
-                    )
-                    logger.info(f"Successfully generated with {model}")
-                    break
-                except Exception as e:
-                    logger.warning(f"Model {model} failed: {e}")
-                    last_error = e
-                    continue
-            
-            if image is None:
-                raise Exception(f"All models failed. Last error: {last_error}")
 
             path = self._save_to_cache(image, cache_key)
             logger.info(f"Generated opening scene image: {path}")
@@ -506,11 +360,12 @@ def generate_portrait_on_demand(suspect, mystery_setting: str) -> Optional[str]:
     return path
 
 
-def generate_title_card_on_demand(mystery) -> Optional[str]:
+def generate_title_card_on_demand(mystery, fast_mode: bool = False) -> Optional[str]:
     """Generate an opening scene image for the mystery on-demand.
     
     Args:
         mystery: Mystery object with victim and setting
+        fast_mode: If True, skip LLM prompt enhancement (~6s faster)
         
     Returns:
         Path to generated image, or None on error
@@ -524,12 +379,13 @@ def generate_title_card_on_demand(mystery) -> Optional[str]:
     victim_name = getattr(mystery.victim, "name", None) if hasattr(mystery, "victim") else None
     victim_background = getattr(mystery.victim, "background", None) if hasattr(mystery, "victim") else None
     
-    logger.info("Generating opening scene image on-demand (with victim: %s)...", victim_name)
+    logger.info("Generating opening scene image on-demand (fast_mode=%s, victim=%s)...", fast_mode, victim_name)
     path = service.generate_title_card(
         title=f"The Murder of {mystery.victim.name}",
         setting=mystery.setting,
         victim_name=victim_name,
         victim_background=victim_background,
+        fast_mode=fast_mode,
     )
     
     if path:
@@ -631,3 +487,195 @@ def generate_all_mystery_images(
 
     logger.info(f"Completed generating {len(images)} images")
     return images
+
+
+# =============================================================================
+# MCP-BASED PARALLEL GENERATION
+# =============================================================================
+
+def generate_all_mystery_images_mcp(mystery) -> Dict[str, str]:
+    """Generate all mystery images using MCP server for true parallelism.
+    
+    This uses the MCP image generator server, which handles both prompt
+    enhancement and image generation. Multiple images are generated in
+    parallel via concurrent MCP calls.
+    
+    Args:
+        mystery: Mystery object with suspects, victim, and setting
+        
+    Returns:
+        Dict mapping names to image paths
+    """
+    if not MCP_AVAILABLE or MCPImageClient is None:
+        logger.warning("MCP not available, falling back to direct generation")
+        return generate_all_mystery_images(mystery, generate_portraits=True, generate_title=True)
+    
+    logger.info("[MCP] Starting parallel image generation via MCP server...")
+    
+    async def _generate_all():
+        client = MCPImageClient()  # type: ignore
+        
+        # Prepare all generation tasks
+        tasks = []
+        
+        # Character portraits
+        for suspect in mystery.suspects:
+            tasks.append((
+                "portrait",
+                suspect.name,
+                client.generate_character_portrait(
+                    name=suspect.name,
+                    role=suspect.role,
+                    personality=suspect.personality,
+                    gender=getattr(suspect, "gender", "person"),
+                    setting=mystery.setting
+                )
+            ))
+        
+        # Title card
+        tasks.append((
+            "title",
+            "_opening_scene",
+            client.generate_title_card(
+                title=f"The Murder of {mystery.victim.name}",
+                setting=mystery.setting,
+                victim_name=mystery.victim.name,
+                victim_background=mystery.victim.background
+            )
+        ))
+        
+        # Run ALL tasks in parallel
+        logger.info(f"[MCP] Launching {len(tasks)} parallel image generations...")
+        
+        async def run_task(task_type, name, coro):
+            try:
+                path = await coro
+                logger.info(f"[MCP] ✓ Generated {task_type}: {name}")
+                return (name, path)
+            except Exception as e:
+                logger.error(f"[MCP] ✗ Failed {task_type} {name}: {e}")
+                return (name, None)
+        
+        results = await asyncio.gather(*[
+            run_task(t[0], t[1], t[2]) for t in tasks
+        ])
+        
+        return {name: path for name, path in results if path}
+    
+    try:
+        images = asyncio.run(_generate_all())
+        
+        # Update suspect portrait paths
+        for suspect in mystery.suspects:
+            if suspect.name in images:
+                suspect.portrait_path = images[suspect.name]
+        
+        logger.info(f"[MCP] Completed: {len(images)} images generated")
+        return images
+        
+    except Exception as e:
+        logger.error(f"[MCP] Parallel generation failed: {e}")
+        return {}
+
+
+def generate_portrait_mcp(suspect, mystery_setting: str) -> Optional[str]:
+    """Generate a single portrait using MCP server.
+    
+    Args:
+        suspect: Suspect object
+        mystery_setting: Setting description
+        
+    Returns:
+        Path to generated image
+    """
+    if not MCP_AVAILABLE or mcp_generate_portrait is None:
+        return generate_portrait_on_demand(suspect, mystery_setting)
+    
+    logger.info(f"[MCP] Generating portrait for {suspect.name}...")
+    path = mcp_generate_portrait(
+        name=suspect.name,
+        role=suspect.role,
+        personality=suspect.personality,
+        gender=getattr(suspect, "gender", "person"),
+        setting=mystery_setting
+    )
+    
+    if path:
+        suspect.portrait_path = path
+        logger.info(f"[MCP] ✓ Generated portrait: {suspect.name}")
+    
+    return path
+
+
+def generate_scene_mcp(
+    location: str,
+    setting: str,
+    mood: str = "mysterious",
+    context: str = ""
+) -> Optional[str]:
+    """Generate a scene image using MCP server.
+    
+    Args:
+        location: Location name
+        setting: Mystery setting
+        mood: Scene mood
+        context: Additional context
+        
+    Returns:
+        Path to generated image
+    """
+    if not MCP_AVAILABLE or mcp_generate_scene is None:
+        service = get_image_service()
+        return service.generate_scene(location, setting, mood, context)
+    
+    logger.info(f"[MCP] Generating scene for {location}...")
+    path = mcp_generate_scene(
+        location=location,
+        setting=setting,
+        mood=mood,
+        context=context
+    )
+    
+    if path:
+        logger.info(f"[MCP] ✓ Generated scene: {location}")
+    
+    return path
+
+
+# =============================================================================
+# UNIFIED API (automatically chooses MCP or direct based on USE_MCP)
+# =============================================================================
+
+def smart_generate_portrait(suspect, mystery_setting: str) -> Optional[str]:
+    """Generate portrait using MCP if available, otherwise direct."""
+    if USE_MCP and MCP_AVAILABLE:
+        return generate_portrait_mcp(suspect, mystery_setting)
+    return generate_portrait_on_demand(suspect, mystery_setting)
+
+
+def smart_generate_scene(
+    location: str,
+    setting: str,
+    mood: str = "mysterious",
+    context: str = ""
+) -> Optional[str]:
+    """Generate scene using MCP if available, otherwise direct."""
+    if USE_MCP and MCP_AVAILABLE:
+        return generate_scene_mcp(location, setting, mood, context)
+    service = get_image_service()
+    return service.generate_scene(location, setting, mood, context)
+
+
+def smart_generate_all(mystery) -> Dict[str, str]:
+    """Generate all mystery images using MCP if available, otherwise direct."""
+    if USE_MCP and MCP_AVAILABLE:
+        return generate_all_mystery_images_mcp(mystery)
+    return generate_all_mystery_images(mystery, generate_portraits=True, generate_title=True)
+
+
+# Log MCP status on module load
+if USE_MCP:
+    if MCP_AVAILABLE:
+        logger.info("🔌 MCP mode ENABLED - Using MCP server for image generation")
+    else:
+        logger.warning("⚠️ USE_MCP=true but MCP client not available, falling back to direct mode")

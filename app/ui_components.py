@@ -292,19 +292,29 @@ def create_ui_components() -> dict:
         # ----- DEBUG TAB -----
         with gr.Tab("Debug"):
             with gr.Column(elem_classes="settings-column"):
+                gr.Markdown("### ⏱️ Performance Tracker")
+                perf_summary_textbox = gr.Textbox(
+                    label="Timing & Parallelization",
+                    lines=15,
+                    value="Performance data will appear here after starting a mystery.",
+                    interactive=False,
+                    elem_classes="perf-summary",
+                )
+                refresh_perf_btn = gr.Button("🔄 Refresh Performance Data")
+                
+                gr.Markdown("---")
                 gr.Markdown(
-                    "### Debug logs\n\n"
-                    "These are the most recent server logs captured during gameplay.\n\n"
-                    "- Use the **Refresh logs** button to update.\n"
-                    "- Then copy/paste any relevant lines when sharing details with the AI assistant."
+                    "### 📋 Debug Logs\n\n"
+                    "Server logs captured during gameplay.\n"
+                    "Copy/paste relevant lines when debugging."
                 )
                 debug_logs_textbox = gr.Textbox(
                     label="Recent logs",
-                    lines=20,
+                    lines=15,
                     value="No logs captured yet. Interact with the game to generate logs.",
                     interactive=False,
                 )
-                refresh_logs_btn = gr.Button("🔄 Refresh logs")
+                refresh_logs_btn = gr.Button("🔄 Refresh Logs")
 
     # Hidden timer for checking mystery completion (inactive by default)
     mystery_check_timer = gr.Timer(value=1.0, active=False)
@@ -332,6 +342,8 @@ def create_ui_components() -> dict:
         "notebook_html_tab": notebook_html_tab,
         "debug_logs_textbox": debug_logs_textbox,
         "refresh_logs_btn": refresh_logs_btn,
+        "perf_summary_textbox": perf_summary_textbox,
+        "refresh_perf_btn": refresh_perf_btn,
         "mystery_check_timer": mystery_check_timer,
         "voice_input": voice_input,
         # Setup wizard components

@@ -279,9 +279,19 @@ Return ONLY the JSON object mapping each location name to its visual description
         data = json.loads(text)
 
         # Ensure we only keep strings for known locations
+        # Normalize both keys for comparison (strip trailing punctuation)
+        def normalize_loc(s: str) -> str:
+            return s.rstrip(".,;:!? ").lower()
+        
+        # Build lookup from normalized LLM keys to original descriptions
+        normalized_data = {normalize_loc(k): v for k, v in data.items()}
+        
         result: dict = {}
         for loc in locations:
+            # Try exact match first, then normalized match
             desc = data.get(loc)
+            if not desc:
+                desc = normalized_data.get(normalize_loc(loc))
             if isinstance(desc, str) and desc.strip():
                 result[loc] = desc.strip()
 

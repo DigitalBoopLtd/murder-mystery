@@ -39,8 +39,13 @@ def create_game_master_agent():
     """
     # max_tokens=600 allows for richer narrative responses when searching locations
     # while still keeping responses reasonably short for voice narration
+    # Using gpt-4o-mini for speed (~2s) vs gpt-4o (~5s) vs gpt-4 (~10s)
+    model_name = os.getenv("GAME_MASTER_MODEL", "gpt-4o-mini")
+    logger.info("🤖 Creating Game Master agent with model: %s", model_name)
     llm = ChatOpenAI(
-        model="gpt-5.1", max_tokens=600, api_key=os.getenv("OPENAI_API_KEY")
+        model=model_name,
+        max_tokens=600,
+        api_key=os.getenv("OPENAI_API_KEY")
     )
 
     # Bind tools to the LLM - use get_all_tools() to include RAG tools if available

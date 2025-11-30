@@ -30,6 +30,7 @@ from game.state_manager import (
 )
 from game.media import _generate_portrait_background
 from services.game_memory import get_game_memory
+from services.perf_tracker import perf
 
 logger = logging.getLogger(__name__)
 
@@ -816,12 +817,14 @@ def run_action_logic(
                 )
 
                 chain = prompt | llm
+                perf.start("suspect_resolver", details="gpt-4o-mini")
                 result = chain.invoke(
                     {
                         "suspect_list": suspects_summary,
                         "player_message": custom_message,
                     }
                 )
+                perf.end("suspect_resolver", details="resolved")
                 choice = (result.content or "").strip()
                 first_line = choice.splitlines()[0].strip()
                 first_line = first_line.lstrip("-• ").strip().strip('"').strip("'")
@@ -846,6 +849,7 @@ def run_action_logic(
                         "AI suspect resolver chose NONE for message: %s", custom_message
                     )
             except Exception:
+                perf.end("suspect_resolver", status="error", details="exception")
                 logger.exception(
                     "Error resolving suspect name via AI; falling back to heuristics only"
                 )
@@ -944,7 +948,8 @@ def run_action_logic(
     # Update system prompt (will include newly assigned voice_id if any)
     state.system_prompt = state.get_continue_prompt()
 
-    # Process with agent (Game Master + tools)
+    # Process with agent (Game Master + tools) - TRACKED
+    perf.start("gameplay_agent", details=f"action={action_type}")
     t_agent_start = time.perf_counter()
     response, speaker = process_message(
         run_action_logic.agent,
@@ -954,6 +959,7 @@ def run_action_logic(
         thread_id=session_id,
     )
     t_agent_end = time.perf_counter()
+    perf.end("gameplay_agent", details=f"{len(response)} chars, speaker={speaker}")
     logger.info(
         "[PERF] run_action_logic: agent + tools took %.2fs",
         t_agent_end - t_agent_start,

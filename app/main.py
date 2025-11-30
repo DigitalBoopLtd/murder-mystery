@@ -5,7 +5,8 @@ styled like classic adventure games (Monkey Island, Day of the Tentacles, Gabrie
 """
 
 import os
-from typing import Dict
+import threading
+from typing import Dict, List
 import gradio as gr
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -20,6 +21,7 @@ except ImportError:
 
 # Import modular components
 from services.tts_service import init_tts_service
+from services.perf_tracker import perf, get_perf_summary
 from game.state_manager import init_game_handlers, mystery_images
 from app.utils import setup_ui_logging, get_ui_logs
 from app.ui_components import create_ui_components
@@ -39,32 +41,96 @@ from app.event_handlers import (
 # Load environment variables
 load_dotenv()
 
-# Initialize clients
-openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+# Logging - set up early
+import logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+setup_ui_logging()
 
+# =============================================================================
+# APP STARTUP - Pre-fetch voices directly (no MCP overhead)
+# =============================================================================
+
+logger.info("🚀 Starting Murder Mystery App...")
+perf.reset("app_startup")
+
+# Initialize OpenAI client
+perf.start("init_openai")
+openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+perf.end("init_openai")
+
+# Initialize ElevenLabs client
+perf.start("init_elevenlabs")
 elevenlabs_client = None
 if os.getenv("ELEVENLABS_API_KEY") and ELEVENLABS_AVAILABLE:
     try:
         elevenlabs_client = ElevenLabs(api_key=os.getenv("ELEVENLABS_API_KEY"))
+        logger.info("✅ ElevenLabs client initialized")
     except Exception as e:  # noqa: BLE001
-        print(f"Warning: Failed to initialize ElevenLabs: {e}")
+        logger.warning(f"⚠️ Failed to initialize ElevenLabs: {e}")
+perf.end("init_elevenlabs")
 
 # Game Master voice
 GAME_MASTER_VOICE_ID = "JBFqnCBsd6RMkjVDRZzb"
 
-# Logging
-import logging
+# =============================================================================
+# PRE-FETCH VOICES DIRECTLY (bypasses MCP for speed)
+# =============================================================================
 
-logging.basicConfig(level=logging.INFO)
-setup_ui_logging()
+# Global voice cache - populated on app load for instant access
+PREFETCHED_VOICES: List = []
+VOICE_SUMMARY: str = ""
+VOICES_READY = threading.Event()
+
+
+def _prefetch_voices():
+    """Pre-fetch voices directly from ElevenLabs API on app startup."""
+    global PREFETCHED_VOICES, VOICE_SUMMARY
+    
+    from services.voice_service import get_voice_service
+    
+    perf.start("prefetch_voices", details="Direct API call")
+    
+    try:
+        voice_service = get_voice_service()
+        if voice_service.is_available:
+            voices = voice_service.get_available_voices(force_refresh=True)
+            if voices:
+                # Update globals BEFORE signaling ready
+                PREFETCHED_VOICES = voices
+                VOICE_SUMMARY = voice_service.summarize_voices_for_llm(voices)
+                VOICES_READY.set()  # Signal ready AFTER globals are set
+                logger.info(f"✅ Pre-fetched {len(voices)} voices on app load")
+                perf.end("prefetch_voices", details=f"{len(voices)} voices")
+                return
+            else:
+                logger.warning("⚠️ No voices returned from ElevenLabs")
+                perf.end("prefetch_voices", status="warning", details="No voices")
+        else:
+            logger.info("ℹ️ ElevenLabs not configured, skipping voice prefetch")
+            perf.end("prefetch_voices", status="skipped", details="No API key")
+    except Exception as e:
+        logger.error(f"❌ Voice prefetch failed: {e}")
+        perf.end("prefetch_voices", status="error", details=str(e))
+    
+    # If we get here, no voices were fetched
+    VOICES_READY.set()
+
+
+# Start voice prefetch in background thread (non-blocking)
+logger.info("🎤 Pre-fetching voices in background...")
+voice_thread = threading.Thread(target=_prefetch_voices, daemon=True)
+voice_thread.start()
 
 # Global state
 game_states: Dict[str, object] = {}
 # mystery_images is imported from game.state_manager to ensure all modules share the same dict
 
 # Initialize services
+perf.start("init_services")
 init_tts_service(elevenlabs_client, openai_client, GAME_MASTER_VOICE_ID)
 init_game_handlers(game_states, mystery_images, GAME_MASTER_VOICE_ID)
+perf.end("init_services")
 
 
 # ============================================================================
@@ -101,6 +167,8 @@ def create_app():
         notebook_html_tab = components["notebook_html_tab"]
         debug_logs_textbox = components["debug_logs_textbox"]
         refresh_logs_btn = components["refresh_logs_btn"]
+        perf_summary_textbox = components["perf_summary_textbox"]
+        refresh_perf_btn = components["refresh_perf_btn"]
         mystery_check_timer = components["mystery_check_timer"]
         voice_input = components["voice_input"]
         # Setup wizard components
@@ -227,10 +295,12 @@ def create_app():
         )
 
         # Timer to check for mystery completion and update UI
+        # Also updates opening scene image when it becomes available
         getattr(mystery_check_timer, "tick")(
             fn=check_mystery_ready,
             inputs=[session_id],
             outputs=[
+                portrait_image,  # Opening scene image (appears when ready)
                 victim_scene_html,
                 suspects_list_html,
                 locations_html,
@@ -256,6 +326,13 @@ def create_app():
             fn=get_ui_logs,
             inputs=None,
             outputs=[debug_logs_textbox],
+        )
+        
+        # Debug tab - refresh performance summary
+        getattr(refresh_perf_btn, "click")(
+            fn=get_perf_summary,
+            inputs=None,
+            outputs=[perf_summary_textbox],
         )
 
         # Hide speaker name when audio finishes playing

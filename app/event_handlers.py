@@ -11,6 +11,7 @@ from game.startup import start_new_game_staged, prepare_game_resources, refresh_
 from game.handlers import process_player_action, run_action_logic
 from game.media import generate_turn_media
 from services.tts_service import transcribe_audio
+from services.perf_tracker import perf
 from ui.formatters import (
     format_victim_scene_html,
     format_suspects_list_html,
@@ -197,35 +198,30 @@ def on_start_game(sess_id, progress=gr.Progress()):
     logger.info("Retrieving images for session %s", sess_id)
     logger.info("Available image keys: %s", list(images.keys()))
 
-    # Opening scene image: we REQUIRE this before "starting" the game.
-    # First, try to use any prewarmed image generated in the background
-    # right after the premise was created. If it's not available yet,
-    # fall back to generating it synchronously here.
-    progress(0.9, desc="🎨 Creating scene image...")
+    # Opening scene image: wait for background thread with short timeout.
+    # This ensures image and audio start together for polished UX.
+    progress(0.9, desc="🎨 Waiting for scene...")
 
     portrait = images.get("_opening_scene", None)
     if not portrait:
-        from services.image_service import generate_title_card_on_demand
-        from types import SimpleNamespace
-
-        if getattr(state, "premise_setting", None) and getattr(
-            state, "premise_victim_name", None
-        ):
-            victim_stub = SimpleNamespace(name=state.premise_victim_name)
-            mystery_like = SimpleNamespace(
-                victim=victim_stub,
-                setting=state.premise_setting,
-            )
-            logger.info(
-                "Generating opening scene image for new mystery (fallback)..."
-            )
-            portrait = generate_title_card_on_demand(mystery_like)
+        # Wait up to 3 seconds for the image to be ready
+        wait_start = time.time()
+        max_wait = 3.0  # seconds
+        poll_interval = 0.1  # 100ms
+        
+        logger.info("[APP] Opening scene not ready, waiting up to %.1fs...", max_wait)
+        while time.time() - wait_start < max_wait:
+            # Re-check the images dict (background thread updates it)
+            images = mystery_images.get(sess_id, {})
+            portrait = images.get("_opening_scene", None)
             if portrait:
-                # Merge into existing images dict without clobbering
-                images = mystery_images.get(sess_id, {}) or {}
-                images["_opening_scene"] = portrait
-                mystery_images[sess_id] = images
-                logger.info("Generated opening scene image: %s", portrait)
+                wait_time = time.time() - wait_start
+                logger.info("[APP] ✅ Opening scene ready after %.2fs", wait_time)
+                break
+            time.sleep(poll_interval)
+        
+        if not portrait:
+            logger.info("[APP] Opening scene still not ready after %.1fs, starting anyway", max_wait)
 
     if portrait:
         # Ensure path is absolute and file exists
@@ -320,14 +316,21 @@ def on_start_game(sess_id, progress=gr.Progress()):
 
 
 def check_mystery_ready(sess_id: str):
-    """Timer callback to check if full mystery is ready and update UI."""
+    """Timer callback to check if full mystery is ready and update UI.
+    
+    Also updates the opening scene image when it becomes available.
+    """
     sess_id = normalize_session_id(sess_id)
     state = get_or_create_state(sess_id)
     ready = getattr(state, "mystery_ready", False)
+    images = mystery_images.get(sess_id, {})
+    opening_scene = images.get("_opening_scene", None)
+    
     logger.info(
-        "[APP] Timer tick - session: %s, mystery_ready: %s",
+        "[APP] Timer tick - session: %s, mystery_ready: %s, opening_scene: %s",
         sess_id[:8] if sess_id else "None",
         ready,
+        bool(opening_scene),
     )
 
     if ready and state.mystery is not None:
@@ -341,7 +344,7 @@ def check_mystery_ready(sess_id: str):
             state.suspects_talked_to,
             loading=False,
             suspect_states=state.suspect_states,
-            portrait_images=mystery_images.get(sess_id, {}),
+            portrait_images=images,
             layout="column",
         )
         # Tabs: row layout (portrait on left)
@@ -350,14 +353,14 @@ def check_mystery_ready(sess_id: str):
             state.suspects_talked_to,
             loading=False,
             suspect_states=state.suspect_states,
-            portrait_images=mystery_images.get(sess_id, {}),
+            portrait_images=images,
             layout="row",
         )
         locations_html = format_locations_html(
             state.mystery,
             state.searched_locations,
             loading=False,
-            location_images=mystery_images.get(sess_id, {}),
+            location_images=images,
         )
         dashboard_html = format_dashboard_html(
             state.mystery,
@@ -367,7 +370,11 @@ def check_mystery_ready(sess_id: str):
             state.suspect_states,
             state.wrong_accusations
         )
+        # Update portrait if opening scene is available
+        portrait_update = gr.update(value=opening_scene) if opening_scene else gr.update()
+        
         return [
+            portrait_update,  # Opening scene image
             victim_html,
             suspects_html_panel,  # Side panel (column layout)
             locations_html,
@@ -379,8 +386,11 @@ def check_mystery_ready(sess_id: str):
             gr.update(active=False),  # Stop the timer
         ]
     else:
-        # Mystery still loading - keep timer active, no UI changes
+        # Mystery still loading - but check if opening scene is ready
+        portrait_update = gr.update(value=opening_scene) if opening_scene else gr.update()
+        
         return [
+            portrait_update,  # Update opening scene if available
             gr.update(),  # victim_scene_html - no change
             gr.update(),  # suspects_list_html - no change
             gr.update(),  # locations_html - no change
@@ -661,10 +671,12 @@ def on_voice_input(audio_path: str, sess_id, progress=gr.Progress()):
         "[APP] Before processing - suspects talked to: %s", previous_suspects
     )
 
-    # Transcribe
+    # Transcribe - TRACKED
+    perf.start("transcription", details="Whisper API")
     t0 = time.perf_counter()
     text = transcribe_audio(audio_path)
     t1 = time.perf_counter()
+    perf.end("transcription", details=f"{len(text)} chars")
     logger.info("[PERF] Transcription took %.2fs", t1 - t0)
 
     if not text.strip():

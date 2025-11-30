@@ -24,6 +24,7 @@ from game.mystery_generator import (
     prepare_game_prompt,
     generate_location_descriptions,
 )
+from game.media import _prewarm_suspect_portraits, _prewarm_scene_images
 from mystery_config import create_validated_config
 from services.agent import create_game_master_agent, process_message
 from services.tts_service import text_to_speech
@@ -132,10 +133,12 @@ def _background_generate_title_card_from_premise(session_id: str):
         mystery_like = SimpleNamespace(victim=victim_stub, setting=setting)
 
         logger.info(
-            "[BG] Generating opening scene image from premise for session %s",
+            "[BG] Generating opening scene image from premise for session %s (fast mode)",
             session_id,
         )
-        portrait = generate_title_card_on_demand(mystery_like)
+        # Use fast_mode=True to skip LLM prompt enhancement (~6s faster)
+        # This ensures the image is ready before/with the welcome speech
+        portrait = generate_title_card_on_demand(mystery_like, fast_mode=True)
         if not portrait:
             logger.warning(
                 "[BG] Failed to generate opening scene image for session %s",
@@ -159,37 +162,59 @@ def _background_generate_title_card_from_premise(session_id: str):
 
 
 def fetch_voices_for_session(session_id: str) -> Tuple[List, str, str]:
-    """Fetch voices for a session with MCP-first approach and fallback.
+    """Fetch voices for a session using pre-fetched voices from app startup.
     
     This should be called BEFORE generating characters so the LLM can
     create characters that match available voices.
     
-    Uses MCP (Model Context Protocol) to communicate with ElevenLabs,
-    qualifying for the "MCP in Action" hackathon track. Falls back to
-    direct API if MCP is unavailable.
+    OPTIMIZATION: Voices are pre-fetched on app load via direct API call,
+    bypassing MCP for speed. This function uses the cached voices.
     
     Returns:
         Tuple of (voices list, voice_summary string, status string)
-        Status is one of: 'mcp_success', 'api_success', 'cached', 'failed', etc.
+        Status is one of: 'prefetched', 'api_success', 'cached', 'failed', etc.
     """
+    from services.perf_tracker import perf
+    
     state = get_or_create_state(session_id)
     
     # Check session cache first
     if state.voices_fetched and state.available_voices:
-        logger.info("[VOICE] Using cached voices for session %s (%d voices)", 
+        logger.info("[VOICE] Using session-cached voices for %s (%d voices)", 
                     session_id[:8], len(state.available_voices))
         return state.available_voices, state.voice_summary, "cached"
     
-    # Fetch fresh voices using MCP with fallback to direct API
+    perf.start("fetch_voices_session")
+    
+    # Try to use pre-fetched voices from app startup
+    try:
+        from app.main import PREFETCHED_VOICES, VOICE_SUMMARY, VOICES_READY
+        
+        # Wait for prefetch to complete (with timeout)
+        if VOICES_READY.wait(timeout=5.0) and PREFETCHED_VOICES:
+            logger.info("[VOICE] Using pre-fetched voices (%d voices)", len(PREFETCHED_VOICES))
+            
+            # Cache in session state
+            state.available_voices = PREFETCHED_VOICES
+            state.voice_summary = VOICE_SUMMARY
+            state.voices_fetched = True
+            state.voice_mode = "full"
+            
+            perf.end("fetch_voices_session", details=f"prefetched {len(PREFETCHED_VOICES)} voices")
+            return PREFETCHED_VOICES, VOICE_SUMMARY, "prefetched"
+    except ImportError:
+        logger.debug("[VOICE] Pre-fetched voices not available, using direct fetch")
+    
+    # Fallback to direct API fetch (no MCP)
     voice_service = get_voice_service()
     
     t0 = time.perf_counter()
-    # Try MCP first, fallback to direct API
-    voices, status = voice_service.fetch_voices_via_mcp_with_fallback(timeout=30.0)
+    voices = voice_service.get_available_voices(force_refresh=True)
     t1 = time.perf_counter()
+    status = "api_success" if voices else "failed"
     logger.info("[PERF] Voice fetch took %.2fs (status=%s)", t1 - t0, status)
     
-    if status in ["mcp_success", "api_success", "success"] and voices:
+    if status in ["prefetched", "mcp_success", "api_success", "success"] and voices:
         # Generate summary for LLM
         voice_summary = voice_service.summarize_voices_for_llm(voices)
         voice_stats = voice_service.get_voice_diversity_stats(voices)
@@ -230,15 +255,23 @@ def start_new_game(session_id: str):
     3. Generate Game Master welcome
     4. Background: Generate full mystery WITH voice assignments
     """
+    from services.perf_tracker import perf
+    
+    # Reset perf tracker for this game session
+    perf.reset(session_id)
+    
     state = get_or_create_state(session_id)
     state.reset_game()
 
     # Initialize RAG memory for semantic search (Phase 2 AI Enhancement)
+    perf.start("init_rag_memory")
     reset_game_memory()
     if initialize_game_memory():
         logger.info("[RAG] Game memory initialized successfully")
+        perf.end("init_rag_memory", details="success")
     else:
         logger.warning("[RAG] Game memory not available (FAISS may not be installed)")
+        perf.end("init_rag_memory", status="skipped", details="FAISS not available")
 
     # Ensure we have a configuration object for this session
     if not hasattr(state, "config") or state.config is None:
@@ -256,7 +289,7 @@ def start_new_game(session_id: str):
     logger.info("Fetching voices for session %s...", session_id[:8])
     voices, voice_summary, voice_status = fetch_voices_for_session(session_id)
     
-    if voice_status in ["mcp_success", "api_success", "success", "cached"]:
+    if voice_status in ["prefetched", "mcp_success", "api_success", "success", "cached"]:
         logger.info(
             "[VOICE] %d voices available for character generation (via %s)",
             len(voices),
@@ -278,10 +311,9 @@ def start_new_game(session_id: str):
 
     # ========== STAGE 1: FAST PREMISE ==========
     logger.info("Generating mystery premise...")
-    t0 = time.perf_counter()
+    perf.start("generate_premise", details="GPT-4o call")
     premise = generate_mystery_premise(config=config)
-    t1 = time.perf_counter()
-    logger.info("[PERF] Mystery premise generation took %.2fs", t1 - t0)
+    perf.end("generate_premise", details=f"victim: {premise.victim_name}")
 
     # Store premise on state for later use
     state.premise_setting = premise.setting
@@ -315,24 +347,27 @@ system or background tasks. Stay purely in-world."""
     # we have the premise (victim + setting). This runs concurrently with
     # the welcome LLM + TTS so the image is often ready by the time we show
     # the first screen, without blocking startup.
+    perf.start("bg_title_card", is_parallel=True, parallel_count=1, details="Background thread")
     try:
         threading.Thread(
             target=_background_generate_title_card_from_premise,
             args=(session_id,),
             daemon=True,
         ).start()
+        # Note: We mark this as "started" - completion is tracked separately
     except Exception as e:  # noqa: BLE001
         logger.error(
             "[BG] Error starting title-card prewarm thread for %s: %s",
             session_id,
             e,
         )
+        perf.end("bg_title_card", status="error", details=str(e))
 
     # Create or reuse shared agent and get narration immediately (no waiting for images)
     if not hasattr(start_new_game, "agent"):
         start_new_game.agent = create_game_master_agent()
 
-    t2 = time.perf_counter()
+    perf.start("welcome_llm", details="Game Master greeting")
     response, _speaker = process_message(
         start_new_game.agent,
         (
@@ -344,8 +379,7 @@ system or background tasks. Stay purely in-world."""
         session_id,
         thread_id=session_id,
     )
-    t3 = time.perf_counter()
-    logger.info("[PERF] First Game Master response took %.2fs", t3 - t2)
+    perf.end("welcome_llm", details=f"{len(response)} chars")
 
     # Ensure images dict exists for this session (do not clobber prewarmed images)
     if session_id not in mystery_images:
@@ -358,12 +392,11 @@ system or background tasks. Stay purely in-world."""
         "[GAME] Using Game Master voice_id=%s for welcome message",
         gm_voice,
     )
-    t4 = time.perf_counter()
+    perf.start("welcome_tts", details="ElevenLabs TTS")
     audio_path, alignment_data = text_to_speech(
         response, gm_voice, speaker_name="Game Master"
     )
-    t5 = time.perf_counter()
-    logger.info("[PERF] Welcome TTS (with timestamps) took %.2fs", t5 - t4)
+    perf.end("welcome_tts", details=f"audio: {bool(audio_path)}, alignment: {len(alignment_data) if alignment_data else 0} words")
 
     # Verify audio was generated
     if audio_path:
@@ -393,6 +426,8 @@ system or background tasks. Stay purely in-world."""
     # Pass voice_summary so LLM can assign voices during generation
 
     def _background_generate_full_case(sess_id: str, premise_obj, bg_voice_summary: str):
+        from services.perf_tracker import perf
+        
         bg_state = get_or_create_state(sess_id)
         try:
             # Use the latest config for this session when generating the full case
@@ -409,17 +444,12 @@ system or background tasks. Stay purely in-world."""
             logger.info("[BG] Voice mode: %s (summary length: %d chars)", 
                         bg_state.voice_mode, len(bg_voice_summary) if bg_voice_summary else 0)
             
-            t_full_0 = time.perf_counter()
+            perf.start("bg_full_mystery", is_parallel=True, parallel_count=1, details="Background thread")
             # Pass voice_summary so LLM assigns voices during character generation
             full_mystery = generate_mystery(
                 premise=premise_obj, 
                 config=bg_config,
                 voice_summary=bg_voice_summary if bg_voice_summary else None
-            )
-            t_full_1 = time.perf_counter()
-            logger.info(
-                "[PERF] Full mystery generation (background) took %.2fs",
-                t_full_1 - t_full_0,
             )
             
             # Log voice assignments
@@ -428,30 +458,57 @@ system or background tasks. Stay purely in-world."""
                         assigned_count, len(full_mystery.suspects))
             
             bg_state.mystery = full_mystery
+            
             # Generate rich per-location visual descriptions for scene images
+            perf.start("bg_location_descriptions", details="LLM visual descriptions")
             try:
                 bg_state.location_descriptions = generate_location_descriptions(
                     full_mystery
                 )
+                perf.end("bg_location_descriptions", details=f"{len(bg_state.location_descriptions)} locations")
             except Exception as e:  # noqa: BLE001
                 logger.error(
                     "[BG] Error generating location descriptions for session %s: %s",
                     sess_id,
                     e,
                 )
+                perf.end("bg_location_descriptions", status="error", details=str(e))
+            
             bg_state.system_prompt = prepare_game_prompt(
                 full_mystery, bg_state.tone_instruction
             )
             bg_state.mystery_ready = True
+            perf.end("bg_full_mystery", details=f"{len(full_mystery.suspects)} suspects, {len(full_mystery.clues)} clues")
             logger.info("[BG] Full mystery is ready for session %s", sess_id)
+            
+            # ========== PREWARM ALL IMAGES IN BACKGROUND ==========
+            # This runs AFTER mystery is ready, generating all portraits and scenes
+            # in parallel so they're ready before the player needs them
+            logger.info("[BG] Starting image prewarming for session %s...", sess_id)
+            perf.start("bg_prewarm_images", is_parallel=True, parallel_count=1, details="portraits + scenes")
+            try:
+                # Prewarm all suspect portraits (runs 3 workers in parallel)
+                _prewarm_suspect_portraits(sess_id, full_mystery)
+                # Prewarm all scene images (runs 3 workers in parallel)
+                _prewarm_scene_images(sess_id, full_mystery)
+                perf.end("bg_prewarm_images", details=f"{len(full_mystery.suspects)} portraits, {len(full_mystery.clues)} scenes")
+            except Exception as prewarm_err:  # noqa: BLE001
+                logger.error("[BG] Error prewarming images: %s", prewarm_err)
+                perf.end("bg_prewarm_images", status="error", details=str(prewarm_err))
         except Exception as e:
             logger.error("[BG] Error generating full mystery in background: %s", e)
+            perf.end("bg_full_mystery", status="error", details=str(e))
 
+    # Mark title card prewarm as started (it's running in parallel)
+    perf.end("bg_title_card", status="started", details="Running in parallel")
+    
+    perf.start("bg_mystery_thread", details="Starting background thread")
     threading.Thread(
         target=_background_generate_full_case,
         args=(session_id, premise, voice_summary),  # Pass voice_summary!
         daemon=True,
     ).start()
+    perf.end("bg_mystery_thread", details="Thread launched")
 
     return state, response, audio_path, "Game Master", alignment_data
 
