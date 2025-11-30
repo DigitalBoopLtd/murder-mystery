@@ -5,23 +5,84 @@ CSS_CENTER_STAGE = """/* ========== MAIN LAYOUT ========== */
     align-items: stretch !important;
 }
 
+/* ========== DESKTOP: Hide bottom tabs, show side panels ========== */
+@media (min-width: 901px) {
+    /* Hide the bottom info tabs on desktop - side panels show this info */
+    .info-tabs {
+        display: none !important;
+    }
+    
+    /* Ensure side panels are visible */
+    .side-column-left,
+    .side-column-right {
+        display: flex !important;
+    }
+}
+
+/* ========== MOBILE/TABLET: Hide side panels, show bottom tabs ========== */
 @media (max-width: 900px) {
     .main-layout-row {
         flex-direction: column !important;
     }
-    .main-layout-row .center-column { order: 1 !important; width: 100% !important; }
-    .main-layout-row .side-column-left { order: 2 !important; width: 100% !important; }
-    .main-layout-row .side-column-right { order: 3 !important; width: 100% !important; }
     
+    /* Only show center column on mobile */
+    .main-layout-row .center-column { 
+        order: 1 !important; 
+        width: 100% !important; 
+    }
+    
+    /* Hide side panels on mobile - use bottom tabs instead */
+    .main-layout-row .side-column-left,
+    .main-layout-row .side-column-right,
+    .side-column-left,
+    .side-column-right {
+        display: none !important;
+    }
+    
+    /* Show bottom tabs on mobile */
+    .info-tabs {
+        display: block !important;
+        margin-top: 16px;
+    }
+    
+    /* Make the CRT stage more compact on mobile */
     .center-column > .gr-group {
         position: relative !important;
         overflow: hidden !important;
+        aspect-ratio: 4 / 3; /* More square aspect for mobile */
+        padding: 12px !important;
+    }
+    
+    /* Adjust input bar for mobile */
+    .input-bar {
+        padding: 8px !important;
+    }
+    
+    /* Make setup wizard full width on mobile */
+    .setup-wizard {
+        min-height: 300px;
+        padding: 16px;
+    }
+    
+    .wizard-settings {
+        padding: 12px;
+    }
+    
+    .wizard-buttons {
+        flex-direction: column;
+        gap: 12px;
+    }
+    
+    .wizard-primary-btn {
+        max-width: 100% !important;
+        width: 100% !important;
     }
 }
 
 /* ========== CRT STAGE (Center Column) ========== */
 .center-column > .gr-group,
-.center-column .gr-group {
+.center-column .gr-group,
+.center-column .crt-stage {
     background: #050510 !important;
     border: 4px solid var(--border-color) !important;
     padding: 24px !important;

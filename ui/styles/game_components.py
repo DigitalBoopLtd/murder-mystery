@@ -166,7 +166,6 @@ CSS_GAME_COMPONENTS = """/* ========== BASE PANEL TITLE (fallback) ========== */
 .transcript-panel {
     max-height: 300px;
     overflow-y: auto;
-    font-family: var(--font-retro-mono);
     font-size: 13px;
     line-height: 1.5;
 }
@@ -411,6 +410,55 @@ CSS_GAME_COMPONENTS = """/* ========== BASE PANEL TITLE (fallback) ========== */
     color: #ff6666;
     font-family: var(--font-body);
     animation: contradiction-pulse 2s ease-in-out infinite;
+}
+
+/* ========== GAME STARTED MARKER ========== */
+/* Container starts empty - when game starts, .game-active element is injected */
+/* CSS uses :has(.game-active) to detect game state and show/hide UI */
+.game-started-container {
+    position: absolute;
+    pointer-events: none;
+    width: 0;
+    height: 0;
+    overflow: hidden;
+}
+
+.game-active {
+    display: none;
+}
+
+/* ========== HIDE MAIN GAME CONTENT UNTIL GAME STARTS ========== */
+/* Default: completely hide the CRT stage - don't take up any space */
+.center-column > .gr-group {
+    display: none !important;
+}
+
+/* When .game-active element exists, show the CRT stage */
+.center-column:has(.game-active) > .gr-group {
+    display: flex !important;
+    opacity: 1;
+    animation: fadeIn 0.4s ease-in;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+/* ========== SETUP WIZARD POSITIONING ========== */
+/* Position wizard in the center where the game screen will appear */
+.setup-wizard {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-height: 400px;
+    margin: 0 auto;
+    padding: 0;
+}
+
+/* When game has started (marker contains .game-active), hide the setup wizard */
+.center-column:has(.game-active) .setup-wizard {
+    display: none !important;
 }
 
 /* ========== SETUP WIZARD ========== */

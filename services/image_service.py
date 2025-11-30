@@ -381,12 +381,13 @@ No text, no words, no letters, no writing, no labels, no captions, no name tags.
             logger.warning("Image client not available")
             return None
 
-        # Build victim description for the scene
+        # Build victim description for the scene.
+        # We use the victim's details ONLY as atmospheric context, not to show the body.
         victim_desc = ""
         if victim_name:
             victim_desc = f"""
-The scene shows the murder victim, {victim_name}, lying dead at the crime scene.
-The body is posed dramatically but tastefully – this is a mystery, not horror.
+The scene subtly reflects the life and personality of the victim, {victim_name}, through personal items and environmental details.
+Do NOT show any dead body, violence, or explicit depiction of the crime itself.
 """
             if victim_background:
                 # Extract any visual hints from background (e.g., profession, age)
@@ -394,13 +395,13 @@ The body is posed dramatically but tastefully – this is a mystery, not horror.
 
         # We describe this as an opening scene rather than a title card to
         # avoid encouraging any rendered text in the image.
-        prompt = f"""Opening scene for a murder mystery – the discovery of the body.
+        prompt = f"""Opening scene for a murder mystery – an atmospheric view of the location shortly after the crime.
 The case is called "{title}", but do NOT draw or write the title or ANY text in the image.
 Setting: {setting}
 {victim_desc}
 {SCENE_ART_STYLE}
-Ominous, foreboding, dramatic crime scene discovery moment.
-Show the victim's body in the scene – this is the moment the murder is discovered.
+Ominous, foreboding mood focused on the environment and clues, not on the body.
+Do NOT show the victim's body or any graphic depiction of the crime.
 No text, no words, no letters, no writing, no labels, no captions, no signage, no title.
 Atmospheric scene only, no text overlay.
 """

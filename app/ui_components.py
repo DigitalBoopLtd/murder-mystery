@@ -94,8 +94,15 @@ def create_ui_components() -> dict:
                 # === CENTER: MAIN STAGE ===
                 with gr.Column(scale=3, elem_classes="center-column"):
 
+                    # ====== GAME STARTED MARKER (must be first for CSS sibling selectors) ======
+                    # Empty initially - when game starts, content is added that CSS detects via :has()
+                    game_started_marker = gr.HTML(
+                        '',  # Empty initially - will be populated when game starts
+                        elem_classes="game-started-container",
+                    )
+
                     # Stage container (styled via .center-column > .gr-group in CSS)
-                    with gr.Group():
+                    with gr.Group(elem_classes="crt-stage"):
 
                         # Speaker name - hidden until the mystery starts
                         # (placeholder text is only shown after the first turn)
@@ -136,7 +143,7 @@ def create_ui_components() -> dict:
 
                     # ====== SETUP WIZARD ======
                     # Step 1: Configure + Voice Loading
-                    with gr.Column(elem_classes="setup-wizard", visible=True) as setup_wizard:
+                    with gr.Column(elem_classes="setup-wizard") as setup_wizard:
                         
                         # Settings (inline in wizard for Step 1)
                         with gr.Group(elem_classes="wizard-settings"):
@@ -328,6 +335,7 @@ def create_ui_components() -> dict:
         "mystery_check_timer": mystery_check_timer,
         "voice_input": voice_input,
         # Setup wizard components
+        "game_started_marker": game_started_marker,
         "setup_wizard": setup_wizard,
         "wizard_era_dropdown": wizard_era_dropdown,
         "wizard_setting_dropdown": wizard_setting_dropdown,

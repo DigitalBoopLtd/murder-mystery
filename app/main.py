@@ -104,6 +104,7 @@ def create_app():
         mystery_check_timer = components["mystery_check_timer"]
         voice_input = components["voice_input"]
         # Setup wizard components
+        game_started_marker = components["game_started_marker"]
         setup_wizard = components["setup_wizard"]
         wizard_era_dropdown = components["wizard_era_dropdown"]
         wizard_setting_dropdown = components["wizard_setting_dropdown"]
@@ -199,16 +200,16 @@ def create_app():
             outputs=None,
         )
 
-        # Start game - now with wizard outputs
+        # Start game - show game_started_marker (CSS sibling selector hides wizard)
         getattr(start_btn, "click")(
-            on_start_game,
+            fn=on_start_game,
             inputs=[session_id],
             outputs=[
+                game_started_marker,  # Show marker → CSS hides wizard via sibling selector
                 speaker_html,
                 audio_output,
                 portrait_image,
                 input_row,
-                setup_wizard,  # Hide wizard
                 victim_scene_html,
                 suspects_list_html,
                 locations_html,
@@ -262,13 +263,13 @@ def create_app():
         if hasattr(audio_output, "stop"):
             getattr(audio_output, "stop")(
                 fn=on_audio_stop,
-                inputs=None,
+                inputs=[session_id],
                 outputs=[speaker_html],
             )
         elif hasattr(audio_output, "pause"):
             getattr(audio_output, "pause")(
                 fn=on_audio_stop,
-                inputs=None,
+                inputs=[session_id],
                 outputs=[speaker_html],
             )
 

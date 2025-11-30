@@ -1,17 +1,18 @@
-langchain>=0.1.0
-langchain-openai>=0.0.5
-langchain-community>=0.0.20
-langgraph>=0.0.20
-faiss-cpu>=1.7.4
-gradio>=5.0.0
-pydantic>=2.0.0
-python-dotenv>=1.0.0
-watchdog>=3.0.0
-openai>=1.0.0
-elevenlabs>=0.2.0
-requests>=2.31.0
-huggingface_hub>=0.20.0
-Pillow>=10.0.0
-websockets>=12.0
-mcp>=1.0.0
-mcp-elevenlabs>=0.1.0
+langchain-openai>=1.1.0
+langchain-community>=0.4.1
+langgraph>=1.0.3
+faiss-cpu>=1.13.0
+gradio>=6.0.0
+pydantic>=2.12.4
+python-dotenv>=1.2.1
+openai>=2.8.1
+elevenlabs>=2.24.0
+requests>=2.32.5
+huggingface_hub>=0.36.0
+Pillow>=11.3.0
+mcp>=1.22.0
+mcp-elevenlabs>=0.0.2
+
+# Note:
+# - langchain core packages are pulled in transitively via langchain-openai/community
+# - watchdog and websockets are dependencies of gradio and need not be pinned here

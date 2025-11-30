@@ -136,7 +136,6 @@ def on_start_game(sess_id, progress=gr.Progress()):
     sess_id = normalize_session_id(sess_id)
     state = get_or_create_state(sess_id)
 
-
     # Stage descriptions for progress bar
     stage_descriptions = {
         "voices": "🎭 Preparing voice actors...",
@@ -283,6 +282,8 @@ def on_start_game(sess_id, progress=gr.Progress()):
         logger.info("[APP] Running in Silent Film mode (no voices)")
 
     yield [
+        # FIRST: Populate game_started_marker with content → CSS :has() detects it
+        '<div class="game-active" data-game-started="true"></div>',  # game_started_marker
         # Speaker - show when game starts
         f'<div class="speaker-name" style="padding: 16px 0 !important;">🗣️ {speaker} SPEAKING...</div>',
         # Audio with subtitles
@@ -291,7 +292,6 @@ def on_start_game(sess_id, progress=gr.Progress()):
         display_portrait,
         # Show game UI
         gr.update(visible=True),  # input_row
-        gr.update(visible=False),  # setup_wizard - hide wizard
         # Side panels - show "loading" state, timer will update when ready
         victim_html,
         format_suspects_list_html(None, state.suspects_talked_to, loading=True, layout="column"),

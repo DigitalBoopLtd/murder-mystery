@@ -4,6 +4,10 @@ The full Gradio app wiring lives in the `app` package. This file exists so
 commands like `python app.py` or `uvicorn app:app` continue to work.
 """
 
+# Fix OpenMP duplicate library error on macOS (numpy + torch conflict)
+import os
+os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
+
 from app import create_app  # type: ignore  # re-exported from app package
 
 
