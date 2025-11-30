@@ -174,11 +174,12 @@ def _prewarm_suspect_portraits(session_id: str, mystery):
 
 
 def _prewarm_scene_images(session_id: str, mystery):
-    """Pre-generate scene images for all locations in the background.
+    """Pre-generate scene images for all clue locations in the background.
 
-    Runs concurrently with portrait prewarming. Uses a bounded number of
-    workers to generate scene images for each unique location mentioned
-    in the clues.
+    Runs concurrently with portrait prewarming. Uses clue info to generate
+    focused scene images that are ready when the player searches.
+    
+    This eliminates the ~4-5s wait during gameplay when searching locations.
     """
     if not mystery or not getattr(mystery, "clues", None):
         logger.info(
@@ -189,43 +190,50 @@ def _prewarm_scene_images(session_id: str, mystery):
     setting = getattr(mystery, "setting", "") or ""
     session_images = mystery_images.get(session_id, {})
 
-    # Extract unique locations from clues
-    locations = set()
+    # Build location -> clue info mapping for context
+    location_clues: Dict[str, object] = {}
     for clue in mystery.clues:
         location = getattr(clue, "location", None)
         if location and location not in session_images:
-            locations.add(location)
+            # Keep first clue per location (most important)
+            if location not in location_clues:
+                location_clues[location] = clue
 
-    if not locations:
+    if not location_clues:
         logger.info(
             "[BG] No new scene images to prewarm for session %s", session_id
         )
         return
 
-    perf.start("prewarm_scenes", is_parallel=True, parallel_count=len(locations),
-               details=f"{len(locations)} locations")
+    perf.start("prewarm_scenes", is_parallel=True, parallel_count=len(location_clues),
+               details=f"{len(location_clues)} locations")
     
-    task_queue: "queue.Queue[str]" = queue.Queue()
+    # Queue contains (location, clue) tuples for context
+    task_queue: "queue.Queue[Tuple[str, object]]" = queue.Queue()
     completed_count = [0]  # Use list for mutable closure
     
-    for location in locations:
-        task_queue.put(location)
+    for location, clue in location_clues.items():
+        task_queue.put((location, clue))
 
     def _worker():
         while True:
             try:
-                location = task_queue.get_nowait()
+                location, clue = task_queue.get_nowait()
                 try:
                     logger.info(
                         "[BG] Worker generating prewarm scene for %s in session %s",
                         location,
                         session_id,
                     )
-                    # Generate scene without specific context (since player hasn't searched yet)
+                    # Build clue-focused context for better image quality
+                    clue_desc = getattr(clue, "description", "") or ""
+                    clue_type = getattr(clue, "type", "") or ""
+                    context = f"Focus: {clue_desc}. Type: {clue_type}." if clue_desc else ""
+                    
                     _generate_scene_background(
                         location=location,
                         mystery_setting=setting,
-                        context_text="",  # No context yet - player hasn't searched
+                        context_text=context,
                         session_id=session_id,
                     )
                     completed_count[0] += 1
@@ -273,6 +281,7 @@ def generate_turn_media(
     audio_path_from_tool: Optional[str],
     session_id: str,
     background_images: bool = True,
+    alignment_data_from_tool: Optional[List[Dict]] = None,
 ) -> Tuple[Optional[str], Optional[List[Dict]]]:
     """Generate audio and images for a turn (slow path).
 
@@ -290,6 +299,7 @@ def generate_turn_media(
         audio_path_from_tool: Pre-generated audio path if tool created it
         session_id: Session identifier
         background_images: If True, generate images in background threads (default)
+        alignment_data_from_tool: Pre-generated alignment data if tool created it
 
     Returns:
         Tuple of (audio_path, alignment_data)
@@ -321,7 +331,7 @@ def generate_turn_media(
                     break
     
     # Check if scene needed
-    # ALWAYS regenerate if we have clue context (even if prewarmed image exists)
+    # Use prewarmed image if exists - prewarming now includes clue focus
     scene_info = None
     if actions.get("location_searched"):
         location = actions["location_searched"]
@@ -329,17 +339,16 @@ def generate_turn_media(
         session_images = mystery_images.get(session_id, {})
         mystery_setting = state.mystery.setting if state.mystery else ""
         
-        # Get clue-focused scene description from state.location_descriptions
-        # This is populated by _process_scene_brief() with clue_focus, camera_angle, etc.
-        loc_desc = getattr(state, "location_descriptions", {}).get(normalized_location, "")
-        
-        # Check if we have clue context from the describe_scene_for_image tool
-        has_clue_context = bool(loc_desc and "Focus:" in loc_desc)
+        # Check if image already exists (from prewarming or previous search)
         image_exists = normalized_location in session_images or location in session_images
         
-        # Generate if: no image exists OR we have clue context (override prewarmed)
-        if has_clue_context or not image_exists:
-            # Build context with clue-focused info
+        if image_exists:
+            # Use prewarmed/cached image - no regeneration needed
+            # Prewarmed images already have clue focus from _prewarm_scene_images
+            logger.info("[GAME] ✅ Using prewarmed scene for %s (instant)", normalized_location)
+        else:
+            # No prewarmed image - generate on-demand with clue context
+            loc_desc = getattr(state, "location_descriptions", {}).get(normalized_location, "")
             parts = []
             if loc_desc:
                 parts.append(f"CLUE-FOCUSED IMAGE: {loc_desc}")
@@ -347,15 +356,9 @@ def generate_turn_media(
                 parts.append(clean_response[:300])
             context_text = " ".join(parts)
             
-            if has_clue_context and image_exists:
-                logger.info("[GAME] 🎯 Regenerating scene with CLUE FOCUS (overriding prewarmed): %s", normalized_location)
-            else:
-                logger.info("[GAME] Generating clue-focused scene for: %s", normalized_location)
-            logger.info("[GAME] Scene context (loc_desc): %s", loc_desc[:200] if loc_desc else "NONE")
-            logger.info("[GAME] Scene context (total): %d chars", len(context_text))
+            logger.info("[GAME] Generating scene on-demand for: %s", normalized_location)
+            logger.info("[GAME] Scene context: %d chars", len(context_text))
             scene_info = (location, normalized_location, mystery_setting, context_text)
-        else:
-            logger.info("[GAME] Using existing image for %s (no clue context)", normalized_location)
     
     # If background_images=True, fire and forget
     if background_images:
@@ -379,7 +382,7 @@ def generate_turn_media(
         
         # TTS runs in foreground
         audio_path, alignment_data = _generate_tts(
-            tts_text, voice_id, speaker_name, audio_path_from_tool
+            tts_text, voice_id, speaker_name, audio_path_from_tool, alignment_data_from_tool
         )
         return audio_path, alignment_data
     
@@ -393,7 +396,7 @@ def generate_turn_media(
     alignment_data = None
     
     def _tts_task():
-        return _generate_tts(tts_text, voice_id, speaker_name, audio_path_from_tool)
+        return _generate_tts(tts_text, voice_id, speaker_name, audio_path_from_tool, alignment_data_from_tool)
     
     def _portrait_task():
         if not portrait_suspect:
@@ -463,12 +466,19 @@ def _generate_tts(
     tts_text: str,
     voice_id: str,
     speaker_name: str,
-    audio_path_from_tool: Optional[str]
+    audio_path_from_tool: Optional[str],
+    alignment_data_from_tool: Optional[List[Dict]] = None,
 ) -> Tuple[Optional[str], Optional[List[Dict]]]:
     """Generate TTS audio (extracted for parallel execution)."""
     if audio_path_from_tool:
-        from game.tools import get_audio_alignment_data
-        alignment_data = get_audio_alignment_data(audio_path_from_tool)
+        # Prefer alignment data passed directly from ToolOutputStore
+        alignment_data = alignment_data_from_tool
+        
+        # Fall back to legacy cache lookup if not provided
+        if not alignment_data:
+            from game.tools import get_audio_alignment_data
+            alignment_data = get_audio_alignment_data(audio_path_from_tool)
+        
         if alignment_data:
             logger.info(
                 "[GAME] Using audio from tool with %d word timestamps: %s",

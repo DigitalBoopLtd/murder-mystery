@@ -1,4 +1,15 @@
-"""Mystery generation logic."""
+"""Mystery generation logic.
+
+This module provides two mystery generation modes:
+1. PARALLEL (default): Uses multiple sub-agents running concurrently (~6-8s)
+2. MONOLITHIC (fallback): Single large LLM call (~15s)
+
+Set USE_PARALLEL_GENERATION=false in .env to use monolithic mode.
+
+IMPORTANT: Neither mode creates an agent that users interact with.
+The user-facing agent is the Game Master in services/agent.py.
+These generators only run once at game start to create the mystery content.
+"""
 
 import os
 import re
@@ -15,6 +26,15 @@ from services.voice_service import get_voice_service
 from mystery_config import MysteryConfig
 
 logger = logging.getLogger(__name__)
+
+# Feature flag for parallel generation
+# Set to "false" in .env to use the slower monolithic generator
+USE_PARALLEL_GENERATION = os.getenv("USE_PARALLEL_GENERATION", "true").lower() == "true"
+
+if USE_PARALLEL_GENERATION:
+    logger.info("🚀 Using PARALLEL mystery generation (faster)")
+else:
+    logger.info("📦 Using MONOLITHIC mystery generation (slower)")
 
 
 # Diverse, tech/geek-friendly mystery settings
@@ -312,7 +332,50 @@ def generate_mystery(
     voice_summary: Optional[str] = None,
 ) -> Mystery:
     """Generate a complete murder mystery scenario.
+    
+    Routes to either parallel or monolithic generation based on
+    USE_PARALLEL_GENERATION environment variable.
+    
+    IMPORTANT: This is NOT the agent users interact with. Users talk to
+    the Game Master Agent in services/agent.py. This function only runs
+    once at game start to create the mystery content.
 
+    Args:
+        premise: Optional preset premise (setting, victim)
+        config: Game configuration for difficulty/tone
+        voice_summary: Available voices for character casting
+        
+    Returns:
+        Complete Mystery object ready for gameplay
+    """
+    if USE_PARALLEL_GENERATION:
+        try:
+            from game.parallel_mystery import generate_mystery_parallel_sync
+            logger.info("[MYSTERY] Using PARALLEL generation (sub-agents)")
+            return generate_mystery_parallel_sync(
+                premise=premise,
+                config=config,
+                voice_summary=voice_summary,
+            )
+        except Exception as e:
+            logger.error("[MYSTERY] Parallel generation failed: %s", e)
+            logger.info("[MYSTERY] Falling back to monolithic generation")
+            # Fall through to monolithic
+    
+    logger.info("[MYSTERY] Using MONOLITHIC generation")
+    return _generate_mystery_monolithic(premise, config, voice_summary)
+
+
+def _generate_mystery_monolithic(
+    premise: Optional[MysteryPremise] = None,
+    config: Optional[MysteryConfig] = None,
+    voice_summary: Optional[str] = None,
+) -> Mystery:
+    """Generate a complete murder mystery in a single LLM call (legacy mode).
+
+    This is the original monolithic generator. It's slower (~15s) but serves
+    as a fallback if parallel generation fails.
+    
     If a premise is provided, the model MUST keep the setting and victim
     consistent with that premise.
     

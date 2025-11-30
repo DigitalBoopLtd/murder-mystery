@@ -702,6 +702,11 @@ def on_voice_input(audio_path: str, sess_id, progress=gr.Progress()):
     t3 = time.perf_counter()
     logger.info("[PERF] Action logic took %.2fs", t3 - t2)
     progress(1.0, desc="🧠 Figuring out what happens...")
+    
+    # Get alignment data from ToolOutputStore (stored alongside audio by tool)
+    from game.state_manager import get_tool_output_store
+    tool_store = get_tool_output_store(sess_id)
+    alignment_data_from_tool = tool_store.audio_alignment_data
 
     # Get images dict (may not have new portrait yet)
     images = mystery_images.get(sess_id, {})
@@ -836,6 +841,7 @@ def on_voice_input(audio_path: str, sess_id, progress=gr.Progress()):
         audio_path_from_tool,
         sess_id,
         background_images=False,  # Wait for portrait so it's ready in Stage 2
+        alignment_data_from_tool=alignment_data_from_tool,
     )
     t5 = time.perf_counter()
     logger.info("[PERF] Media generation took %.2fs", t5 - t4)

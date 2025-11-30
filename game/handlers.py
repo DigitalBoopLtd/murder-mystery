@@ -656,6 +656,31 @@ def process_player_action(
     
     if tool_store.clue_found:
         actions["clue_found"] = tool_store.clue_found
+        clue_id = tool_store.clue_found
+        
+        # Add clue to game state and RAG memory
+        if state and state.mystery:
+            for clue in state.mystery.clues:
+                if clue.id == clue_id:
+                    # Add to game state (tracks discovered clues for investigation log)
+                    state.add_clue(clue.id, clue.description)
+                    logger.info("[CLUE] ✅ Added to investigation log: %s at %s", 
+                                clue.id, clue.location)
+                    
+                    # Add to RAG memory for semantic search
+                    from services.game_memory import get_game_memory
+                    memory = get_game_memory()
+                    if memory.is_available:
+                        memory.add_clue(
+                            clue_id=clue.id,
+                            description=clue.description,
+                            location=clue.location,
+                            significance=clue.significance,
+                            turn=state.current_turn
+                        )
+                        logger.info("[RAG] Indexed clue %s for semantic search", clue.id)
+                    break
+    
     if tool_store.accusation:
         actions["accusation"] = tool_store.accusation.suspect_name
         actions["accusation_correct"] = tool_store.accusation.is_correct
@@ -1273,6 +1298,31 @@ def run_action_logic(
     
     if tool_store.clue_found:
         actions["clue_found"] = tool_store.clue_found
+        clue_id = tool_store.clue_found
+        
+        # Add clue to game state and RAG memory
+        if state and state.mystery:
+            for clue in state.mystery.clues:
+                if clue.id == clue_id:
+                    # Add to game state (tracks discovered clues for investigation log)
+                    state.add_clue(clue.id, clue.description)
+                    logger.info("[CLUE] ✅ Added to investigation log: %s at %s", 
+                                clue.id, clue.location)
+                    
+                    # Add to RAG memory for semantic search
+                    from services.game_memory import get_game_memory
+                    memory = get_game_memory()
+                    if memory.is_available:
+                        memory.add_clue(
+                            clue_id=clue.id,
+                            description=clue.description,
+                            location=clue.location,
+                            significance=clue.significance,
+                            turn=state.current_turn
+                        )
+                        logger.info("[RAG] Indexed clue %s for semantic search", clue.id)
+                    break
+    
     if tool_store.accusation:
         actions["accusation"] = tool_store.accusation.suspect_name
         actions["accusation_correct"] = tool_store.accusation.is_correct

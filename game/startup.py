@@ -22,9 +22,8 @@ from game.mystery_generator import (
     generate_mystery,
     generate_mystery_premise,
     prepare_game_prompt,
-    generate_location_descriptions,
 )
-from game.media import _prewarm_suspect_portraits
+from game.media import _prewarm_suspect_portraits, _prewarm_scene_images
 from mystery_config import create_validated_config
 from services.agent import create_game_master_agent, process_message
 from services.tts_service import text_to_speech
@@ -459,20 +458,11 @@ system or background tasks. Stay purely in-world."""
             
             bg_state.mystery = full_mystery
             
-            # Generate rich per-location visual descriptions for scene images
-            perf.start("bg_location_descriptions", details="LLM visual descriptions")
-            try:
-                bg_state.location_descriptions = generate_location_descriptions(
-                    full_mystery
-                )
-                perf.end("bg_location_descriptions", details=f"{len(bg_state.location_descriptions)} locations")
-            except Exception as e:  # noqa: BLE001
-                logger.error(
-                    "[BG] Error generating location descriptions for session %s: %s",
-                    sess_id,
-                    e,
-                )
-                perf.end("bg_location_descriptions", status="error", details=str(e))
+            # NOTE: Location descriptions are NO LONGER pre-generated here.
+            # The describe_scene_for_image tool generates clue-focused descriptions
+            # on-demand when the player searches a location - these are MORE USEFUL
+            # because they include the specific clue discovered. Removing this saves ~6s.
+            # (Previously: generate_location_descriptions() added ~6s to startup)
             
             bg_state.system_prompt = prepare_game_prompt(
                 full_mystery, bg_state.tone_instruction
@@ -481,17 +471,19 @@ system or background tasks. Stay purely in-world."""
             perf.end("bg_full_mystery", details=f"{len(full_mystery.suspects)} suspects, {len(full_mystery.clues)} clues")
             logger.info("[BG] Full mystery is ready for session %s", sess_id)
             
-            # ========== PREWARM PORTRAITS IN BACKGROUND ==========
-            # This runs AFTER mystery is ready, generating portraits in background
-            # NOTE: Scene images are NOT prewarmed - they're generated on-demand
-            # when the player searches, so the image focuses on the specific clue
-            logger.info("[BG] Starting portrait prewarming for session %s...", sess_id)
-            perf.start("bg_prewarm_images", is_parallel=True, parallel_count=1, details="portraits only")
+            # ========== PREWARM IMAGES IN BACKGROUND ==========
+            # This runs AFTER mystery is ready, generating all images in background
+            # Portraits AND scene images run in parallel for faster startup
+            logger.info("[BG] Starting image prewarming for session %s...", sess_id)
+            perf.start("bg_prewarm_images", is_parallel=True, parallel_count=1, details="portraits + scenes")
             try:
                 # Prewarm all suspect portraits (runs 3 workers in parallel)
                 _prewarm_suspect_portraits(sess_id, full_mystery)
-                # Scene images generated on-demand with clue focus (not prewarmed)
-                perf.end("bg_prewarm_images", details=f"{len(full_mystery.suspects)} portraits (scenes on-demand)")
+                # Prewarm scene images for all clue locations (runs 3 workers in parallel)
+                # Uses clue info for focused images - eliminates ~4-5s wait during gameplay
+                _prewarm_scene_images(sess_id, full_mystery)
+                num_locations = len(set(c.location for c in full_mystery.clues)) if full_mystery.clues else 0
+                perf.end("bg_prewarm_images", details=f"{len(full_mystery.suspects)} portraits + {num_locations} scenes")
             except Exception as prewarm_err:  # noqa: BLE001
                 logger.error("[BG] Error prewarming images: %s", prewarm_err)
                 perf.end("bg_prewarm_images", status="error", details=str(prewarm_err))

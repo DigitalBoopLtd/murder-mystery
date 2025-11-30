@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import Dict, Optional, Any
+from typing import Dict, List, Optional, Any
 
 from game.state import GameState
 
@@ -61,6 +61,7 @@ class ToolOutputStore:
     location_searched: Optional[str] = None
     clue_found: Optional[str] = None
     audio_path: Optional[str] = None
+    audio_alignment_data: Optional[List[Dict]] = None  # Word timestamps for subtitles
     
     def clear(self):
         """Clear all stored outputs for next turn."""
@@ -70,6 +71,7 @@ class ToolOutputStore:
         self.location_searched = None
         self.clue_found = None
         self.audio_path = None
+        self.audio_alignment_data = None
     
     def to_actions_dict(self) -> Dict[str, Any]:
         """Convert to actions dict for backward compatibility."""

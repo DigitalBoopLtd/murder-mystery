@@ -40,7 +40,9 @@ def interrogate_suspect(
     2) player_question - what the player said
     3) emotional_context - current trust/nervousness and conversation history
     
-    Returns only the narrative. Structured data (audio path, speaker) stored in ToolOutputStore."""
+    Returns only the narrative. Structured data (audio path, speaker) stored in ToolOutputStore.
+    
+    This tool uses RAG memory to maintain consistency - suspects remember past conversations."""
 
     logger.info("\n%s", "=" * 60)
     logger.info("INTERROGATE_SUSPECT TOOL CALLED")
@@ -68,6 +70,54 @@ def interrogate_suspect(
         logger.warning("Suspect not found: %s", suspect_name)
         return f"I'm sorry, I couldn't find a suspect named {suspect_name}."
     
+    # =========================================================================
+    # QUERY RAG MEMORY FOR THIS SUSPECT'S PAST STATEMENTS
+    # This gives the suspect "memory" of past conversations for consistency
+    # =========================================================================
+    memory = get_game_memory()
+    past_conversations = ""
+    relevant_statements = ""
+    
+    if memory.is_available:
+        # Get ALL past conversations with this suspect (chronological)
+        history = memory.get_suspect_history(suspect.name)
+        if history:
+            past_convos = []
+            for conv in history[-5:]:  # Last 5 exchanges max
+                q = conv.get("question", "")[:100]
+                a = conv.get("answer", "")[:150]
+                turn = conv.get("turn", "?")
+                past_convos.append(f"Turn {turn}: Player asked: \"{q}\" → You said: \"{a}\"")
+            past_conversations = "\n".join(past_convos)
+            logger.info("[RAG] Found %d past conversations with %s", len(history), suspect.name)
+        
+        # Search for statements RELATED to current question (semantic search)
+        related = memory.search_by_suspect(suspect.name, player_question, k=3)
+        if related:
+            statements = []
+            for text, meta in related:
+                answer = meta.get("answer", "")
+                if answer:
+                    statements.append(f"- \"{answer[:150]}\"")
+            if statements:
+                relevant_statements = "\n".join(statements)
+                logger.info("[RAG] Found %d relevant past statements", len(statements))
+    
+    # Build memory context for prompt
+    memory_context = ""
+    if past_conversations:
+        memory_context += f"""
+## YOUR PAST STATEMENTS TO THIS DETECTIVE
+(Maintain consistency! Reference these naturally.)
+{past_conversations}
+"""
+    if relevant_statements:
+        memory_context += f"""
+## YOUR STATEMENTS RELATED TO THIS TOPIC
+You may have said something about this before - stay consistent:
+{relevant_statements}
+"""
+    
     # Build the FULL profile internally (including secrets the GM shouldn't narrate)
     full_profile = f"""
 Name: {suspect.name}
@@ -80,6 +130,7 @@ Guilty: {suspect.isGuilty}
 {"Murder details (NEVER confess): Used " + state.mystery.weapon + " because " + state.mystery.motive if suspect.isGuilty else ""}
 
 {emotional_context}
+{memory_context}
 """
 
     llm = ChatOpenAI(
@@ -103,16 +154,18 @@ CORE RULES:
 - If the player asks multiple things at once, answer the most important parts now and leave room for follow‑up questions later.
 - The player might speak in any language, but you MUST ALWAYS answer in natural, fluent ENGLISH only
 
-CONSISTENCY RULES (CRITICAL):
-- Your profile includes CONVERSATION HISTORY - what you've said before to this detective
-- You MUST be consistent with your previous statements unless deliberately lying
-- If you contradict yourself, it should be subtle and due to nervousness, not carelessness
-- Reference past conversations naturally: "As I told you before...", "I already mentioned..."
+⚠️ MEMORY & CONSISTENCY RULES (CRITICAL):
+- Your profile includes YOUR PAST STATEMENTS - what you've said before to this detective
+- You MUST be consistent with your previous statements
+- Reference past conversations naturally: "As I told you...", "I already mentioned...", "Like I said before..."
+- If player asks something you answered before, remind them: "I believe I mentioned..."
+- If you must contradict yourself, it should be SUBTLE and due to nervousness or being caught
+- If caught in a contradiction, get defensive, explain the discrepancy, or admit to nervousness
 
 EMOTIONAL STATE RULES:
 - Low trust (<30%): Be defensive, give short answers, act suspicious of the detective
 - High trust (>70%): Be more open, consider sharing your "info to share" if pressed
-- High nervousness (>70%): Show stress - speak faster, fidget, might slip up
+- High nervousness (>70%): Show stress - speak faster, fidget, might slip up or contradict yourself
 
 Suspect Profile:
 {suspect_profile}""",
@@ -131,8 +184,9 @@ Suspect Profile:
 
     # Generate audio if voice_id is available
     audio_path = None
+    alignment_data = None
     if voice_id:
-        audio_path = generate_suspect_audio(text_response, voice_id, suspect.name)
+        audio_path, alignment_data = generate_suspect_audio(text_response, voice_id, suspect.name)
 
     # Store structured data in ToolOutputStore (no markers!)
     store.interrogation = InterrogationOutput(
@@ -142,8 +196,12 @@ Suspect Profile:
     )
     if audio_path:
         store.audio_path = audio_path
+        # Store alignment data directly in ToolOutputStore for reliable retrieval
+        store.audio_alignment_data = alignment_data
     
-    logger.info("Interrogation stored: suspect=%s, audio=%s", suspect.name, bool(audio_path))
+    logger.info("Interrogation stored: suspect=%s, audio=%s, alignment=%d words, memory_used=%s", 
+                suspect.name, bool(audio_path), len(alignment_data) if alignment_data else 0,
+                bool(past_conversations or relevant_statements))
 
     # Return ONLY the narrative - no markers needed!
     return text_response
@@ -340,7 +398,7 @@ def enhance_text_for_speech(text: str) -> str:
 
 def generate_suspect_audio(
     text: str, voice_id: str, suspect_name: str
-) -> Optional[str]:
+) -> tuple:
     """Generate audio for suspect response with alignment data.
 
     Args:
@@ -349,8 +407,7 @@ def generate_suspect_audio(
         suspect_name: Name of the suspect (for logging)
 
     Returns:
-        Path to generated audio file, or None on error
-        Also stores alignment data in _audio_alignment_cache
+        Tuple of (audio_path, alignment_data) or (None, None) on error
     """
     try:
         # Enhance text with capitalization for emphasis
@@ -362,7 +419,7 @@ def generate_suspect_audio(
         )
 
         if audio_path:
-            # Store alignment data in cache for retrieval later
+            # Also store in legacy cache for backward compatibility
             _audio_alignment_cache[audio_path] = alignment_data
             if alignment_data:
                 logger.info(
@@ -377,14 +434,14 @@ def generate_suspect_audio(
                     suspect_name,
                     audio_path,
                 )
-            return audio_path
+            return audio_path, alignment_data
         else:
             logger.warning("Failed to generate audio for %s", suspect_name)
-            return None
+            return None, None
 
     except Exception as e:
         logger.error("Error generating audio: %s", e)
-        return None
+        return None, None
 
 
 def get_audio_alignment_data(audio_path: str) -> Optional[list]:
