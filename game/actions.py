@@ -25,7 +25,7 @@ from game.state_manager import (
     get_suspect_voice_id,
     normalize_location_name,
 )
-from services.image_service import generate_portrait_on_demand, get_image_service
+from services.image_service import smart_generate_portrait, smart_generate_scene
 from game.mystery_generator import (
     assign_voice_to_suspect,
 )
@@ -359,7 +359,7 @@ def process_player_action(
             # Check if we need to generate this suspect's portrait
             if speaker not in session_images:
                 logger.info("Generating portrait on-demand for suspect: %s", speaker)
-                portrait_path = generate_portrait_on_demand(
+                portrait_path = smart_generate_portrait(
                     suspect, state.mystery.setting if state.mystery else ""
                 )
                 if portrait_path:
@@ -380,51 +380,61 @@ def process_player_action(
             )
 
     # Generate scene image on-demand if a location was searched
+    # ALWAYS regenerate if we have clue context (even if prewarmed image exists)
     if actions.get("location_searched"):
         location = actions["location_searched"]
         normalized_location = normalize_location_name(location, state)
         session_images = mystery_images.get(session_id, {})
         
-        # Only generate if we don't already have this scene (check both original and normalized)
-        if normalized_location not in session_images and location not in session_images:
-            logger.info("Generating scene image for location: %s (normalized: %s)", location, normalized_location)
-            service = get_image_service()
-            if service and service.is_available:
-                # Build rich scene context: stored location description + latest narrative
-                parts = []
-                loc_desc = getattr(state, "location_descriptions", {}).get(
-                    normalized_location, ""
-                )
-                if loc_desc:
-                    parts.append(f"Location visual description: {loc_desc}")
-                if clean_response:
-                    parts.append(clean_response[:300])
-                context_text = " ".join(parts)
-                mood = _get_scene_mood_for_state(state)
-                scene_path = service.generate_scene(
-                    location_name=normalized_location,  # Use normalized name for generation
-                    setting_description=state.mystery.setting if state.mystery else "",
-                    mood=mood,
-                    context=context_text,
-                )
-                if scene_path:
-                    # Store in mystery_images dict for this session with normalized name
-                    # Also store with original name as fallback
-                    if session_id not in mystery_images:
-                        mystery_images[session_id] = {}
-                    mystery_images[session_id][normalized_location] = scene_path
-                    if normalized_location != location:
-                        mystery_images[session_id][location] = scene_path  # Also store with original
-                    logger.info(
-                        "Generated and stored scene for %s (normalized: %s): %s",
-                        location,
-                        normalized_location,
-                        scene_path,
-                    )
-                else:
-                    logger.warning("Failed to generate scene for %s", normalized_location)
+        # Build rich scene context: stored location description + latest narrative
+        loc_desc = getattr(state, "location_descriptions", {}).get(
+            normalized_location, ""
+        )
+        
+        # Check if we have clue context from the describe_scene_for_image tool
+        has_clue_context = bool(loc_desc and "Focus:" in loc_desc)
+        image_exists = normalized_location in session_images or location in session_images
+        
+        # Generate if: no image exists OR we have clue context (override prewarmed)
+        if has_clue_context or not image_exists:
+            parts = []
+            if loc_desc:
+                parts.append(f"CLUE-FOCUSED IMAGE: {loc_desc}")
+            if clean_response:
+                parts.append(clean_response[:300])
+            context_text = " ".join(parts)
+            mood = _get_scene_mood_for_state(state)
+            
+            if has_clue_context and image_exists:
+                logger.info("🎯 Regenerating scene with CLUE FOCUS (overriding prewarmed): %s", normalized_location)
             else:
-                logger.warning("Image service not available for scene generation")
+                logger.info("Generating scene image for location: %s (normalized: %s)", location, normalized_location)
+            
+            # Use smart_generate_scene (MCP if available, otherwise direct)
+            scene_path = smart_generate_scene(
+                location=normalized_location,
+                setting=state.mystery.setting if state.mystery else "",
+                mood=mood,
+                context=context_text,
+            )
+            if scene_path:
+                # Store in mystery_images dict for this session with normalized name
+                # Also store with original name as fallback
+                if session_id not in mystery_images:
+                    mystery_images[session_id] = {}
+                mystery_images[session_id][normalized_location] = scene_path
+                if normalized_location != location:
+                    mystery_images[session_id][location] = scene_path  # Also store with original
+                logger.info(
+                    "Generated and stored scene for %s (normalized: %s): %s",
+                    location,
+                    normalized_location,
+                    scene_path,
+                )
+            else:
+                logger.warning("Failed to generate scene for %s", normalized_location)
+        else:
+            logger.info("Using existing image for %s (no clue context)", normalized_location)
 
     # Determine voice
     voice_id = None

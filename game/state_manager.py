@@ -3,14 +3,101 @@
 from __future__ import annotations
 
 import logging
-from typing import Dict, Optional
+from dataclasses import dataclass, field
+from typing import Dict, Optional, Any
 
 from game.state import GameState
-import logging
 
 logger = logging.getLogger(__name__)
 
-logger = logging.getLogger(__name__)
+
+# ============================================================================
+# Structured Tool Output Store
+# ============================================================================
+# Tools store their structured outputs here instead of embedding markers in text.
+# Handlers read from here instead of regex parsing.
+
+
+@dataclass
+class SceneBriefOutput:
+    """Structured output from describe_scene_for_image tool."""
+    location_name: str
+    clue_id: Optional[str] = None
+    clue_focus: str = ""
+    camera_angle: str = "medium shot"
+    lighting_mood: str = "dramatic"
+    background_hint: str = ""
+    prompt_hint: str = ""
+
+
+@dataclass 
+class InterrogationOutput:
+    """Structured output from interrogate_suspect tool."""
+    suspect_name: str
+    response_text: str
+    emotional_state: Optional[str] = None
+
+
+@dataclass
+class AccusationOutput:
+    """Structured output from make_accusation tool."""
+    suspect_name: str
+    is_correct: bool
+    narrative: str
+
+
+@dataclass
+class ToolOutputStore:
+    """Store for structured tool outputs. Replaces regex marker parsing."""
+    
+    # Most recent outputs from each tool type
+    scene_brief: Optional[SceneBriefOutput] = None
+    interrogation: Optional[InterrogationOutput] = None
+    accusation: Optional[AccusationOutput] = None
+    
+    # Action flags (replaces [SEARCHED:], [CLUE_FOUND:], etc.)
+    location_searched: Optional[str] = None
+    clue_found: Optional[str] = None
+    audio_path: Optional[str] = None
+    
+    def clear(self):
+        """Clear all stored outputs for next turn."""
+        self.scene_brief = None
+        self.interrogation = None
+        self.accusation = None
+        self.location_searched = None
+        self.clue_found = None
+        self.audio_path = None
+    
+    def to_actions_dict(self) -> Dict[str, Any]:
+        """Convert to actions dict for backward compatibility."""
+        actions = {}
+        if self.location_searched:
+            actions["location_searched"] = self.location_searched
+        if self.clue_found:
+            actions["clue_found"] = self.clue_found
+        if self.accusation:
+            actions["accusation"] = self.accusation.suspect_name
+            actions["accusation_correct"] = self.accusation.is_correct
+        return actions
+
+
+# Per-session tool output stores
+_tool_outputs: Dict[str, ToolOutputStore] = {}
+
+
+def get_tool_output_store(session_id: Optional[str] = None) -> ToolOutputStore:
+    """Get the tool output store for a session."""
+    sid = session_id or _current_session_id or "_default"
+    if sid not in _tool_outputs:
+        _tool_outputs[sid] = ToolOutputStore()
+    return _tool_outputs[sid]
+
+
+def clear_tool_outputs(session_id: Optional[str] = None):
+    """Clear tool outputs for a new turn."""
+    store = get_tool_output_store(session_id)
+    store.clear()
 
 # These will be set by app.py via init_game_handlers()
 game_states: Dict[str, GameState] = {}

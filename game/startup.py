@@ -24,7 +24,7 @@ from game.mystery_generator import (
     prepare_game_prompt,
     generate_location_descriptions,
 )
-from game.media import _prewarm_suspect_portraits, _prewarm_scene_images
+from game.media import _prewarm_suspect_portraits
 from mystery_config import create_validated_config
 from services.agent import create_game_master_agent, process_message
 from services.tts_service import text_to_speech
@@ -481,17 +481,17 @@ system or background tasks. Stay purely in-world."""
             perf.end("bg_full_mystery", details=f"{len(full_mystery.suspects)} suspects, {len(full_mystery.clues)} clues")
             logger.info("[BG] Full mystery is ready for session %s", sess_id)
             
-            # ========== PREWARM ALL IMAGES IN BACKGROUND ==========
-            # This runs AFTER mystery is ready, generating all portraits and scenes
-            # in parallel so they're ready before the player needs them
-            logger.info("[BG] Starting image prewarming for session %s...", sess_id)
-            perf.start("bg_prewarm_images", is_parallel=True, parallel_count=1, details="portraits + scenes")
+            # ========== PREWARM PORTRAITS IN BACKGROUND ==========
+            # This runs AFTER mystery is ready, generating portraits in background
+            # NOTE: Scene images are NOT prewarmed - they're generated on-demand
+            # when the player searches, so the image focuses on the specific clue
+            logger.info("[BG] Starting portrait prewarming for session %s...", sess_id)
+            perf.start("bg_prewarm_images", is_parallel=True, parallel_count=1, details="portraits only")
             try:
                 # Prewarm all suspect portraits (runs 3 workers in parallel)
                 _prewarm_suspect_portraits(sess_id, full_mystery)
-                # Prewarm all scene images (runs 3 workers in parallel)
-                _prewarm_scene_images(sess_id, full_mystery)
-                perf.end("bg_prewarm_images", details=f"{len(full_mystery.suspects)} portraits, {len(full_mystery.clues)} scenes")
+                # Scene images generated on-demand with clue focus (not prewarmed)
+                perf.end("bg_prewarm_images", details=f"{len(full_mystery.suspects)} portraits (scenes on-demand)")
             except Exception as prewarm_err:  # noqa: BLE001
                 logger.error("[BG] Error prewarming images: %s", prewarm_err)
                 perf.end("bg_prewarm_images", status="error", details=str(prewarm_err))

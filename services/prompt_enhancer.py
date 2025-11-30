@@ -120,13 +120,23 @@ REQUIREMENTS:
 - Art style: 1990s adventure game backgrounds like Monkey Island, Gabriel Knight, The Dig
 - Painterly digital art with visible brushwork texture
 - Rich saturated colors with dramatic lighting
-- First-person detective POV surveying the scene
+
+IMPORTANT - CLUE FOCUS:
+If Context mentions a CLUE or evidence, make the CLUE the VISUAL FOCUS of the image:
+- The clue/evidence should be prominently visible and dramatically lit
+- Use close-up or medium shot to feature the clue
+- The location provides atmospheric BACKGROUND, the clue is the HERO
+- Follow any camera angle/shot type specified in Context (e.g., "extreme close-up", "macro shot")
+
+If no specific clue mentioned, show the location from first-person detective POV.
+
+OTHER REQUIREMENTS:
 - Include period-appropriate props, furniture, environmental details
 - Atmospheric depth with layered foreground/midground/background
 - NO TEXT, NO SIGNS, NO WRITING visible in the image
 - NO PEOPLE unless specifically mentioned in context
 
-Generate a detailed visual description of this scene."""
+Generate a detailed visual description that makes the CLUE the star of the image."""
 
 
 TITLE_CARD_TEMPLATE = """Enhance this opening scene prompt for a murder mystery game.
@@ -240,14 +250,18 @@ def enhance_scene_prompt(
     Returns:
         Enhanced prompt string (200-400 words)
     """
-    # Check cache first (note: context is excluded from cache key for prewarm)
-    cache_key = _cache_key("scene", location=location, setting=setting[:100], mood=mood)
+    # Include context hash in cache key so clue-focused prompts aren't cached incorrectly
+    context_hash = hashlib.md5((context or "").encode()).hexdigest()[:8] if context else "none"
+    cache_key = _cache_key("scene", location=location, setting=setting[:100], mood=mood, ctx=context_hash)
     with _cache_lock:
         if cache_key in _prompt_cache:
-            logger.info(f"[PE] Cache hit for scene {location}")
+            logger.info(f"[PE] Cache hit for scene {location} (ctx={context_hash})")
             return _prompt_cache[cache_key]
     
     client = get_client()
+    
+    # Log the context being used for image generation
+    logger.info(f"[PE] Scene prompt context for {location}: {context[:200] if context else 'NONE'}")
     
     user_prompt = SCENE_TEMPLATE.format(
         location=location,

@@ -522,6 +522,12 @@ CRITICAL: Return ONLY valid JSON. Do NOT wrap it in markdown code blocks. Do NOT
                         "  %s: voice_id=%s, gender=%s, age=%s",
                         s.name, s.voice_id, s.gender, s.age
                     )
+            # Clear any placeholder portrait_path values the LLM may have generated
+            # (we generate portraits ourselves using the Image MCP server)
+            for suspect in mystery.suspects:
+                if suspect.portrait_path and not os.path.exists(suspect.portrait_path):
+                    suspect.portrait_path = None
+            
             break
         except Exception as e:
             logger.error("Error generating full mystery on attempt %s: %s", attempt, e)

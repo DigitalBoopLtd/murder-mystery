@@ -34,18 +34,18 @@ USE_MCP = os.getenv("USE_MCP", "false").lower() == "true"
 
 # Initialize MCP variables (will be set if MCP is available)
 MCP_AVAILABLE = False
-MCPImageClient = None
+ImageAgent = None
 mcp_generate_portrait = None
 mcp_generate_scene = None
 
 if USE_MCP:
     try:
-        from services.mcp_image_client import (
-            MCPImageClient as _MCPImageClient,
+        from services.image_agent import (
+            ImageAgent as _ImageAgent,
             generate_portrait_sync as _mcp_generate_portrait,
             generate_scene_sync as _mcp_generate_scene,
         )
-        MCPImageClient = _MCPImageClient
+        ImageAgent = _ImageAgent
         mcp_generate_portrait = _mcp_generate_portrait
         mcp_generate_scene = _mcp_generate_scene
         MCP_AVAILABLE = True
@@ -506,14 +506,14 @@ def generate_all_mystery_images_mcp(mystery) -> Dict[str, str]:
     Returns:
         Dict mapping names to image paths
     """
-    if not MCP_AVAILABLE or MCPImageClient is None:
+    if not MCP_AVAILABLE or ImageAgent is None:
         logger.warning("MCP not available, falling back to direct generation")
         return generate_all_mystery_images(mystery, generate_portraits=True, generate_title=True)
     
     logger.info("[MCP] Starting parallel image generation via MCP server...")
     
     async def _generate_all():
-        client = MCPImageClient()  # type: ignore
+        agent = ImageAgent()  # type: ignore
         
         # Prepare all generation tasks
         tasks = []
@@ -523,7 +523,7 @@ def generate_all_mystery_images_mcp(mystery) -> Dict[str, str]:
             tasks.append((
                 "portrait",
                 suspect.name,
-                client.generate_character_portrait(
+                agent.generate_portrait(
                     name=suspect.name,
                     role=suspect.role,
                     personality=suspect.personality,
@@ -536,7 +536,7 @@ def generate_all_mystery_images_mcp(mystery) -> Dict[str, str]:
         tasks.append((
             "title",
             "_opening_scene",
-            client.generate_title_card(
+            agent.generate_title_card(
                 title=f"The Murder of {mystery.victim.name}",
                 setting=mystery.setting,
                 victim_name=mystery.victim.name,
@@ -649,7 +649,9 @@ def generate_scene_mcp(
 def smart_generate_portrait(suspect, mystery_setting: str) -> Optional[str]:
     """Generate portrait using MCP if available, otherwise direct."""
     if USE_MCP and MCP_AVAILABLE:
+        logger.info("🔌 [MCP] Portrait: %s (via MCP server)", suspect.name)
         return generate_portrait_mcp(suspect, mystery_setting)
+    logger.info("🎨 [DIRECT] Portrait: %s (via HuggingFace API)", suspect.name)
     return generate_portrait_on_demand(suspect, mystery_setting)
 
 
@@ -661,7 +663,9 @@ def smart_generate_scene(
 ) -> Optional[str]:
     """Generate scene using MCP if available, otherwise direct."""
     if USE_MCP and MCP_AVAILABLE:
+        logger.info("🔌 [MCP] Scene: %s (via MCP server)", location)
         return generate_scene_mcp(location, setting, mood, context)
+    logger.info("🎨 [DIRECT] Scene: %s (via HuggingFace API)", location)
     service = get_image_service()
     return service.generate_scene(location, setting, mood, context)
 
@@ -669,7 +673,9 @@ def smart_generate_scene(
 def smart_generate_all(mystery) -> Dict[str, str]:
     """Generate all mystery images using MCP if available, otherwise direct."""
     if USE_MCP and MCP_AVAILABLE:
+        logger.info("🔌 [MCP] Generating all images (via MCP server)")
         return generate_all_mystery_images_mcp(mystery)
+    logger.info("🎨 [DIRECT] Generating all images (via HuggingFace API)")
     return generate_all_mystery_images(mystery, generate_portraits=True, generate_title=True)
 
 

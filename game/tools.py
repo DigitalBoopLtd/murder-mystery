@@ -6,6 +6,7 @@ import os
 import re
 import tempfile
 from typing import Annotated, Optional, List
+from pydantic import BaseModel, Field
 from langchain_core.tools import tool
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
@@ -39,8 +40,7 @@ def interrogate_suspect(
     2) player_question - what the player said
     3) emotional_context - current trust/nervousness and conversation history
     
-    The tool has secure access to suspect secrets and will roleplay correctly.
-    You do NOT need to include secrets or guilt - the tool handles that privately."""
+    Returns only the narrative. Structured data (audio path, speaker) stored in ToolOutputStore."""
 
     logger.info("\n%s", "=" * 60)
     logger.info("INTERROGATE_SUSPECT TOOL CALLED")
@@ -49,9 +49,11 @@ def interrogate_suspect(
     logger.info("Emotional context: %s", emotional_context[:200] if emotional_context else "None")
     logger.info("%s\n", "=" * 60)
     
-    # Look up suspect from game state (secure access to hidden info)
-    from game.state_manager import get_game_state
+    # Import here to avoid circular imports
+    from game.state_manager import get_game_state, get_tool_output_store, InterrogationOutput
+    
     state = get_game_state()
+    store = get_tool_output_store()
     
     suspect = None
     voice_id = None
@@ -132,12 +134,33 @@ Suspect Profile:
     if voice_id:
         audio_path = generate_suspect_audio(text_response, voice_id, suspect.name)
 
-    # Return response with audio path marker if audio was generated
+    # Store structured data in ToolOutputStore (no markers!)
+    store.interrogation = InterrogationOutput(
+        suspect_name=suspect.name,
+        response_text=text_response,
+        emotional_state=emotional_context[:100] if emotional_context else None,
+    )
     if audio_path:
-        # Use a special marker that we can parse in app.py
-        return f"[AUDIO:{audio_path}]{text_response}"
+        store.audio_path = audio_path
+    
+    logger.info("Interrogation stored: suspect=%s, audio=%s", suspect.name, bool(audio_path))
 
+    # Return ONLY the narrative - no markers needed!
     return text_response
+
+
+class SceneToolOutput(BaseModel):
+    """Structured output from describe_scene_for_image tool.
+    
+    Using Pydantic model with LangChain's with_structured_output() 
+    instead of regex parsing of markers.
+    """
+    spoken_narration: str = Field(description="2-3 sentences about finding the clue")
+    clue_focus: str = Field(description="What the image should focus on - the clue itself")
+    camera_angle: str = Field(description="Shot type: extreme close-up, close-up, medium, wide")
+    lighting_mood: str = Field(description="Lighting style: dramatic, forensic, atmospheric, moody")
+    background_hint: str = Field(default="", description="Location details visible in blurred background")
+    prompt_hint: str = Field(default="", description="Additional image generation hints")
 
 
 @tool
@@ -152,23 +175,23 @@ def describe_scene_for_image(
     - Close-up for documents, objects, and traces
     - Wide shot only for environment/scene clues
     
-    Returns narration + [SCENE_BRIEF{...}] marker for image generation.
-    Also includes [SEARCHED:location] and [CLUE_FOUND:id] markers.
+    Returns only the narrative text. Structured data is stored in ToolOutputStore.
     """
     logger.info("\n%s", "=" * 60)
     logger.info("DESCRIBE_SCENE_FOR_IMAGE TOOL CALLED")
     logger.info("Location: %s", location_name)
     logger.info("%s\n", "=" * 60)
     
-    # Look up clue from game state (secure access)
-    from game.state_manager import get_game_state
+    # Import here to avoid circular imports
+    from game.state_manager import get_game_state, get_tool_output_store, SceneBriefOutput
+    
     state = get_game_state()
+    store = get_tool_output_store()
     
     clue = None
     clue_description = "an empty area"
     clue_id = None
     clue_type = "environment"
-    # Use exact clue location for consistent image mapping
     exact_location = location_name
     
     if state and state.mystery:
@@ -179,7 +202,6 @@ def describe_scene_for_image(
                 clue = c
                 clue_description = c.description
                 clue_id = c.id
-                # Use the EXACT clue location name for consistent caching
                 exact_location = c.location
                 # Infer clue type from description
                 desc_lower = c.description.lower()
@@ -196,7 +218,7 @@ def describe_scene_for_image(
     
     logger.info("Found clue: %s (type: %s) at '%s'", clue_id or "none", clue_type, exact_location)
     
-    # Determine optimal camera angle based on clue type
+    # Camera angle guidance based on clue type
     camera_guidance = {
         "document": "extreme close-up, document filling frame, dramatic lighting from above",
         "object": "close-up on the object, shallow depth of field, mysterious lighting",
@@ -205,117 +227,84 @@ def describe_scene_for_image(
     }
     suggested_camera = camera_guidance.get(clue_type, camera_guidance["object"])
 
+    # Use LangChain's structured output - no regex needed!
     llm = ChatOpenAI(
         model="gpt-4o-mini",
         temperature=0.7,
         api_key=os.getenv("OPENAI_API_KEY"),
     )
+    
+    # with_structured_output ensures we get a Pydantic model back
+    structured_llm = llm.with_structured_output(SceneToolOutput)
 
-    prompt = ChatPromptTemplate.from_messages(
-        [
-            (
-                "system",
-                """You are a Game Master narrator + concept artist for a murder mystery game.
+    prompt = ChatPromptTemplate.from_messages([
+        ("system", """You are a Game Master narrator + concept artist for a murder mystery game.
 
 Your job is to:
 1. Write SHORT spoken narration (2-3 sentences, ~50 words) about finding the CLUE
 2. Design an image brief that FOCUSES ON THE CLUE, not the location
 
-IMAGE COMPOSITION RULES:
+IMAGE RULES:
 - The CLUE is the HERO of the image - it should be the visual focus
-- The location provides atmospheric BACKGROUND, not the main subject
 - Use the suggested camera angle for this clue type
-- Think like a film director: what shot reveals this evidence dramatically?
-
-CAMERA ANGLE GUIDANCE:
 - DOCUMENT clues: Extreme close-up, text partially visible, dramatic top lighting
-- OBJECT clues: Close-up with shallow depth of field, object isolated, moody lighting  
+- OBJECT clues: Close-up with shallow depth of field, isolated, moody lighting
 - TRACE clues: Macro/forensic style, details crisp, clinical lighting
 - ENVIRONMENT clues: Wide shot, room tells a story, atmospheric
 
 NARRATION RULES:
-- ALWAYS write in ENGLISH
-- Focus on the DISCOVERY moment - what the detective notices
-- Be atmospheric but brief
-- Write in second person ("You notice...", "Something catches your eye...")
-
-Return STRICT JSON ONLY:
-  "spoken_narration": string (2-3 sentences about finding this clue)
-  "location_name": string (for background context)
-  "clue_focus": string (what the image should focus on - the clue itself)
-  "camera_angle": string (specific shot type: close-up, macro, wide, etc.)
-  "lighting_mood": string (dramatic, forensic, atmospheric, etc.)
-  "background_hint": string (location details visible in background, blurred)
-  "prompt_hint": string (additional image generation hints)
-
-Do NOT wrap JSON in markdown. Return ONLY the JSON object.
-""",
-            ),
-            (
-                "human",
-                """LOCATION (background): {location_name}
-
-CLUE FOUND (image focus): {clue_description}
-
+- Write in ENGLISH, second person ("You notice...", "Something catches your eye...")
+- Focus on the DISCOVERY moment
+- Be atmospheric but brief"""),
+        ("human", """LOCATION: {location_name}
+CLUE FOUND: {clue_description}
 CLUE TYPE: {clue_type}
-
 SUGGESTED CAMERA: {suggested_camera}
 
-PREVIOUS SEARCHES: {previous_searches}
+Design an image that dramatically reveals this CLUE."""),
+    ])
 
-Design an image that dramatically reveals this CLUE with the location as background context.""",
-            ),
-        ]
-    )
-
-    chain = prompt | llm
-    result = chain.invoke(
-        {
-            "location_name": exact_location,  # Use exact clue location for consistent mapping
+    chain = prompt | structured_llm
+    
+    try:
+        # Structured output - no JSON parsing needed!
+        result: SceneToolOutput = chain.invoke({
+            "location_name": exact_location,
             "clue_description": clue_description,
             "clue_type": clue_type,
             "suggested_camera": suggested_camera,
-            "previous_searches": "",  # Could be enhanced to check state.searched_locations
-        }
-    )
-
-    raw_json = result.content.strip() if hasattr(result, "content") else str(result).strip()
-    logger.info("Scene brief JSON (raw): %s", raw_json[:300])
-
-    # Parse JSON to extract spoken_narration and build the final output
-    try:
-        data = json.loads(raw_json)
-        spoken = data.get("spoken_narration", "").strip()
+        })
         
-        # Build scene brief focused on the CLUE (not just the location)
-        # Use exact_location for consistent image cache mapping
-        scene_brief = {
-            "location_name": exact_location,  # Exact clue location for cache consistency
-            "clue_focus": data.get("clue_focus", clue_description),
-            "camera_angle": data.get("camera_angle", suggested_camera),
-            "lighting_mood": data.get("lighting_mood", "dramatic"),
-            "background_hint": data.get("background_hint", ""),
-            "prompt_hint": data.get("prompt_hint", ""),
-        }
-        scene_json = json.dumps(scene_brief)
+        logger.info("Structured output: clue_focus=%s, camera=%s", 
+                    result.clue_focus[:50], result.camera_angle)
         
-        # Build output with all necessary markers (use exact_location for consistency)
-        markers = [f"[SEARCHED:{exact_location}]"]
+        # Store structured data in ToolOutputStore (no regex markers!)
+        store.scene_brief = SceneBriefOutput(
+            location_name=exact_location,
+            clue_id=clue_id,
+            clue_focus=result.clue_focus,
+            camera_angle=result.camera_angle,
+            lighting_mood=result.lighting_mood,
+            background_hint=result.background_hint,
+            prompt_hint=result.prompt_hint,
+        )
+        store.location_searched = exact_location
         if clue_id:
-            markers.append(f"[CLUE_FOUND:{clue_id}]")
+            store.clue_found = clue_id
         
-        # Return spoken narration + markers + scene brief marker
-        output = f"{spoken}\n\n{' '.join(markers)}\n[SCENE_BRIEF{scene_json}]"
-        logger.info("Scene tool output: spoken=%d chars, clue=%s", len(spoken), clue_id or "none")
-        return output
+        logger.info("Scene tool: stored in ToolOutputStore (location=%s, clue=%s)", 
+                    exact_location, clue_id or "none")
         
-    except json.JSONDecodeError as e:
-        logger.error("Failed to parse scene brief JSON: %s", e)
-        # Fallback with basic markers (use exact_location for consistency)
-        markers = f"[SEARCHED:{exact_location}]"
+        # Return ONLY the narrative - no markers needed!
+        return result.spoken_narration
+        
+    except Exception as e:
+        logger.error("Structured output failed: %s", e)
+        # Fallback - still store basic info
+        store.location_searched = exact_location
         if clue_id:
-            markers += f" [CLUE_FOUND:{clue_id}]"
-        return f"You search {exact_location} carefully. {markers}"
+            store.clue_found = clue_id
+        return f"You search {exact_location} carefully."
 
 
 def enhance_text_for_speech(text: str) -> str:
@@ -661,6 +650,12 @@ def get_investigation_hint(
 
 
 @tool
+class AccusationToolOutput(BaseModel):
+    """Structured output from make_accusation tool."""
+    dramatic_response: str = Field(description="Dramatic 2-3 sentence Game Master response")
+
+
+@tool
 def make_accusation(
     suspect_name: Annotated[str, "The full name of the suspect being accused of the murder"],
     evidence_summary: Annotated[str, "Brief summary of evidence or reasoning the player cited"] = "",
@@ -679,8 +674,7 @@ def make_accusation(
     2. Updates the game state (wrong accusations count, win/lose)
     3. Returns a dramatic response for the Game Master to deliver
     
-    IMPORTANT: Only call this for FINAL ACCUSATIONS, not casual suspicions.
-    If the player is just theorizing, respond conversationally instead.
+    Returns only the narrative. Structured data is stored in ToolOutputStore.
     """
     logger.info("\n" + "=" * 60)
     logger.info("🎯 MAKE_ACCUSATION TOOL CALLED")
@@ -688,12 +682,28 @@ def make_accusation(
     logger.info("Evidence: %s", evidence_summary[:200] if evidence_summary else "None cited")
     logger.info("=" * 60 + "\n")
     
-    # Generate dramatic accusation response with marker for parser
+    # Import here to avoid circular imports
+    from game.state_manager import get_game_state, get_tool_output_store, AccusationOutput
+    
+    state = get_game_state()
+    store = get_tool_output_store()
+    
+    # Check if accusation is correct
+    is_correct = False
+    if state and state.mystery:
+        for s in state.mystery.suspects:
+            if s.isGuilty and (s.name.lower() == suspect_name.lower() or suspect_name.lower() in s.name.lower()):
+                is_correct = True
+                break
+    
+    # Use LangChain's structured output
     llm = ChatOpenAI(
         model="gpt-4o-mini", 
         temperature=0.8, 
         api_key=os.getenv("OPENAI_API_KEY")
     )
+    
+    structured_llm = llm.with_structured_output(AccusationToolOutput)
     
     prompt = ChatPromptTemplate.from_messages([
         ("system", """You are the Game Master for a murder mystery game. The player has made a FORMAL ACCUSATION.
@@ -704,31 +714,42 @@ Generate a DRAMATIC response that:
 3. Builds tension before the reveal
 4. Ends on a cliffhanger (the actual result will be shown by the game)
 
-Keep it SHORT (2-3 sentences) for voice narration. Be theatrical!
-
-CRITICAL: You MUST include this exact marker in your response: [ACCUSATION:{suspect_name}]
-This marker is how the game system tracks the accusation. Put it at the start of your response."""),
+Keep it SHORT (2-3 sentences) for voice narration. Be theatrical!"""),
         ("human", """Player formally accuses: {suspect_name}
 Their reasoning: {evidence}
 
-Generate the dramatic Game Master response. Start with the [ACCUSATION:{suspect_name}] marker.""")
+Generate the dramatic Game Master response.""")
     ])
     
-    chain = prompt | llm
-    response = chain.invoke({
-        "suspect_name": suspect_name,
-        "evidence": evidence_summary or "Gut instinct - no specific evidence cited"
-    })
+    chain = prompt | structured_llm
     
-    result = response.content.strip()
-    
-    # Ensure the accusation marker is present (failsafe)
-    marker = f"[ACCUSATION:{suspect_name}]"
-    if marker not in result and "[ACCUSATION:" not in result:
-        result = f"{marker} {result}"
-    
-    logger.info("Accusation response generated: %s...", result[:150])
-    return result
+    try:
+        result: AccusationToolOutput = chain.invoke({
+            "suspect_name": suspect_name,
+            "evidence": evidence_summary or "Gut instinct - no specific evidence cited"
+        })
+        
+        # Store structured data in ToolOutputStore (no regex markers!)
+        store.accusation = AccusationOutput(
+            suspect_name=suspect_name,
+            is_correct=is_correct,
+            narrative=result.dramatic_response,
+        )
+        
+        logger.info("Accusation stored: suspect=%s, correct=%s", suspect_name, is_correct)
+        
+        # Return ONLY the narrative - no markers needed!
+        return result.dramatic_response
+        
+    except Exception as e:
+        logger.error("Structured output failed: %s", e)
+        # Fallback - still store basic info
+        store.accusation = AccusationOutput(
+            suspect_name=suspect_name,
+            is_correct=is_correct,
+            narrative=f"You accuse {suspect_name} of the murder!"
+        )
+        return f"You accuse {suspect_name} of the murder!"
 
 
 def get_all_tools() -> List:

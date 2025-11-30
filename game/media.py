@@ -10,7 +10,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, List, Optional, Tuple
 
 from game.state import GameState
-from services.image_service import generate_portrait_on_demand, get_image_service
+from services.image_service import smart_generate_portrait, smart_generate_scene
 from services.tts_service import text_to_speech
 from game.state_manager import (
     mystery_images,
@@ -35,7 +35,7 @@ def _generate_portrait_background(
     try:
         logger.info("[BG] Generating portrait for %s...", suspect_name)
         perf.start(f"portrait_{suspect_name}", is_parallel=True, parallel_count=1, details="background")
-        portrait_path = generate_portrait_on_demand(suspect, mystery_setting)
+        portrait_path = smart_generate_portrait(suspect, mystery_setting)
         if portrait_path:
             if session_id not in mystery_images:
                 mystery_images[session_id] = {}
@@ -62,28 +62,23 @@ def _generate_scene_background(
     try:
         logger.info("[BG] Generating scene for %s...", location)
         perf.start(f"scene_{safe_loc}", is_parallel=True, parallel_count=1, details="background")
-        service = get_image_service()
-        if service and service.is_available:
-            bg_state = get_or_create_state(session_id)
-            mood = _get_scene_mood_for_state(bg_state)
-            scene_path = service.generate_scene(
-                location_name=location,
-                setting_description=mystery_setting,
-                mood=mood,
-                context=context_text,
-            )
-            if scene_path:
-                if session_id not in mystery_images:
-                    mystery_images[session_id] = {}
-                mystery_images[session_id][location] = scene_path
-                perf.end(f"scene_{safe_loc}", details="success")
-                logger.info("[BG] ✅ Scene ready for %s: %s", location, scene_path)
-            else:
-                perf.end(f"scene_{safe_loc}", status="error", details="no path")
-                logger.warning("[BG] ❌ Failed to generate scene for %s", location)
+        bg_state = get_or_create_state(session_id)
+        mood = _get_scene_mood_for_state(bg_state)
+        scene_path = smart_generate_scene(
+            location=location,
+            setting=mystery_setting,
+            mood=mood,
+            context=context_text,
+        )
+        if scene_path:
+            if session_id not in mystery_images:
+                mystery_images[session_id] = {}
+            mystery_images[session_id][location] = scene_path
+            perf.end(f"scene_{safe_loc}", details="success")
+            logger.info("[BG] ✅ Scene ready for %s: %s", location, scene_path)
         else:
-            perf.end(f"scene_{safe_loc}", status="error", details="service unavailable")
-            logger.warning("[BG] Image service not available for scene generation")
+            perf.end(f"scene_{safe_loc}", status="error", details="no path")
+            logger.warning("[BG] ❌ Failed to generate scene for %s", location)
     except Exception as e:
         perf.end(f"scene_{safe_loc}", status="error", details=str(e))
         logger.error("[BG] Error generating scene for %s: %s", location, e)
@@ -326,21 +321,41 @@ def generate_turn_media(
                     break
     
     # Check if scene needed
+    # ALWAYS regenerate if we have clue context (even if prewarmed image exists)
     scene_info = None
     if actions.get("location_searched"):
         location = actions["location_searched"]
         normalized_location = normalize_location_name(location, state)
         session_images = mystery_images.get(session_id, {})
-        if normalized_location not in session_images and location not in session_images:
-            mystery_setting = state.mystery.setting if state.mystery else ""
+        mystery_setting = state.mystery.setting if state.mystery else ""
+        
+        # Get clue-focused scene description from state.location_descriptions
+        # This is populated by _process_scene_brief() with clue_focus, camera_angle, etc.
+        loc_desc = getattr(state, "location_descriptions", {}).get(normalized_location, "")
+        
+        # Check if we have clue context from the describe_scene_for_image tool
+        has_clue_context = bool(loc_desc and "Focus:" in loc_desc)
+        image_exists = normalized_location in session_images or location in session_images
+        
+        # Generate if: no image exists OR we have clue context (override prewarmed)
+        if has_clue_context or not image_exists:
+            # Build context with clue-focused info
             parts = []
-            loc_desc = getattr(state, "location_descriptions", {}).get(normalized_location, "")
             if loc_desc:
-                parts.append(f"Location visual description: {loc_desc}")
+                parts.append(f"CLUE-FOCUSED IMAGE: {loc_desc}")
             if clean_response:
                 parts.append(clean_response[:300])
             context_text = " ".join(parts)
+            
+            if has_clue_context and image_exists:
+                logger.info("[GAME] 🎯 Regenerating scene with CLUE FOCUS (overriding prewarmed): %s", normalized_location)
+            else:
+                logger.info("[GAME] Generating clue-focused scene for: %s", normalized_location)
+            logger.info("[GAME] Scene context (loc_desc): %s", loc_desc[:200] if loc_desc else "NONE")
+            logger.info("[GAME] Scene context (total): %d chars", len(context_text))
             scene_info = (location, normalized_location, mystery_setting, context_text)
+        else:
+            logger.info("[GAME] Using existing image for %s (no clue context)", normalized_location)
     
     # If background_images=True, fire and forget
     if background_images:
@@ -386,7 +401,7 @@ def generate_turn_media(
         mystery_setting = state.mystery.setting if state.mystery else ""
         logger.info("[GAME] Parallel: generating portrait for %s", speaker)
         perf.start(f"parallel_portrait_{speaker}", details="foreground parallel")
-        portrait_path = generate_portrait_on_demand(portrait_suspect, mystery_setting)
+        portrait_path = smart_generate_portrait(portrait_suspect, mystery_setting)
         if portrait_path:
             if session_id not in mystery_images:
                 mystery_images[session_id] = {}
@@ -403,23 +418,21 @@ def generate_turn_media(
         location, normalized_location, mystery_setting, context_text = scene_info
         logger.info("[GAME] Parallel: generating scene for %s", normalized_location)
         perf.start(f"parallel_scene_{normalized_location[:15]}", details="foreground parallel")
-        service = get_image_service()
-        if service and service.is_available:
-            scene_path = service.generate_scene(
-                location_name=normalized_location,
-                setting_description=mystery_setting,
-                mood="mysterious",
-                context=context_text,
-            )
-            if scene_path:
-                if session_id not in mystery_images:
-                    mystery_images[session_id] = {}
-                mystery_images[session_id][normalized_location] = scene_path
-                if normalized_location != location:
-                    mystery_images[session_id][location] = scene_path
-                perf.end(f"parallel_scene_{normalized_location[:15]}", details="success")
-                logger.info("[GAME] Parallel: scene ready for %s", normalized_location)
-                return scene_path
+        scene_path = smart_generate_scene(
+            location=normalized_location,
+            setting=mystery_setting,
+            mood="mysterious",
+            context=context_text,
+        )
+        if scene_path:
+            if session_id not in mystery_images:
+                mystery_images[session_id] = {}
+            mystery_images[session_id][normalized_location] = scene_path
+            if normalized_location != location:
+                mystery_images[session_id][location] = scene_path
+            perf.end(f"parallel_scene_{normalized_location[:15]}", details="success")
+            logger.info("[GAME] Parallel: scene ready for %s", normalized_location)
+            return scene_path
         perf.end(f"parallel_scene_{normalized_location[:15]}", status="error", details="failed")
         return None
     

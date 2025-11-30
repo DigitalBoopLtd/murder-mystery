@@ -1,7 +1,6 @@
 """Game logic handlers for starting games and processing player actions."""
 
 import os
-import re
 import json
 import logging
 import time
@@ -10,8 +9,8 @@ from typing import Optional, Tuple, List, Dict
 
 from game.state import GameState
 from services.image_service import (
-    generate_portrait_on_demand,
-    get_image_service,
+    smart_generate_portrait,
+    smart_generate_scene,
 )
 from game.mystery_generator import (
     assign_voice_to_suspect,
@@ -28,6 +27,8 @@ from game.state_manager import (
     get_suspect_voice_id,
     normalize_location_name,
     set_current_session,
+    get_tool_output_store,
+    clear_tool_outputs,
 )
 from game.media import _generate_portrait_background
 from services.game_memory import get_game_memory
@@ -47,6 +48,8 @@ def _process_scene_brief(scene_brief: dict, state: GameState) -> str:
     Handles both new clue-focused format and legacy format.
     Returns the full description string for logging.
     """
+    logger.info("[SCENE_BRIEF] Processing: %s", scene_brief)
+    
     loc_name = scene_brief.get("location_name")
     
     # New clue-focused format
@@ -55,6 +58,9 @@ def _process_scene_brief(scene_brief: dict, state: GameState) -> str:
     lighting = scene_brief.get("lighting_mood") or ""
     background = scene_brief.get("background_hint") or ""
     prompt_hint = scene_brief.get("prompt_hint") or ""
+    
+    logger.info("[SCENE_BRIEF] Extracted: location=%s, clue_focus=%s, camera=%s", 
+                loc_name, clue_focus[:50] if clue_focus else "none", camera_angle)
     
     # Legacy format support
     env = scene_brief.get("environment_description") or ""
@@ -244,6 +250,10 @@ def process_player_action(
     Returns:
         Tuple of (response_text, audio_path, speaker_name, state)
     """
+    # Set current session for tool context and clear previous outputs
+    set_current_session(session_id)
+    clear_tool_outputs(session_id)
+    
     state = get_or_create_state(session_id)
 
     # If the full mystery is not ready yet, keep the player in the intro
@@ -505,43 +515,43 @@ def process_player_action(
                 "[GAME] Failed to mark suspect %s as talked to on state", speaker
             )
 
-    # Extract audio path marker if present (from interrogate_suspect tool)
-    # Format: [AUDIO:/path/to/file.mp3]text response
-    audio_path_from_tool = None
+    # ========== Structured Tool Outputs (No Regex!) ==========
+    # Tools store their outputs in ToolOutputStore, we just read from it
+    tool_store = get_tool_output_store(session_id)
+    
+    # Get audio path from tool store (no regex parsing needed!)
+    audio_path_from_tool = tool_store.audio_path
+    if audio_path_from_tool:
+        logger.info("[GAME] Audio path from ToolOutputStore: %s", audio_path_from_tool)
+    
+    # Get scene brief from tool store (no regex parsing needed!)
     clean_response = response
-    audio_marker_pattern = r"\[AUDIO:([^\]]+)\]"
-    match = re.search(audio_marker_pattern, response)
-    if match:
-        audio_path_from_tool = match.group(1)
-        # Remove the audio marker from the text
-        clean_response = re.sub(audio_marker_pattern, "", response).strip()
-        logger.info("Extracted audio path from tool: %s", audio_path_from_tool)
-
-    # Extract optional scene brief marker (from describe_scene_for_image tool)
-    # Format: [SCENE_BRIEF{...json...}]
-    scene_brief = None
-    scene_pattern = r"\[SCENE_BRIEF(?P<json>\{.*?\})\]"
-    scene_match = re.search(scene_pattern, clean_response)
-    if scene_match:
-        scene_json = scene_match.group("json")
-        try:
-            scene_brief = json.loads(scene_json)
-            logger.info(
-                "[GAME] Parsed SCENE_BRIEF for location: %s",
-                scene_brief.get("location_name"),
-            )
-        except Exception as e:  # noqa: BLE001
-            logger.exception("[GAME] Failed to parse SCENE_BRIEF JSON: %s", e)
-            scene_brief = None
-
-        # Remove the scene brief marker from the text seen by the player
-        clean_response = re.sub(scene_pattern, "", clean_response).strip()
-
-        # If we successfully parsed, cache a rich description on state
-        if scene_brief:
-            _process_scene_brief(scene_brief, state)
-
-    # Remove game state markers from response (SEARCHED, ACCUSATION, CLUE_FOUND)
+    if tool_store.scene_brief:
+        sb = tool_store.scene_brief
+        logger.info("[GAME] Scene brief from ToolOutputStore: location=%s, clue_focus=%s", 
+                    sb.location_name, sb.clue_focus[:50] if sb.clue_focus else "none")
+        
+        # Convert to dict format and process (stores in state.location_descriptions)
+        scene_brief_dict = {
+            "location_name": sb.location_name,
+            "clue_focus": sb.clue_focus,
+            "camera_angle": sb.camera_angle,
+            "lighting_mood": sb.lighting_mood,
+            "background_hint": sb.background_hint,
+            "prompt_hint": sb.prompt_hint,
+        }
+        _process_scene_brief(scene_brief_dict, state)
+    
+    # Merge tool store actions into parsed actions
+    if tool_store.location_searched:
+        actions["location_searched"] = tool_store.location_searched
+    if tool_store.clue_found:
+        actions["clue_found"] = tool_store.clue_found
+    if tool_store.accusation:
+        actions["accusation"] = tool_store.accusation.suspect_name
+        actions["accusation_correct"] = tool_store.accusation.is_correct
+    
+    # Clean up any leftover markers from response (legacy support)
     clean_response = clean_response_markers(clean_response)
 
     # AI Enhancement Phase 1: Record interrogation and update emotional state
@@ -578,7 +588,7 @@ def process_player_action(
             # Check if we need to generate this suspect's portrait
             if speaker not in session_images:
                 logger.info("Generating portrait on-demand for suspect: %s", speaker)
-                portrait_path = generate_portrait_on_demand(
+                portrait_path = smart_generate_portrait(
                     suspect, state.mystery.setting if state.mystery else ""
                 )
                 if portrait_path:
@@ -599,51 +609,61 @@ def process_player_action(
             )
 
     # Generate scene image on-demand if a location was searched
+    # ALWAYS regenerate if we have clue context (even if prewarmed image exists)
     if actions.get("location_searched"):
         location = actions["location_searched"]
         normalized_location = normalize_location_name(location, state)
         session_images = mystery_images.get(session_id, {})
         
-        # Only generate if we don't already have this scene (check both original and normalized)
-        if normalized_location not in session_images and location not in session_images:
-            logger.info("Generating scene image for location: %s (normalized: %s)", location, normalized_location)
-            service = get_image_service()
-            if service and service.is_available:
-                # Build rich scene context: stored location description + latest narrative
-                parts = []
-                loc_desc = getattr(state, "location_descriptions", {}).get(
-                    normalized_location, ""
-                )
-                if loc_desc:
-                    parts.append(f"Location visual description: {loc_desc}")
-                if clean_response:
-                    parts.append(clean_response[:300])
-                context_text = " ".join(parts)
-                mood = _get_scene_mood_for_state(state)
-                scene_path = service.generate_scene(
-                    location_name=normalized_location,  # Use normalized name for generation
-                    setting_description=state.mystery.setting if state.mystery else "",
-                    mood=mood,
-                    context=context_text,
-                )
-                if scene_path:
-                    # Store in mystery_images dict for this session with normalized name
-                    # Also store with original name as fallback
-                    if session_id not in mystery_images:
-                        mystery_images[session_id] = {}
-                    mystery_images[session_id][normalized_location] = scene_path
-                    if normalized_location != location:
-                        mystery_images[session_id][location] = scene_path  # Also store with original
-                    logger.info(
-                        "Generated and stored scene for %s (normalized: %s): %s",
-                        location,
-                        normalized_location,
-                        scene_path,
-                    )
-                else:
-                    logger.warning("Failed to generate scene for %s", normalized_location)
+        # Build rich scene context: stored location description + latest narrative
+        loc_desc = getattr(state, "location_descriptions", {}).get(
+            normalized_location, ""
+        )
+        
+        # Check if we have clue context from the describe_scene_for_image tool
+        has_clue_context = bool(loc_desc and "Focus:" in loc_desc)
+        image_exists = normalized_location in session_images or location in session_images
+        
+        # Generate if: no image exists OR we have clue context (override prewarmed)
+        if has_clue_context or not image_exists:
+            parts = []
+            if loc_desc:
+                parts.append(f"CLUE-FOCUSED IMAGE: {loc_desc}")
+            if clean_response:
+                parts.append(clean_response[:300])
+            context_text = " ".join(parts)
+            mood = _get_scene_mood_for_state(state)
+            
+            if has_clue_context and image_exists:
+                logger.info("🎯 Regenerating scene with CLUE FOCUS (overriding prewarmed): %s", normalized_location)
             else:
-                logger.warning("Image service not available for scene generation")
+                logger.info("Generating scene image for location: %s (normalized: %s)", location, normalized_location)
+            
+            # Use smart_generate_scene (MCP if available, otherwise direct)
+            scene_path = smart_generate_scene(
+                location=normalized_location,
+                setting=state.mystery.setting if state.mystery else "",
+                mood=mood,
+                context=context_text,
+            )
+            if scene_path:
+                # Store in mystery_images dict for this session with normalized name
+                # Also store with original name as fallback
+                if session_id not in mystery_images:
+                    mystery_images[session_id] = {}
+                mystery_images[session_id][normalized_location] = scene_path
+                if normalized_location != location:
+                    mystery_images[session_id][location] = scene_path  # Also store with original
+                logger.info(
+                    "Generated and stored scene for %s (normalized: %s): %s",
+                    location,
+                    normalized_location,
+                    scene_path,
+                )
+            else:
+                logger.warning("Failed to generate scene for %s", normalized_location)
+        else:
+            logger.info("Using existing image for %s (no clue context)", normalized_location)
 
     # Determine voice
     voice_id = None
@@ -737,9 +757,11 @@ def run_action_logic(
 
     This is used by the voice UI to:
       - Run transcription + LLM agent + tools
-      - Parse actions
-      - Extract any tool-generated audio path (from [AUDIO:...] markers)
+      - Read structured outputs from ToolOutputStore (no regex parsing!)
     and then hand off to generate_turn_media() for the slow TTS/image work.
+    
+    Tool outputs (audio paths, scene briefs, actions) are stored in ToolOutputStore
+    by the tools themselves, and read here without any regex parsing.
 
     Returns:
         Tuple of (clean_response, speaker_name, state, actions_dict, audio_path_from_tool)
@@ -748,6 +770,9 @@ def run_action_logic(
     
     # Set current session for tool context (tools can access state securely)
     set_current_session(session_id)
+    
+    # Clear tool outputs from previous turn (fresh slate)
+    clear_tool_outputs(session_id)
     
     state = get_or_create_state(session_id)
 
@@ -1042,39 +1067,41 @@ def run_action_logic(
                 "[GAME] Failed to mark suspect %s as talked to on state", speaker
             )
 
-    # Extract audio path marker if present (from interrogate_suspect tool)
-    audio_path_from_tool = None
+    # ========== Structured Tool Outputs (No Regex!) ==========
+    # Tools store their outputs in ToolOutputStore, we just read from it
+    tool_store = get_tool_output_store(session_id)
+    
+    # Get audio path from tool store (no regex parsing needed!)
+    audio_path_from_tool = tool_store.audio_path
+    if audio_path_from_tool:
+        logger.info("[GAME] Audio path from ToolOutputStore: %s", audio_path_from_tool)
+    
+    # Get scene brief from tool store (no regex parsing needed!)
     clean_response = response
-    audio_marker_pattern = r"\[AUDIO:([^\]]+)\]"
-    match = re.search(audio_marker_pattern, response)
-    if match:
-        audio_path_from_tool = match.group(1)
-        clean_response = re.sub(audio_marker_pattern, "", response).strip()
-        logger.info("Extracted audio path from tool: %s", audio_path_from_tool)
-
-    # Extract optional scene brief marker (from describe_scene_for_image tool)
-    # Format: [SCENE_BRIEF{...json...}]
-    scene_brief = None
-    scene_pattern = r"\[SCENE_BRIEF(?P<json>\{.*?\})\]"
-    scene_match = re.search(scene_pattern, clean_response)
-    if scene_match:
-        scene_json = scene_match.group("json")
-        try:
-            scene_brief = json.loads(scene_json)
-            logger.info(
-                "[GAME] Parsed SCENE_BRIEF for location: %s",
-                scene_brief.get("location_name"),
-            )
-        except Exception as e:  # noqa: BLE001
-            logger.exception("[GAME] Failed to parse SCENE_BRIEF JSON: %s", e)
-            scene_brief = None
-
-        # Remove the scene brief marker from the text seen by the player
-        clean_response = re.sub(scene_pattern, "", clean_response).strip()
-
-        # If we successfully parsed, cache a rich description on state
-        if scene_brief:
-            _process_scene_brief(scene_brief, state)
+    if tool_store.scene_brief:
+        sb = tool_store.scene_brief
+        logger.info("[GAME] Scene brief from ToolOutputStore: location=%s, clue_focus=%s", 
+                    sb.location_name, sb.clue_focus[:50] if sb.clue_focus else "none")
+        
+        # Convert to dict format and process (stores in state.location_descriptions)
+        scene_brief_dict = {
+            "location_name": sb.location_name,
+            "clue_focus": sb.clue_focus,
+            "camera_angle": sb.camera_angle,
+            "lighting_mood": sb.lighting_mood,
+            "background_hint": sb.background_hint,
+            "prompt_hint": sb.prompt_hint,
+        }
+        _process_scene_brief(scene_brief_dict, state)
+    
+    # Merge tool store actions into parsed actions
+    if tool_store.location_searched:
+        actions["location_searched"] = tool_store.location_searched
+    if tool_store.clue_found:
+        actions["clue_found"] = tool_store.clue_found
+    if tool_store.accusation:
+        actions["accusation"] = tool_store.accusation.suspect_name
+        actions["accusation_correct"] = tool_store.accusation.is_correct
 
     # Remove game state markers from response (SEARCHED, ACCUSATION, CLUE_FOUND)
     t_clean_start = time.perf_counter()

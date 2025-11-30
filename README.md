@@ -106,6 +106,7 @@ The application uses:
 - **LangGraph**: To orchestrate the Game Master agent, tools, and conversational memory.
 - **LangChain**: For OpenAI model integration and structured outputs.
 - **Gradio**: For the web UI, voice input, and audio/subtitle playback.
+- **Model Context Protocol (MCP)**: For exposing game state and services as composable tools.
 - **Pydantic / dataclasses**: For structured models and configuration.
 
 High‑level flow:
@@ -113,6 +114,218 @@ High‑level flow:
 2. Player actions (spoken input) are transcribed with Whisper via OpenAI.
 3. The LangGraph agent and game handlers decide what happens next (search, interrogate, reveal clues, etc.).
 4. A response is generated, voiced with ElevenLabs (if configured), and the UI is updated with state panels and art.
+
+---
+
+## 🔌 MCP Architecture (Model Context Protocol)
+
+This project demonstrates **MCP in Action** through MCP servers that expose game functionality as composable tools and resources.
+
+### MCP Servers
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                     MURDER MYSTERY MCP ECOSYSTEM                     │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                      │
+│  ┌─────────────────────────────────────────────────────────────┐   │
+│  │  Image Generator MCP (mcp_servers/image_generator.py)       │   │
+│  ├─────────────────────────────────────────────────────────────┤   │
+│  │                                                             │   │
+│  │  RESOURCES:                    TOOLS:                       │   │
+│  │  • images://cache              • generate_character_portrait│   │
+│  │  • images://cache/{key}        • generate_scene             │   │
+│  │  • images://styles             • generate_title_card        │   │
+│  │  • images://stats              • list_cached_images         │   │
+│  │                                • get_image_by_key           │   │
+│  │                                                             │   │
+│  │  Purpose: 1990s adventure game art generation with caching  │   │
+│  └─────────────────────────────────────────────────────────────┘   │
+│                                                                      │
+│  ┌─────────────────────────────────────────────────────────────┐   │
+│  │  ElevenLabs MCP (external: mcp-elevenlabs)                  │   │
+│  ├─────────────────────────────────────────────────────────────┤   │
+│  │  TOOLS:                                                     │   │
+│  │  • get_voices - Fetch available voice catalog               │   │
+│  │  • text_to_speech - Generate speech from text               │   │
+│  │                                                             │   │
+│  │  Purpose: Voice synthesis for characters and Game Master    │   │
+│  └─────────────────────────────────────────────────────────────┘   │
+│                                                                      │
+│  ┌─────────────────────────────────────────────────────────────┐   │
+│  │  Image Agent (services/image_agent.py)                      │   │
+│  ├─────────────────────────────────────────────────────────────┤   │
+│  │  Demonstrates MCP tool composition:                         │   │
+│  │  • Connects to Image MCP server                             │   │
+│  │  • Calls tools to generate images                           │   │
+│  │  • Reads resources to check cache status                    │   │
+│  └─────────────────────────────────────────────────────────────┘   │
+│                                                                      │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+### Image Generator MCP Server (`mcp_servers/image_generator.py`)
+
+Generates 1990s point-and-click adventure game style artwork via HuggingFace.
+
+**Resources (MCP Resources):**
+
+| URI | Description |
+|-----|-------------|
+| `images://cache` | List all cached images with metadata |
+| `images://cache/{key}` | Get details of a specific cached image |
+| `images://styles` | Available art styles and presets |
+| `images://stats` | Cache statistics (total images, size, etc.) |
+
+**Tools:**
+
+| Tool | Description |
+|------|-------------|
+| `generate_character_portrait` | Create suspect/victim portraits |
+| `generate_scene` | Generate location backgrounds |
+| `generate_title_card` | Create atmospheric opening scenes |
+| `list_cached_images` | Query the image cache |
+| `get_image_by_key` | Retrieve a specific cached image |
+
+**Run standalone:**
+```bash
+python -m mcp_servers.image_generator
+```
+
+### ElevenLabs MCP Client (`services/mcp_elevenlabs.py`)
+
+Connects to the official ElevenLabs MCP server for voice synthesis.
+
+**Usage:**
+```python
+from services.mcp_elevenlabs import fetch_voices_via_mcp
+
+voices, status = await fetch_voices_via_mcp()
+```
+
+### Image Agent (`services/image_agent.py`)
+
+Demonstrates calling the Image MCP server from an agent:
+
+```python
+from services.image_agent import ImageAgent
+
+agent = ImageAgent()
+
+# Generate a portrait via MCP
+path = await agent.generate_portrait("Inspector Holmes", "Detective", "Analytical, observant")
+
+# Check cache stats via MCP Resource
+stats = await agent.get_cache_stats()
+```
+
+### Claude Desktop Configuration
+
+To use the Image MCP server with Claude Desktop:
+
+```json
+{
+  "mcpServers": {
+    "murder-mystery-images": {
+      "command": "python",
+      "args": ["-m", "mcp_servers.image_generator"],
+      "cwd": "/path/to/murder-mystery",
+      "env": {
+        "OPENAI_API_KEY": "your-key",
+        "HF_TOKEN": "your-token"
+      }
+    }
+  }
+}
+```
+
+### MCP Integration Points
+
+The main application integrates MCP at several points:
+
+1. **Voice Fetching**: Uses ElevenLabs MCP to get available voices for character casting
+2. **Image Generation**: Parallel image requests via `ImageAgent` (`services/image_agent.py`)
+3. **Image Resources**: Cache status and generated images queryable via MCP Resources
+
+### Demo: MCP Tool Composition
+
+Run the Image Agent demo:
+```bash
+python -m services.image_agent
+```
+
+This demonstrates:
+- Connecting to the Image MCP server
+- Reading resources (`images://cache`, `images://styles`, `images://stats`)
+- Calling tools to generate images
+- Composing multiple MCP operations
+
+---
+
+## 🤖 Agentic Architecture
+
+### Game Master Agent (`services/agent.py`)
+
+The Game Master is a **LangGraph agent** with tools, not just an LLM. It:
+- Decides when to call tools (interrogate suspect, search location, make accusation)
+- Maintains conversation state via LangGraph checkpoints
+- Uses tools to access game information securely
+
+**Tools Available:**
+
+| Tool | Purpose |
+|------|---------|
+| `interrogate_suspect` | Talk to a suspect in-character |
+| `describe_scene_for_image` | Generate scene descriptions for image generation |
+| `make_accusation` | Formally accuse a suspect of murder |
+| `search_past_statements` | RAG search over conversation history |
+| `find_contradictions` | Detect inconsistencies in statements |
+| `get_investigation_hint` | Get contextual hints for the player |
+
+### Investigation Assistant (`services/investigation_agent.py`)
+
+A **separate assistant agent** demonstrating MCP composition:
+- Analyzes case evidence and suggests next steps
+- Uses structured outputs (Pydantic models)
+- Non-blocking - doesn't affect gameplay latency
+
+```python
+from services.investigation_agent import InvestigationAssistant
+
+assistant = InvestigationAssistant()
+report = await assistant.analyze_case()
+suggestions = await assistant.suggest_next_steps()
+```
+
+### Structured Outputs (vs Regex Markers)
+
+The game uses **structured Pydantic outputs** for reliable parsing:
+
+```python
+# Old approach (fragile regex):
+# "[SEARCHED:library] You find a torn letter..."
+
+# New approach (structured output):
+from game.models import GameMasterResponse, GameAction
+
+response = GameMasterResponse(
+    narrative="You carefully search the library...",
+    action=GameAction(
+        action_type="search_location",
+        target="library",
+        clue_ids_revealed=["clue_torn_letter"]
+    ),
+    scene_brief=SceneBrief(
+        location="Victorian Library",
+        visual_description="Dusty shelves, scattered papers...",
+        camera_angle="medium shot"
+    )
+)
+```
+
+See `game/models.py` for structured output schemas and `game/structured_parser.py` for the parser.
+
+---
 
 ## Requirements
 

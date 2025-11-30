@@ -1,14 +1,27 @@
 #!/usr/bin/env python3
 """MCP Server for Murder Mystery Image Generation.
 
-This server provides image generation tools that can be called in parallel
-from the main application. It handles:
+This server provides image generation tools AND resources that can be called
+from external AI assistants or the main application. It handles:
 1. Prompt enhancement (via GPT-4o-mini)
 2. Image generation (via HuggingFace/Z-Image-Turbo)
+3. Image cache management
+
+RESOURCES (MCP Resources for hackathon demo):
+- images://cache          - List all cached images with metadata
+- images://cache/{key}    - Get details of a specific cached image
+- images://styles         - Available art styles and presets
+- images://stats          - Generation statistics
+
+TOOLS:
+- generate_character_portrait - Create character portraits
+- generate_scene             - Create location backgrounds
+- generate_title_card        - Create atmospheric opening scenes
+- list_cached_images         - Query the image cache
 
 Running this as an MCP server allows the main app to:
 - Make parallel image generation requests
-- Demonstrate MCP usage for hackathon
+- Demonstrate MCP Resources for hackathon
 - Decouple image generation from the main event loop
 
 Usage:
@@ -48,11 +61,15 @@ logger = logging.getLogger("mcp-image-generator")
 try:
     from mcp.server import Server
     from mcp.server.stdio import stdio_server
-    from mcp.types import Tool, TextContent
+    from mcp.types import Tool, TextContent, Resource
     MCP_AVAILABLE = True
 except ImportError:
     MCP_AVAILABLE = False
     logger.error("MCP SDK not installed. Run: pip install mcp")
+
+import json
+import glob
+from datetime import datetime
 
 # Image generation imports (lazy loaded)
 _hf_client = None
@@ -255,8 +272,149 @@ def generate_image(prompt: str, width: int = 1024, height: int = 576) -> str:
 # MCP SERVER
 # =============================================================================
 
+# =============================================================================
+# RESOURCE HELPERS
+# =============================================================================
+
+def get_cache_stats() -> dict:
+    """Get statistics about the image cache."""
+    cache_files = glob.glob(os.path.join(IMAGE_CACHE_DIR, "*.png"))
+    total_size = sum(os.path.getsize(f) for f in cache_files)
+    
+    return {
+        "total_images": len(cache_files),
+        "total_size_mb": round(total_size / (1024 * 1024), 2),
+        "cache_directory": IMAGE_CACHE_DIR,
+        "oldest": min((os.path.getmtime(f) for f in cache_files), default=None),
+        "newest": max((os.path.getmtime(f) for f in cache_files), default=None),
+    }
+
+
+def list_cached_images_data() -> list[dict]:
+    """List all cached images with metadata."""
+    cache_files = glob.glob(os.path.join(IMAGE_CACHE_DIR, "*.png"))
+    
+    images = []
+    for f in cache_files:
+        stat = os.stat(f)
+        images.append({
+            "path": f,
+            "key": os.path.basename(f).replace(".png", ""),
+            "size_kb": round(stat.st_size / 1024, 1),
+            "created": datetime.fromtimestamp(stat.st_mtime).isoformat(),
+        })
+    
+    # Sort by creation time, newest first
+    images.sort(key=lambda x: x["created"], reverse=True)
+    return images
+
+
+ART_STYLES = {
+    "lucasarts": {
+        "name": "LucasArts 1990s",
+        "description": "Monkey Island, Day of the Tentacle style - painterly, saturated colors, dramatic lighting",
+        "suffix": ART_STYLE_SUFFIX
+    },
+    "sierra": {
+        "name": "Sierra 1990s", 
+        "description": "King's Quest, Gabriel Knight style - detailed, slightly more realistic",
+        "suffix": "Rendered in the style of 1990s Sierra adventure games. Detailed pixel-art-inspired digital painting with rich colors and atmospheric lighting."
+    },
+    "noir": {
+        "name": "Noir Detective",
+        "description": "High contrast black and white with dramatic shadows",
+        "suffix": "Rendered in classic film noir style. High contrast black and white with dramatic shadows, venetian blind lighting, and moody atmosphere."
+    }
+}
+
+
 if MCP_AVAILABLE:
     server = Server("murder-mystery-images")
+    
+    # =========================================================================
+    # MCP RESOURCES
+    # =========================================================================
+    
+    @server.list_resources()
+    async def list_resources() -> list[Resource]:
+        """List available image resources."""
+        resources = [
+            Resource(
+                uri="images://cache",
+                name="Image Cache",
+                description="List all cached generated images with metadata",
+                mimeType="application/json"
+            ),
+            Resource(
+                uri="images://styles",
+                name="Art Styles",
+                description="Available art styles and presets for image generation",
+                mimeType="application/json"
+            ),
+            Resource(
+                uri="images://stats",
+                name="Generation Statistics",
+                description="Cache statistics and generation metrics",
+                mimeType="application/json"
+            ),
+        ]
+        
+        # Add individual image resources
+        for img in list_cached_images_data()[:20]:  # Limit to 20 most recent
+            resources.append(Resource(
+                uri=f"images://cache/{img['key']}",
+                name=f"Image: {img['key']}",
+                description=f"Cached image ({img['size_kb']}KB, {img['created'][:10]})",
+                mimeType="image/png"
+            ))
+        
+        return resources
+    
+    @server.read_resource()
+    async def read_resource(uri: str) -> str:
+        """Read an image resource."""
+        if uri == "images://cache":
+            images = list_cached_images_data()
+            return json.dumps({
+                "total": len(images),
+                "images": images
+            }, indent=2)
+        
+        elif uri == "images://styles":
+            return json.dumps({
+                "default": "lucasarts",
+                "styles": ART_STYLES
+            }, indent=2)
+        
+        elif uri == "images://stats":
+            stats = get_cache_stats()
+            if stats["oldest"]:
+                stats["oldest"] = datetime.fromtimestamp(stats["oldest"]).isoformat()
+            if stats["newest"]:
+                stats["newest"] = datetime.fromtimestamp(stats["newest"]).isoformat()
+            return json.dumps(stats, indent=2)
+        
+        elif uri.startswith("images://cache/"):
+            key = uri.replace("images://cache/", "")
+            cache_path = os.path.join(IMAGE_CACHE_DIR, f"{key}.png")
+            if os.path.exists(cache_path):
+                stat = os.stat(cache_path)
+                return json.dumps({
+                    "key": key,
+                    "path": cache_path,
+                    "size_kb": round(stat.st_size / 1024, 1),
+                    "created": datetime.fromtimestamp(stat.st_mtime).isoformat(),
+                    "exists": True
+                }, indent=2)
+            else:
+                return json.dumps({"error": f"Image not found: {key}", "exists": False})
+        
+        else:
+            return json.dumps({"error": f"Unknown resource: {uri}"})
+    
+    # =========================================================================
+    # MCP TOOLS
+    # =========================================================================
     
     @server.list_tools()
     async def list_tools() -> list[Tool]:
@@ -303,6 +461,28 @@ if MCP_AVAILABLE:
                         "victim_background": {"type": "string", "description": "Victim background", "default": ""}
                     },
                     "required": ["title", "setting"]
+                }
+            ),
+            Tool(
+                name="list_cached_images",
+                description="List all cached images with metadata. Useful for checking what has been generated.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "limit": {"type": "integer", "description": "Max images to return", "default": 10}
+                    },
+                    "required": []
+                }
+            ),
+            Tool(
+                name="get_image_by_key",
+                description="Get a specific cached image by its cache key.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "key": {"type": "string", "description": "The cache key (hash) of the image"}
+                    },
+                    "required": ["key"]
                 }
             )
         ]
@@ -352,6 +532,33 @@ if MCP_AVAILABLE:
                 
                 path = generate_image(prompt)
                 return [TextContent(type="text", text=path)]
+            
+            elif name == "list_cached_images":
+                limit = arguments.get("limit", 10)
+                images = list_cached_images_data()[:limit]
+                return [TextContent(type="text", text=json.dumps({
+                    "total_cached": len(list_cached_images_data()),
+                    "returned": len(images),
+                    "images": images
+                }, indent=2))]
+            
+            elif name == "get_image_by_key":
+                key = arguments.get("key", "")
+                cache_path = os.path.join(IMAGE_CACHE_DIR, f"{key}.png")
+                if os.path.exists(cache_path):
+                    stat = os.stat(cache_path)
+                    return [TextContent(type="text", text=json.dumps({
+                        "key": key,
+                        "path": cache_path,
+                        "size_kb": round(stat.st_size / 1024, 1),
+                        "created": datetime.fromtimestamp(stat.st_mtime).isoformat(),
+                        "exists": True
+                    }, indent=2))]
+                else:
+                    return [TextContent(type="text", text=json.dumps({
+                        "error": f"Image not found: {key}",
+                        "exists": False
+                    }))]
                 
             else:
                 return [TextContent(type="text", text=f"Unknown tool: {name}")]

@@ -95,3 +95,89 @@ class Mystery(BaseModel):
     motive: str
     suspects: List[Suspect] = Field(min_length=4, max_length=4)
     clues: List[Clue] = Field(min_length=5, max_length=5)
+
+
+# =============================================================================
+# STRUCTURED OUTPUT MODELS FOR GAME MASTER RESPONSES
+# =============================================================================
+
+class GameAction(BaseModel):
+    """A game action detected in the GM's response.
+    
+    These replace the fragile regex markers like [SEARCHED:], [ACCUSATION:], etc.
+    """
+    
+    action_type: str = Field(
+        description="Type of action: 'search_location', 'interrogate_suspect', 'reveal_clue', 'make_accusation', 'general_narration'"
+    )
+    target: Optional[str] = Field(
+        default=None,
+        description="Target of action (location name, suspect name, or clue ID)"
+    )
+    clue_ids_revealed: List[str] = Field(
+        default_factory=list,
+        description="List of clue IDs revealed during this action (if any)"
+    )
+
+
+class SceneBrief(BaseModel):
+    """Scene description for image generation."""
+    
+    location: str = Field(description="The exact location name")
+    visual_description: str = Field(description="Rich visual description for image generation")
+    camera_angle: str = Field(
+        default="medium shot",
+        description="Camera angle: 'extreme close-up', 'close-up', 'medium shot', 'wide shot', 'establishing shot'"
+    )
+    mood: str = Field(default="mysterious", description="Atmosphere/mood of the scene")
+    focus_element: Optional[str] = Field(
+        default=None,
+        description="Primary element to focus on (e.g., 'torn letter', 'bloody knife')"
+    )
+
+
+class GameMasterResponse(BaseModel):
+    """Structured response from the Game Master.
+    
+    This replaces the fragile regex parsing of markers like [SEARCHED:], [ACCUSATION:], etc.
+    The LLM returns structured data that we can process directly.
+    """
+    
+    narrative: str = Field(
+        description="The spoken narrative for the player. This is what gets TTS'd and displayed."
+    )
+    
+    speaker: Optional[str] = Field(
+        default=None,
+        description="Who is speaking: None for Game Master, or suspect name if a suspect is responding"
+    )
+    
+    action: Optional[GameAction] = Field(
+        default=None,
+        description="Game action performed (search, interrogation, accusation, etc.)"
+    )
+    
+    scene_brief: Optional[SceneBrief] = Field(
+        default=None,
+        description="Scene details for image generation (only when searching a location)"
+    )
+    
+    accusation_result: Optional[bool] = Field(
+        default=None,
+        description="True if accusation was correct, False if wrong, None if no accusation"
+    )
+
+
+class StructuredToolOutput(BaseModel):
+    """Wrapper for tool outputs that need structured parsing.
+    
+    Tools can return this to provide structured data back to the parser
+    instead of relying on regex markers in text.
+    """
+    
+    tool_name: str
+    narrative: str = Field(description="The narrative text to speak/display")
+    speaker: Optional[str] = Field(default=None, description="Who is speaking")
+    action: Optional[GameAction] = Field(default=None)
+    scene_brief: Optional[SceneBrief] = Field(default=None)
+    raw_data: Optional[Dict] = Field(default=None, description="Additional tool-specific data")
