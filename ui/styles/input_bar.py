@@ -1,191 +1,108 @@
 """Input bar CSS styles."""
 
-CSS_INPUT_BAR = """/* ========== STICKY RECORD BUTTON ========== */
+CSS_INPUT_BAR = """/* ========== STICKY INPUT BAR (RESET) ========== */
 #sticky-record-bar {
     position: fixed !important;
     bottom: 0 !important;
     left: 0 !important;
     right: 0 !important;
     z-index: 9999 !important;
-    display: flex !important;
-    justify-content: center !important;
-    align-items: center !important;
-    padding: 10px 12px !important;
     background: rgba(10, 10, 10, 0.96) !important;
-    border-top: 1px solid var(--terminal-green, #00cc66) !important;
-    backdrop-filter: blur(8px) !important;
-    -webkit-backdrop-filter: blur(8px) !important;
+    border-top: 1px solid var(--border-dark) !important;
+    padding: 8px 12px !important;
 }
 
-/* Mobile - add safe area padding for notch devices */
-@media (max-width: 900px) {
-    #sticky-record-bar {
-        padding-bottom: calc(14px + env(safe-area-inset-bottom)) !important;
-    }
-}
-
-/* ===== HIDE ALL UNWANTED ELEMENTS ===== */
-#sticky-record-bar label,
-#sticky-record-bar .label-wrap,
-#sticky-record-bar .icon-button,
-#sticky-record-bar .icon-button-wrapper,
-#sticky-record-bar .mic-select,
-#sticky-record-bar select,
-#sticky-record-bar .dropdown,
-#sticky-record-bar .settings-button {
-    display: none !important;
-    visibility: hidden !important;
-    width: 0 !important;
-    height: 0 !important;
-    overflow: hidden !important;
-}
-
-/* Hide any text labels inside the button */
-#sticky-record-bar button span {
-    display: none !important;
-}
-
-/* Center the audio component content */
-#sticky-record-bar > div,
-#sticky-record-bar .audio-component {
-    display: flex !important;
-    justify-content: center !important;
-    align-items: center !important;
+/* Center the audio block, keep it narrow, and make the wrapper visually subtle */
+#sticky-record-bar .block.record-audio-minimal {
+    margin: 0 auto !important;
+    max-width: 360px !important;
     background: transparent !important;
     border: none !important;
-    width: 100% !important;
+    box-shadow: none !important;
 }
 
-/* ===== THE RECORD BUTTON (SINGLE CONTROL) ===== */
-#sticky-record-bar button.record-button,
-#sticky-record-bar button[aria-label*="ecord"],
-#sticky-record-bar button:not(.icon-button):not(.settings-button) {
-    position: relative !important;
+#sticky-record-bar .audio-container {
     display: flex;
-    align-items: center !important;
-    justify-content: center !important;
-    width: 56px !important;
-    height: 56px !important;
-    min-width: 56px !important;
-    min-height: 56px !important;
-    max-width: 56px !important;
-    max-height: 56px !important;
-    border-radius: 50% !important;
-    background: var(--terminal-green, #00cc66) !important;
-    border: 2px solid rgba(255, 255, 255, 0.35) !important;
-    cursor: pointer !important;
-    transition: transform 0.15s ease-out !important;
-    margin: 0 auto !important;
-    font-size: 0 !important; /* hide built-in text like 'Record' */
+    flex-direction: column;
+    gap: 4px;
 }
 
-#sticky-record-bar button.record-button:hover,
-#sticky-record-bar button[aria-label*="ecord"]:hover,
-#sticky-record-bar button:not(.icon-button):not(.settings-button):hover {
-    transform: scale(1.03) !important;
+/* Make the inner component wrapper minimal so the record button stands out */
+#sticky-record-bar .component-wrapper {
+    padding: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
 }
 
-/* Recording state - change color only */
-#sticky-record-bar button[aria-label*="top"],
-#sticky-record-bar button.recording {
-    background: #e74c3c !important;
-    border-color: rgba(255, 120, 120, 0.8) !important;
+#sticky-record-bar .controls {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 8px;
 }
 
-/* Hide extra control buttons (keep record + stop) */
-.pause-button,
-#stop-paused,
-.resume-button {
+/* Hide the text label on the Record button, but keep the button itself visible.
+   Style it as a neutral circular button with a centered microphone icon. */
+#sticky-record-bar .controls .record-button {
+    position: relative;
+    font-size: 0;                            /* hide "Record" text */
+    border-radius: 999px !important;         /* circular button */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    background: rgba(255, 255, 255, 0.06);    /* subtle neutral background */
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    color: var(--text-primary);
+}
+
+#sticky-record-bar .controls .record-button::before {
+    content: "🎙";                           /* simple microphone icon */
+    font-size: 18px;
+    line-height: 1;
+}
+
+/* Make the Stop buttons visually match the Record button */
+#sticky-record-bar .controls .stop-button,
+#sticky-record-bar .controls .stop-button-paused {
+    position: relative;
+    font-size: 0;                            /* hide "Stop" text */
+    border-radius: 999px !important;         /* circular button */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    background: rgba(255, 255, 255, 0.06);   /* same neutral background */
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    color: var(--text-primary);
+}
+
+#sticky-record-bar .controls .stop-button::before,
+#sticky-record-bar .controls .stop-button-paused::before {
+    content: "■";                            /* simple stop icon */
+    font-size: 14px;
+    line-height: 1;
+}
+
+/* Hide the secondary "stop paused" control so only one Stop is visible */
+#sticky-record-bar .controls .stop-button-paused, #stop-paused {
     display: none !important;
 }
 
-/* Stop button styling */
-#sticky-record-bar .stop-button {
-    position: relative !important;
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    width: 40px !important;
-    height: 40px !important;
-    min-width: 40px !important;
-    min-height: 40px !important;
-    max-width: 40px !important;
-    max-height: 40px !important;
-    border-radius: 50% !important;
-    background: #e74c3c !important;
-    border: 2px solid rgba(255, 255, 255, 0.4) !important;
-    cursor: pointer !important;
-    margin-left: 10px !important;
-    font-size: 0 !important;  /* hide 'Stop' text */
+
+.stop-button-paused, .resume-button {
+    display: none !important;
 }
 
-#sticky-record-bar .stop-button::before {
-    content: "■";
-    font-size: 14px;
-    line-height: 1;
-    color: #000000;
-}
-
-/* Use any custom microphone icon via pseudo-element (optional) */
-/* If you want a mic emoji, uncomment the content line below. */
-#sticky-record-bar button.record-button::before,
-#sticky-record-bar button[aria-label*="ecord"]::before,
-#sticky-record-bar button:not(.icon-button):not(.settings-button)::before {
-    /* content: "🎤"; */
-    font-size: 18px;
-    line-height: 1;
-    color: #000000;
-}
-
-/* Mobile - slightly larger button + icon */
-@media (max-width: 900px) {
-    #sticky-record-bar button.record-button,
-    #sticky-record-bar button[aria-label*="ecord"],
-    #sticky-record-bar button:not(.icon-button):not(.settings-button) {
-        width: 64px !important;
-        height: 64px !important;
-        min-width: 64px !important;
-        min-height: 64px !important;
-        max-width: 64px !important;
-        max-height: 64px !important;
-    }
-    
-    #sticky-record-bar button.record-button::before,
-    #sticky-record-bar button[aria-label*="ecord"]::before,
-    #sticky-record-bar button:not(.icon-button):not(.settings-button)::before {
-        font-size: 20px;
-    }
-
-    #sticky-record-bar .stop-button {
-        width: 48px !important;
-        height: 48px !important;
-        min-width: 48px !important;
-        min-height: 48px !important;
-        max-width: 48px !important;
-        max-height: 48px !important;
-    }
-}
-
-/* ===== PAGE PADDING ===== */
+/* Add bottom padding so content isn't hidden behind the bar */
 .gradio-container {
-    padding-bottom: 100px !important;
+    padding-bottom: 90px !important;
 }
+
 
 @media (max-width: 900px) {
     .gradio-container {
-        padding-bottom: 120px !important;
+        padding-bottom: 110px !important;
     }
 }
-
-/* Legacy class fallback */
-.input-bar {
-    position: fixed !important;
-    bottom: 0 !important;
-    left: 0 !important;
-    right: 0 !important;
-    z-index: 9999 !important;
-    display: flex !important;
-    justify-content: center !important;
-}
-
 """

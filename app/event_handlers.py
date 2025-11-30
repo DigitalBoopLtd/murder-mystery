@@ -22,7 +22,6 @@ from ui.formatters import (
     format_timeline_html,
     format_case_file_html,
 )
-from ui.case_board import build_case_board
 from services.api_keys import set_session_key, get_session_keys, has_required_keys
 from app.utils import convert_alignment_to_subtitles
 
@@ -199,8 +198,6 @@ def on_start_game(sess_id, progress=gr.Progress()):
             gr.update(),  # clues_html_tab
             gr.update(),  # accusations_html_tab
             gr.update(),  # timeline_html_tab
-            gr.update(),  # case_board_plot
-            gr.update(),  # case_board_plot_main
             gr.update(),  # mystery_check_timer
         ]
 
@@ -377,19 +374,12 @@ def on_start_game(sess_id, progress=gr.Progress()):
         format_clues_html(state.clues_found),
         format_accusations_html(state),
         format_timeline_html(state.discovered_timeline),
-        # Case board - both tabs and side panel versions
-        (case_board := build_case_board(
-            mystery=None,  # Not ready yet
-            suspects_talked_to=state.suspects_talked_to,
-            clues_found=state.clues_found,
-            searched_locations=state.searched_locations,
-            discovered_timeline=state.discovered_timeline,
-            suspect_states=state.suspect_states,
-        )),
-        case_board,  # Same board for main tab
         # Activate timer to check when mystery is ready
         gr.update(active=True),
     ]
+    # NOTE: on_start_game outputs 19 items (game_started_marker + input_row + mystery_check_timer + game_outputs)
+    # game_outputs now has 18 items including dashboard_html_main, but on_start_game doesn't return dashboard_html_main
+    # since it's wired separately. The yield above is for start_btn.click outputs, not game_outputs.
 
 
 def check_mystery_ready(sess_id: str):
@@ -457,15 +447,6 @@ def check_mystery_ready(sess_id: str):
         # Update portrait if opening scene is available
         portrait_update = gr.update(value=opening_scene) if opening_scene else gr.update()
         
-        # Build case board once, use for both tabs and side panel
-        case_board = build_case_board(
-            mystery=state.mystery,
-            suspects_talked_to=state.suspects_talked_to,
-            clues_found=state.clues_found,
-            searched_locations=state.searched_locations,
-            discovered_timeline=state.discovered_timeline,
-            suspect_states=state.suspect_states,
-        )
         case_file_html = format_case_file_html(
             state.mystery,
             suspects_talked_to=state.suspects_talked_to,
@@ -485,8 +466,6 @@ def check_mystery_ready(sess_id: str):
             victim_html,
             suspects_html_tab,  # Tabs (row layout)
             locations_html,
-            case_board,        # Case board (info tabs/mobile)
-            case_board,        # Case board (main tab)
             case_file_html,    # Case File (main tab)
             gr.update(active=False),  # Stop the timer
         ]
@@ -515,8 +494,6 @@ def check_mystery_ready(sess_id: str):
                 gr.update(),  # victim_scene_html_tab
                 suspects_preview_tab,  # suspects tab - show previews early!
                 gr.update(),  # locations_html_tab
-                gr.update(),  # case_board (info tabs) - no change yet
-                gr.update(),  # case_board (main tab) - no change yet
                 gr.update(),  # case_file_html_main - no change yet
                 gr.update(active=True),  # Keep timer running
             ]
@@ -531,8 +508,6 @@ def check_mystery_ready(sess_id: str):
             gr.update(),  # victim_scene_html_tab
             gr.update(),  # suspects_list_html_tab
             gr.update(),  # locations_html_tab
-            gr.update(),  # case_board (info tabs) - no change
-            gr.update(),  # case_board (main tab) - no change
             gr.update(),  # case_file_html_main - no change
             gr.update(active=True),  # Keep timer running
         ]
@@ -772,7 +747,7 @@ def on_voice_input(audio_path: str, sess_id, progress=gr.Progress()):
     Stage 2 (slow): Generate TTS audio + images, yield final update with audio
     """
     if not audio_path:
-        yield [gr.update()] * 19  # Must match game_outputs count
+        yield [gr.update()] * 18  # Must match game_outputs count
         return
 
     # Normalize session id so it matches what on_start_game used
@@ -784,12 +759,12 @@ def on_voice_input(audio_path: str, sess_id, progress=gr.Progress()):
         state_before, "premise_setting", None
     ):
         logger.warning("[APP] Voice input received but no game started yet")
-        yield [gr.update()] * 19  # Must match game_outputs count
+        yield [gr.update()] * 18  # Must match game_outputs count
         return
 
     # Show progress indicator while processing
     progress(0, desc="🗣️ Transcribing...")
-    yield [gr.update()] * 19  # Must match game_outputs count
+    yield [gr.update()] * 18  # Must match game_outputs count
 
     # Store previous state to detect what changed
     # IMPORTANT: Make copies of the lists since state is mutated in place
@@ -816,7 +791,7 @@ def on_voice_input(audio_path: str, sess_id, progress=gr.Progress()):
     logger.info("[PERF] Transcription took %.2fs", t1 - t0)
 
     if not text.strip():
-        yield [gr.update()] * 19  # Must match game_outputs count
+        yield [gr.update()] * 18  # Must match game_outputs count
         return
 
     # Infer high-level action type from the transcribed text
@@ -986,16 +961,6 @@ def on_voice_input(audio_path: str, sess_id, progress=gr.Progress()):
         format_clues_html(state.clues_found),
         format_accusations_html(state),
         format_timeline_html(state.discovered_timeline),  # Tab (mobile)
-        # Case board - both tabs and side panel versions
-        (case_board := build_case_board(
-            mystery=state.mystery,
-            suspects_talked_to=state.suspects_talked_to,
-            clues_found=state.clues_found,
-            searched_locations=state.searched_locations,
-            discovered_timeline=state.discovered_timeline,
-            suspect_states=state.suspect_states,
-        )),
-        case_board,  # Same board for main tab
         format_case_file_html(
             state.mystery,
             suspects_talked_to=state.suspects_talked_to,
@@ -1004,6 +969,15 @@ def on_voice_input(audio_path: str, sess_id, progress=gr.Progress()):
             wrong_accusations=state.wrong_accusations,
             game_over=state.game_over,
             won=state.won,
+        ),
+        # Dashboard (main tab)
+        format_dashboard_html(
+            state.mystery,
+            state.clues_found,
+            state.suspects_talked_to,
+            state.searched_locations,
+            state.suspect_states,
+            state.wrong_accusations
         ),
     ]
 
@@ -1185,16 +1159,6 @@ def on_voice_input(audio_path: str, sess_id, progress=gr.Progress()):
         format_clues_html(state.clues_found),
         format_accusations_html(state),
         format_timeline_html(state.discovered_timeline),  # Tab (mobile)
-        # Case board - both tabs and side panel versions
-        (case_board := build_case_board(
-            mystery=state.mystery,
-            suspects_talked_to=state.suspects_talked_to,
-            clues_found=state.clues_found,
-            searched_locations=state.searched_locations,
-            discovered_timeline=state.discovered_timeline,
-            suspect_states=state.suspect_states,
-        )),
-        case_board,  # Same board for main tab
         format_case_file_html(
             state.mystery,
             suspects_talked_to=state.suspects_talked_to,
@@ -1203,6 +1167,15 @@ def on_voice_input(audio_path: str, sess_id, progress=gr.Progress()):
             wrong_accusations=state.wrong_accusations,
             game_over=state.game_over,
             won=state.won,
+        ),
+        # Dashboard (main tab)
+        format_dashboard_html(
+            state.mystery,
+            state.clues_found,
+            state.suspects_talked_to,
+            state.searched_locations,
+            state.suspect_states,
+            state.wrong_accusations
         ),
     ]
 
@@ -1278,13 +1251,15 @@ def _refresh_suspects_list(sess_id, trigger: str):
 def on_save_api_keys(
     openai_key: str,
     elevenlabs_key: str,
+    huggingface_key: str,
     sess_id: str,
 ):
     """Save API keys to session (not persisted to disk).
     
     Returns updates for:
     - openai_key_status
-    - elevenlabs_key_status  
+    - elevenlabs_key_status
+    - huggingface_key_status
     - keys_status_html
     """
     sess_id = normalize_session_id(sess_id)
@@ -1319,13 +1294,33 @@ def on_save_api_keys(
             overall_status.append("Voice ✓")
         else:
             results.append(f'<span class="key-status key-error">❌ {msg}</span>')
+            overall_status.append("Voice ✗")
     else:
         keys = get_session_keys(sess_id)
         if keys.elevenlabs_key:
             results.append('<span class="key-status key-env">✅ From environment</span>')
             overall_status.append("Voice (env)")
         else:
-            results.append('<span class="key-status key-optional">⚪ Optional (no voice)</span>')
+            results.append('<span class="key-status key-missing">❌ Required</span>')
+            overall_status.append("Voice missing!")
+    
+    # Save HuggingFace key
+    if huggingface_key and huggingface_key.strip():
+        success, msg = set_session_key(sess_id, "huggingface", huggingface_key)
+        if success:
+            results.append('<span class="key-status key-ok">✅ Saved</span>')
+            overall_status.append("HF ✓")
+        else:
+            results.append(f'<span class="key-status key-error">❌ {msg}</span>')
+            overall_status.append("HF ✗")
+    else:
+        keys = get_session_keys(sess_id)
+        if keys.huggingface_key:
+            results.append('<span class="key-status key-env">✅ From environment</span>')
+            overall_status.append("HF (env)")
+        else:
+            results.append('<span class="key-status key-missing">❌ Required</span>')
+            overall_status.append("HF missing!")
     
     # Check if we can play
     can_play, missing = has_required_keys(sess_id)
@@ -1334,7 +1329,7 @@ def on_save_api_keys(
     else:
         status_html = f'<span class="keys-not-ready">⚠️ Missing: {", ".join(missing)}</span>'
     
-    return results[0], results[1], status_html
+    return results[0], results[1], results[2], status_html
 
 
 def check_api_keys_status(sess_id: str):
@@ -1345,6 +1340,7 @@ def check_api_keys_status(sess_id: str):
     
     openai_html = _format_key_status(status["openai"])
     elevenlabs_html = _format_key_status(status["elevenlabs"])
+    huggingface_html = _format_key_status(status["huggingface"])
     
     can_play, missing = has_required_keys(sess_id)
     if can_play:
@@ -1352,7 +1348,7 @@ def check_api_keys_status(sess_id: str):
     else:
         overall = f'<span class="keys-not-ready">⚠️ Need: {", ".join(missing)}</span>'
     
-    return openai_html, elevenlabs_html, overall
+    return openai_html, elevenlabs_html, huggingface_html, overall
 
 
 def _format_key_status(status: str) -> str:

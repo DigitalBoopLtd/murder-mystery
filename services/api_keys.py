@@ -27,7 +27,7 @@ class APIKeys:
     """Container for API keys - stored only in memory."""
     openai_key: Optional[str] = None
     elevenlabs_key: Optional[str] = None
-    fal_key: Optional[str] = None
+    huggingface_key: Optional[str] = None
     
     # Track which keys were user-provided vs env
     _user_provided: Dict[str, bool] = field(default_factory=dict)
@@ -38,8 +38,8 @@ class APIKeys:
     def has_elevenlabs(self) -> bool:
         return bool(self.elevenlabs_key)
     
-    def has_fal(self) -> bool:
-        return bool(self.fal_key)
+    def has_huggingface(self) -> bool:
+        return bool(self.huggingface_key)
     
     def is_user_provided(self, key_name: str) -> bool:
         return self._user_provided.get(key_name, False)
@@ -49,7 +49,7 @@ class APIKeys:
         return {
             "openai": self._get_key_status("openai", self.openai_key),
             "elevenlabs": self._get_key_status("elevenlabs", self.elevenlabs_key),
-            "fal": self._get_key_status("fal", self.fal_key),
+            "huggingface": self._get_key_status("huggingface", self.huggingface_key),
         }
     
     def _get_key_status(self, name: str, value: Optional[str]) -> str:
@@ -118,12 +118,12 @@ def set_session_key(
         logger.info("ElevenLabs key %s for session %s",
                    "set" if key_value else "cleared",
                    session_id[:8])
-    elif key_name == "fal":
-        keys.fal_key = key_value if key_value else None
-        keys._user_provided["fal"] = bool(key_value)
+    elif key_name == "huggingface":
+        keys.huggingface_key = key_value if key_value else None
+        keys._user_provided["huggingface"] = bool(key_value)
         if key_value:
-            os.environ["FAL_KEY"] = key_value
-        logger.info("Fal key %s for session %s",
+            os.environ["HF_TOKEN"] = key_value
+        logger.info("HuggingFace key %s for session %s",
                    "set" if key_value else "cleared",
                    session_id[:8])
     else:
@@ -144,13 +144,13 @@ def _create_keys_from_env() -> APIKeys:
     keys = APIKeys(
         openai_key=os.getenv("OPENAI_API_KEY"),
         elevenlabs_key=os.getenv("ELEVENLABS_API_KEY"),
-        fal_key=os.getenv("FAL_KEY"),
+        huggingface_key=os.getenv("HF_TOKEN"),
     )
     # Mark all as not user-provided (from env)
     keys._user_provided = {
         "openai": False,
         "elevenlabs": False,
-        "fal": False,
+        "huggingface": False,
     }
     return keys
 
@@ -172,10 +172,12 @@ def _validate_key_format(key_name: str, key_value: str) -> tuple[bool, str]:
         if len(key_value) < 20:
             return False, "ElevenLabs key seems too short"
     
-    elif key_name == "fal":
-        # Fal keys are UUIDs with dashes
+    elif key_name == "huggingface":
+        # HuggingFace tokens start with hf_
+        if not key_value.startswith("hf_"):
+            return False, "HuggingFace tokens should start with 'hf_'"
         if len(key_value) < 20:
-            return False, "Fal key seems too short"
+            return False, "HuggingFace token seems too short"
     
     return True, ""
 
@@ -202,17 +204,19 @@ def get_elevenlabs_key(session_id: Optional[str] = None) -> Optional[str]:
     return os.getenv("ELEVENLABS_API_KEY")
 
 
-def get_fal_key(session_id: Optional[str] = None) -> Optional[str]:
-    """Get Fal API key, preferring session key over env."""
+def get_huggingface_key(session_id: Optional[str] = None) -> Optional[str]:
+    """Get HuggingFace token, preferring session key over env."""
     if session_id:
         keys = get_session_keys(session_id)
-        if keys.fal_key:
-            return keys.fal_key
-    return os.getenv("FAL_KEY")
+        if keys.huggingface_key:
+            return keys.huggingface_key
+    return os.getenv("HF_TOKEN")
 
 
 def has_required_keys(session_id: Optional[str] = None) -> tuple[bool, list[str]]:
     """Check if all required keys are available.
+    
+    All three keys (OpenAI, ElevenLabs, HuggingFace) are required.
     
     Returns:
         Tuple of (all_present, list of missing key names)
@@ -222,8 +226,11 @@ def has_required_keys(session_id: Optional[str] = None) -> tuple[bool, list[str]
     if not get_openai_key(session_id):
         missing.append("OpenAI")
     
-    # ElevenLabs is optional (falls back to no audio)
-    # Fal is optional (falls back to no images)
+    if not get_elevenlabs_key(session_id):
+        missing.append("ElevenLabs")
+    
+    if not get_huggingface_key(session_id):
+        missing.append("HuggingFace")
     
     return len(missing) == 0, missing
 

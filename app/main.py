@@ -25,9 +25,9 @@ except ImportError:
 
 # Import modular components (AFTER load_dotenv so env vars are available)
 from services.tts_service import init_tts_service
-from services.perf_tracker import perf, get_perf_summary
+from services.perf_tracker import perf
 from game.state_manager import init_game_handlers, mystery_images
-from app.utils import setup_ui_logging, get_ui_logs, get_reveal_status
+from app.utils import setup_ui_logging
 from app.ui_components import create_ui_components
 from app.event_handlers import (
     on_config_generic_change,
@@ -171,14 +171,7 @@ def create_app():
         timeline_html_tab = components["timeline_html_tab"]
         timeline_html_main = components["timeline_html_main"]  # Main tab version
         case_file_html_main = components["case_file_html_main"]  # Case File (main tab)
-        case_board_plot = components["case_board_plot"]  # Visual conspiracy board (info tabs/mobile)
-        case_board_plot_main = components["case_board_plot_main"]  # Visual conspiracy board (main tab)
-        reveal_status_textbox = components["reveal_status_textbox"]
-        refresh_reveal_btn = components["refresh_reveal_btn"]
-        debug_logs_textbox = components["debug_logs_textbox"]
-        refresh_logs_btn = components["refresh_logs_btn"]
-        perf_summary_textbox = components["perf_summary_textbox"]
-        refresh_perf_btn = components["refresh_perf_btn"]
+        dashboard_html_main = components["dashboard_html_main"]  # Dashboard (main tab)
         mystery_check_timer = components["mystery_check_timer"]
         voice_input = components["voice_input"]
         # Setup wizard components
@@ -193,6 +186,8 @@ def create_app():
         openai_key_status = components["openai_key_status"]
         elevenlabs_key_input = components["elevenlabs_key_input"]
         elevenlabs_key_status = components["elevenlabs_key_status"]
+        huggingface_key_input = components["huggingface_key_input"]
+        huggingface_key_status = components["huggingface_key_status"]
         save_keys_btn = components["save_keys_btn"]
         keys_status_html = components["keys_status_html"]
         # Tabs and buttons for lazy portrait loading
@@ -220,9 +215,8 @@ def create_app():
             clues_html_tab,
             accusations_html_tab,
             timeline_html_tab,
-            case_board_plot,  # Visual conspiracy board (info tabs/mobile)
-            case_board_plot_main,  # Visual conspiracy board (main tab)
             case_file_html_main,  # Case File (main tab)
+            dashboard_html_main,  # Dashboard (main tab)
         ]
 
         # ====== WIZARD EVENT HANDLERS ======
@@ -282,15 +276,15 @@ def create_app():
         # Save API keys button
         getattr(save_keys_btn, "click")(
             fn=on_save_api_keys,
-            inputs=[openai_key_input, elevenlabs_key_input, session_id],
-            outputs=[openai_key_status, elevenlabs_key_status, keys_status_html],
+            inputs=[openai_key_input, elevenlabs_key_input, huggingface_key_input, session_id],
+            outputs=[openai_key_status, elevenlabs_key_status, huggingface_key_status, keys_status_html],
         )
         
         # Check API keys status on page load
         getattr(app, "load")(
             fn=check_api_keys_status,
             inputs=[session_id],
-            outputs=[openai_key_status, elevenlabs_key_status, keys_status_html],
+            outputs=[openai_key_status, elevenlabs_key_status, huggingface_key_status, keys_status_html],
         )
 
         # Decide which main tab should be active on load (API Keys first if missing)
@@ -322,8 +316,6 @@ def create_app():
                 clues_html_tab,
                 accusations_html_tab,
                 timeline_html_tab,
-                case_board_plot,  # Visual conspiracy board (info tabs/mobile)
-                case_board_plot_main,  # Visual conspiracy board (main tab)
                 mystery_check_timer,  # Timer activation
             ],
         )
@@ -342,8 +334,6 @@ def create_app():
                 victim_scene_html_tab,
                 suspects_list_html_tab,
                 locations_html_tab,
-                case_board_plot,         # Case board (info tabs/mobile)
-                case_board_plot_main,    # Case board (main tab)
                 case_file_html_main,     # Case File (main tab)
                 mystery_check_timer,
             ],
@@ -356,27 +346,6 @@ def create_app():
             reset_voice_input,
             inputs=None,
             outputs=[voice_input],
-        )
-
-        # Debug tab - refresh reveal status
-        getattr(refresh_reveal_btn, "click")(
-            fn=get_reveal_status,
-            inputs=[session_id],
-            outputs=[reveal_status_textbox],
-        )
-        
-        # Debug tab - refresh logs
-        getattr(refresh_logs_btn, "click")(
-            fn=get_ui_logs,
-            inputs=None,
-            outputs=[debug_logs_textbox],
-        )
-        
-        # Debug tab - refresh performance summary
-        getattr(refresh_perf_btn, "click")(
-            fn=get_perf_summary,
-            inputs=None,
-            outputs=[perf_summary_textbox],
         )
 
         # Hide speaker name when audio finishes playing

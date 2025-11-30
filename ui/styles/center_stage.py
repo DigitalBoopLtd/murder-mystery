@@ -45,67 +45,6 @@ CSS_CENTER_STAGE = """/* ========== MAIN LAYOUT ========== */
         margin-top: 16px;
     }
 
-    /* Tabs: icon-only labels on mobile to save space */
-    .main-tabs [role="tab"],
-    .info-tabs [role="tab"] {
-        font-size: 0 !important;          /* hide text label */
-        padding-inline: 8px !important;
-        min-width: 0 !important;
-    }
-
-    .main-tabs [role="tab"]::before,
-    .info-tabs [role="tab"]::before {
-        font-size: 18px !important;
-        line-height: 1;
-        display: inline-block;
-    }
-
-    /* Main top-level tabs icons by position */
-    .main-tabs [role="tab"]:nth-of-type(1)::before { /* Game */
-        content: "🎮";
-    }
-    .main-tabs [role="tab"]:nth-of-type(2)::before { /* Case File */
-        content: "📋";
-    }
-    .main-tabs [role="tab"]:nth-of-type(3)::before { /* Case Board */
-        content: "📋";
-    }
-    .main-tabs [role="tab"]:nth-of-type(4)::before { /* Timeline */
-        content: "🕐";
-    }
-    .main-tabs [role="tab"]:nth-of-type(5)::before { /* Settings */
-        content: "🔑";
-    }
-    .main-tabs [role="tab"]:nth-of-type(6)::before { /* Debug */
-        content: "🐞";
-    }
-
-    /* Bottom info tabs icons by position */
-    .info-tabs [role="tab"]:nth-of-type(1)::before { /* Dashboard */
-        content: "📊";
-    }
-    .info-tabs [role="tab"]:nth-of-type(2)::before { /* Case Details */
-        content: "🧳";
-    }
-    .info-tabs [role="tab"]:nth-of-type(3)::before { /* Suspects */
-        content: "🎭";
-    }
-    .info-tabs [role="tab"]:nth-of-type(4)::before { /* Locations */
-        content: "📍";
-    }
-    .info-tabs [role="tab"]:nth-of-type(5)::before { /* Clues Found */
-        content: "🔎";
-    }
-    .info-tabs [role="tab"]:nth-of-type(6)::before { /* Accusations */
-        content: "⚖️";
-    }
-    .info-tabs [role="tab"]:nth-of-type(7)::before { /* Timeline */
-        content: "🕐";
-    }
-    .info-tabs [role="tab"]:nth-of-type(8)::before { /* Case Board */
-        content: "📋";
-    }
-    
     /* Make the CRT stage more compact on mobile */
     .center-column > .gr-group {
         position: relative !important;
@@ -137,6 +76,64 @@ CSS_CENTER_STAGE = """/* ========== MAIN LAYOUT ========== */
     .wizard-primary-btn {
         max-width: 100% !important;
         width: 100% !important;
+    }
+}
+
+/* ========== SMALLEST SCREENS: Icon-only tabs ========== */
+@media (max-width: 480px) {
+    /* Tabs: icon-only labels on smallest screens to save space */
+    .main-tabs [role="tab"],
+    .info-tabs [role="tab"] {
+        font-size: 0 !important;          /* hide text label */
+        padding-inline: 8px !important;
+        min-width: 0 !important;
+    }
+
+    .main-tabs [role="tab"]::before,
+    .info-tabs [role="tab"]::before {
+        font-size: 18px !important;
+        line-height: 1;
+        display: inline-block;
+    }
+
+    /* Main top-level tabs icons by position */
+    .main-tabs [role="tab"]:nth-of-type(1)::before { /* Game */
+        content: "🎮";
+    }
+    .main-tabs [role="tab"]:nth-of-type(2)::before { /* Dashboard */
+        content: "📊";
+    }
+    .main-tabs [role="tab"]:nth-of-type(3)::before { /* Case File */
+        content: "📋";
+    }
+    .main-tabs [role="tab"]:nth-of-type(4)::before { /* Timeline */
+        content: "🕐";
+    }
+    .main-tabs [role="tab"]:nth-of-type(5)::before { /* Settings */
+        content: "🔑";
+    }
+
+    /* Bottom info tabs icons by position */
+    .info-tabs [role="tab"]:nth-of-type(1)::before { /* Dashboard */
+        content: "📊";
+    }
+    .info-tabs [role="tab"]:nth-of-type(2)::before { /* Case Details */
+        content: "🧳";
+    }
+    .info-tabs [role="tab"]:nth-of-type(3)::before { /* Suspects */
+        content: "🎭";
+    }
+    .info-tabs [role="tab"]:nth-of-type(4)::before { /* Locations */
+        content: "📍";
+    }
+    .info-tabs [role="tab"]:nth-of-type(5)::before { /* Clues Found */
+        content: "🔎";
+    }
+    .info-tabs [role="tab"]:nth-of-type(6)::before { /* Accusations */
+        content: "⚖️";
+    }
+    .info-tabs [role="tab"]:nth-of-type(7)::before { /* Timeline */
+        content: "🕐";
     }
 }
 
@@ -440,23 +437,60 @@ img { border: 4px solid white !important; }
 .settings-tab .settings-column {
     padding: 20px;
     max-width: 800px;
+    margin: 0 auto;
+    background: transparent !important;
+}
+code,
+.settings-tab .settings-column .gr-group .styler {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+}
+
+.settings-tab .settings-column h3,
+.settings-tab .settings-column p {
+    color: var(--text-primary) !important;
 }
 
 .api-keys-group {
-    padding: 16px;
-    background: rgba(0, 20, 0, 0.3);
-    border: 1px solid var(--terminal-green-border-soft);
+    padding: 20px;
+    background: var(--bg-card) !important;
+    border: 1px solid var(--border-dark) !important;
     border-radius: 8px;
     margin: 16px 0;
 }
 
+/* Style the form blocks containing input fields */
+.api-keys-group .form .block {
+    background: rgba(0, 0, 0, 0.3) !important;
+    border: 1px solid var(--border-dark) !important;
+    border-radius: 6px !important;
+}
+
+/* Style the input labels */
+.api-keys-group label span {
+    color: var(--text-secondary) !important;
+    font-size: 13px !important;
+}
+
+/* Style the password input fields */
 .api-keys-group input[type="password"] {
-    background: rgba(0, 30, 0, 0.5) !important;
-    border: 1px solid var(--terminal-green-border-soft) !important;
+    background: rgba(0, 10, 20, 0.8) !important;
+    border: 1px solid var(--border-dark) !important;
+    color: var(--text-primary) !important;
+    border-radius: 4px !important;
+    padding: 10px 12px !important;
+}
+
+.api-keys-group input[type="password"]::placeholder {
+    color: rgba(255, 255, 255, 0.3) !important;
 }
 
 .api-keys-group input[type="password"]:focus {
-    border-color: var(--terminal-green) !important;
+    border-color: var(--accent-blue) !important;
+    outline: none !important;
 }
 
 /* Legacy accordion styling (can be removed if not used) */
@@ -481,6 +515,33 @@ img { border: 4px solid white !important; }
 
 .api-keys-info p {
     margin: 0;
+}
+
+.settings-tab .row {
+    gap: 16px;
+    align-items: center;
+    flex-wrap: nowrap;
+    margin-bottom: 12px;
+}
+
+.settings-tab .form {
+    flex: 1;
+}
+
+.settings-tab .form > .block {
+    border-radius: 6px !important;
+    border-width: 1px !important;
+    background: rgba(0, 10, 20, 0.5) !important;
+}
+
+/* Make key status cells compact labels instead of full cards */
+.settings-tab .block.key-status-container {
+    border: none !important;
+    box-shadow: none !important;
+    background: transparent !important;
+    padding: 0 !important;
+    min-width: 120px !important;
+    flex: 0 0 auto;
 }
 
 .key-status-container {
@@ -522,24 +583,33 @@ img { border: 4px solid white !important; }
 }
 
 .save-keys-btn {
-    background: rgba(255, 204, 0, 0.2) !important;
-    border: 1px solid rgba(255, 204, 0, 0.5) !important;
-    color: #ffcc00 !important;
+    background: var(--accent-blue-dark) !important;
+    border: 1px solid var(--accent-blue) !important;
+    color: var(--text-primary) !important;
+    padding: 10px 24px !important;
+    font-weight: 600 !important;
 }
 
 .save-keys-btn:hover {
-    background: rgba(255, 204, 0, 0.3) !important;
+    background: var(--accent-blue) !important;
+    color: #000 !important;
 }
 
 .keys-ready {
     color: #00ff00;
-    font-size: 13px;
+    font-size: 14px;
     font-weight: bold;
+    padding: 8px 12px;
+    background: rgba(0, 255, 0, 0.1);
+    border-radius: 4px;
 }
 
 .keys-not-ready {
     color: #ff8800;
-    font-size: 13px;
+    font-size: 14px;
+    padding: 8px 12px;
+    background: rgba(255, 136, 0, 0.1);
+    border-radius: 4px;
 }
 
 .keys-overall-status {

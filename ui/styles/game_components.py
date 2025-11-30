@@ -487,6 +487,11 @@ CSS_GAME_COMPONENTS = """/* ========== BASE PANEL TITLE (fallback) ========== */
 .center-column:has(.game-active) .setup-wizard {
     display: none !important;
 }
+button.record.record-button { height: 48px !important; width: 48px !important; background: transparent; }
+.mic-select, .icon-button, .icon-button-wrapper { display: none !important; }
+.record-button.svelte-1xuh0j1:before {background: transparent !important;}
+
+/* Let audio controls size themselves naturally – no global overrides on .record-button */
 
 /* ========== SETUP WIZARD ========== */
 .setup-wizard {
@@ -515,9 +520,12 @@ CSS_GAME_COMPONENTS = """/* ========== BASE PANEL TITLE (fallback) ========== */
 
 .wizard-buttons {
     display: flex;
-    justify-content: space-between;
+    justify-content: center;
     align-items: center;
     gap: 16px;
+    margin-top: 24px;
+    padding-top: 20px;
+    border-top: 1px solid var(--terminal-green-border-soft);
 }
 
 .wizard-secondary-btn {
@@ -534,8 +542,23 @@ CSS_GAME_COMPONENTS = """/* ========== BASE PANEL TITLE (fallback) ========== */
 }
 
 .wizard-primary-btn {
-    flex: 1;
-    max-width: 300px;
+    flex: 0;
+    min-width: 200px;
+    padding: 14px 32px !important;
+    font-size: 16px !important;
+    font-weight: 600 !important;
+    background: var(--terminal-green) !important;
+    color: #000 !important;
+    border: none !important;
+    border-radius: 4px !important;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    transition: all 0.2s ease;
+}
+
+.wizard-primary-btn:hover {
+    background: var(--terminal-green-accent) !important;
+    transform: translateY(-1px);
 }
 
 /* ========== SUSPECT CARDS LIST (TAB & SIDE PANEL) ========== */
@@ -543,23 +566,30 @@ CSS_GAME_COMPONENTS = """/* ========== BASE PANEL TITLE (fallback) ========== */
     display: flex;
     flex-direction: column;
     gap: 12px;
-    padding: 8px;
 }
 
-/* Column layout for side panel: cards are vertical (portrait on top, info below) */
+/* Side panel suspects: compact row layout with small portrait to reduce height */
 .suspects-card-grid-column .suspect-card {
-    flex-direction: column;
+    flex-direction: row;
+    align-items: center;
 }
 
 .suspects-card-grid-column .suspect-card-portrait {
-    flex: none;
-    max-width: none;
-    width: 100%;
+    flex: 0 0 56px;
+    max-width: 56px;
     aspect-ratio: 1 / 1;
 }
 
 .suspects-card-grid-column .suspect-card-info {
-    padding: 10px;
+    padding: 8px 10px;
+}
+
+/* Hide deep meters/relationships in side panel to keep cards short;
+   full detail is available in the main Suspects tab. */
+.suspects-card-grid-column .suspect-meters,
+.suspects-card-grid-column .suspect-relationships,
+.suspects-card-grid-column .suspect-motive {
+    display: none;
 }
 
 .suspect-card {
@@ -644,10 +674,6 @@ CSS_GAME_COMPONENTS = """/* ========== BASE PANEL TITLE (fallback) ========== */
     min-height: auto;
 }
 
-.suspect-card-minimal .suspect-card-info {
-    padding: 16px;
-}
-
 /* Loading indicator while portrait generates */
 .suspect-card-portrait-loading {
     position: absolute;
@@ -668,10 +694,6 @@ CSS_GAME_COMPONENTS = """/* ========== BASE PANEL TITLE (fallback) ========== */
     aspect-ratio: 1 / 1;
 }
 
-.suspects-list .suspect-card-compact .suspect-card-info {
-    padding: 8px 10px;
-}
-
 .suspects-list .suspect-card-compact .suspect-card-name {
     font-size: 14px;
 }
@@ -689,7 +711,6 @@ CSS_GAME_COMPONENTS = """/* ========== BASE PANEL TITLE (fallback) ========== */
 .suspect-card-info {
     flex: 1;
     min-width: 0;
-    padding: 12px;
     position: relative;
     display: flex;
     flex-direction: column;
@@ -1074,201 +1095,261 @@ CSS_GAME_COMPONENTS = """/* ========== BASE PANEL TITLE (fallback) ========== */
 }
 
 /* ========== CASE FILE (TOP TAB) ========== */
+/* Styled like an official police case folder / manila file */
+
 .case-file-root {
-    font-family: var(--font-body);
-    color: var(--text-primary);
+    font-family: 'Georgia', 'Times New Roman', serif;
+    color: #1a1a1a;
+    max-width: 720px;
+    margin: 0 auto;
+    background: linear-gradient(135deg, #f5f0e1 0%, #e8dcc8 50%, #d9cdb4 100%);
+    border-radius: 2px;
+    position: relative;
+    /* Subtle paper texture via noise */
+    background-image: 
+        url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E"),
+        linear-gradient(135deg, #f5f0e1 0%, #e8dcc8 50%, #d9cdb4 100%);
+}
+
+/* Top edge fold effect */
+.case-file-root::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 6px;
+    background: linear-gradient(to bottom, rgba(0,0,0,0.12), transparent);
+    border-radius: 2px 2px 0 0;
 }
 
 .case-file-header {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     justify-content: space-between;
-    padding: 12px 16px;
-    border-bottom: 1px solid var(--border-dark);
-    background: rgba(0, 10, 20, 0.9);
+    padding: 24px 28px 16px;
+    border-bottom: 2px solid #8b7355;
+    background: linear-gradient(to bottom, rgba(139,115,85,0.15), transparent);
 }
 
 .case-file-title-block {
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 2px;
 }
 
 .case-file-division {
-    font-family: var(--font-retro-mono);
-    font-size: 11px;
-    letter-spacing: 2px;
+    font-family: 'Courier New', monospace;
+    font-size: 10px;
+    letter-spacing: 3px;
     text-transform: uppercase;
-    color: var(--terminal-green-muted);
+    color: #6b5a4a;
+    font-weight: 600;
 }
 
 .case-file-title {
-    font-family: var(--font-retro-mono);
-    font-size: 16px;
-    letter-spacing: 2px;
+    font-family: 'Courier New', monospace;
+    font-size: 20px;
+    letter-spacing: 4px;
     text-transform: uppercase;
-    color: var(--terminal-green);
+    color: #3d2b1f;
+    font-weight: 700;
+    text-shadow: 1px 1px 0 rgba(255,255,255,0.5);
 }
 
 .case-file-meta {
+    font-family: 'Courier New', monospace;
     font-size: 11px;
     text-align: right;
-    color: var(--text-secondary);
+    color: #5a4a3a;
+    line-height: 1.6;
 }
 
 .case-file-meta-value {
-    font-family: var(--font-retro-mono);
-    color: var(--terminal-green);
+    font-weight: 700;
+    color: #3d2b1f;
 }
 
 .case-file-status {
     display: inline-block;
-    padding: 2px 8px;
-    border-radius: 999px;
+    padding: 3px 10px;
+    border-radius: 2px;
     font-size: 10px;
-    font-family: var(--font-retro-mono);
-    letter-spacing: 1px;
+    font-family: 'Courier New', monospace;
+    letter-spacing: 2px;
     text-transform: uppercase;
+    font-weight: 700;
+    margin-top: 4px;
 }
 
 .case-file-status-open {
-    border: 1px solid var(--accent-orange);
-    color: var(--accent-orange);
+    background: #fff3cd;
+    border: 1px solid #c9a227;
+    color: #856404;
 }
 
 .case-file-status-solved {
-    border: 1px solid var(--terminal-green);
-    color: var(--terminal-green);
+    background: #d4edda;
+    border: 1px solid #28a745;
+    color: #155724;
 }
 
 .case-file-status-failed {
-    border: 1px solid var(--accent-red);
-    color: var(--accent-red);
+    background: #f8d7da;
+    border: 1px solid #dc3545;
+    color: #721c24;
 }
 
 .case-file-body {
-    background: radial-gradient(circle at top, rgba(0, 60, 40, 0.25), transparent 55%),
-                radial-gradient(circle at bottom, rgba(0, 0, 40, 0.25), transparent 55%),
-                var(--bg-panel);
-    padding: 16px;
+    padding: 24px 28px;
 }
 
 .case-file-section {
-    margin-bottom: 18px;
+    margin-bottom: 24px;
 }
 
 .case-file-section-title {
-    font-family: var(--font-retro-mono);
+    font-family: 'Courier New', monospace;
     font-size: 12px;
-    letter-spacing: 2px;
+    letter-spacing: 3px;
     text-transform: uppercase;
-    color: var(--terminal-green-accent);
-    border-bottom: 1px solid var(--border-dark);
+    color: #5a4a3a;
+    border-bottom: 1px solid #a89070;
     padding-bottom: 6px;
-    margin-bottom: 10px;
+    margin-bottom: 14px;
+    font-weight: 700;
 }
 
 .case-file-victim-grid {
     display: grid;
-    grid-template-columns: minmax(80px, 120px) 1fr;
-    gap: 4px 10px;
-    font-size: 13px;
+    grid-template-columns: 140px 1fr;
+    gap: 8px 16px;
+    font-size: 14px;
+    background: rgba(255,255,255,0.4);
+    padding: 16px;
+    border: 1px solid #c4b49a;
+    border-radius: 2px;
 }
 
 .case-file-victim-label {
-    font-family: var(--font-retro-mono);
-    color: var(--text-secondary);
+    font-family: 'Courier New', monospace;
+    color: #6b5a4a;
     text-transform: uppercase;
     letter-spacing: 1px;
     font-size: 11px;
+    font-weight: 600;
+    padding-top: 2px;
 }
 
 .case-file-victim-value {
-    color: var(--text-primary);
+    color: #2d2d2d;
+    line-height: 1.5;
 }
 
 .case-file-table {
     width: 100%;
     border-collapse: collapse;
-    font-size: 13px;
+    font-size: 14px;
+    background: rgba(255,255,255,0.35);
+    border: 1px solid #c4b49a;
 }
 
 .case-file-table th {
     text-align: left;
-    padding: 8px 10px;
-    font-family: var(--font-retro-mono);
-    font-size: 11px;
-    letter-spacing: 1px;
+    padding: 10px 14px;
+    font-family: 'Courier New', monospace;
+    font-size: 10px;
+    letter-spacing: 2px;
     text-transform: uppercase;
-    color: var(--text-secondary);
-    border-bottom: 1px solid var(--border-dark);
+    color: #5a4a3a;
+    background: rgba(139,115,85,0.15);
+    border-bottom: 1px solid #a89070;
+    font-weight: 700;
 }
 
 .case-file-table td {
-    padding: 8px 10px;
-    border-bottom: 1px solid rgba(0, 80, 80, 0.5);
+    padding: 12px 14px;
+    border-bottom: 1px solid #d4c4a8;
+    vertical-align: top;
+}
+
+.case-file-table tr:last-child td {
+    border-bottom: none;
+}
+
+.case-file-table tr:hover {
+    background: rgba(139,115,85,0.08);
 }
 
 .case-file-cell-name {
     font-weight: 600;
-    color: var(--text-primary);
+    color: #2d2d2d;
 }
 
 .case-file-cell-role {
-    color: var(--text-secondary);
+    color: #5a5a5a;
+    font-style: italic;
 }
 
 .case-file-cell-status {
     font-size: 12px;
+    white-space: nowrap;
 }
 
 .case-file-cell-empty {
     text-align: center;
-    padding: 16px 8px;
+    padding: 24px 14px;
     font-style: italic;
-    color: var(--text-secondary);
+    color: #7a6a5a;
 }
 
 .case-file-footer {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-top: 12px;
-    padding-top: 10px;
-    border-top: 1px solid var(--border-dark);
+    margin-top: 16px;
+    padding: 16px 0 8px;
+    border-top: 1px dashed #a89070;
     font-size: 12px;
 }
 
 .case-file-stamp {
     display: inline-block;
-    padding: 4px 10px;
-    border: 1px solid var(--accent-red);
-    color: var(--accent-red);
-    font-family: var(--font-retro-mono);
-    letter-spacing: 2px;
+    padding: 6px 14px;
+    border: 3px solid #c41e3a;
+    color: #c41e3a;
+    font-family: 'Courier New', monospace;
+    letter-spacing: 3px;
     text-transform: uppercase;
-    transform: rotate(-3deg);
+    font-weight: 700;
+    font-size: 11px;
+    transform: rotate(-4deg);
+    opacity: 0.85;
 }
 
 .case-file-footer-right {
     text-align: right;
-    color: var(--text-secondary);
+    color: #6b5a4a;
+    font-family: 'Courier New', monospace;
+    font-size: 10px;
 }
 
 .case-file-empty {
     text-align: center;
-    padding: 32px 16px;
-    color: var(--terminal-green-muted);
-    font-size: 14px;
+    padding: 48px 24px;
+    color: #7a6a5a;
+    font-size: 15px;
 }
 
 .case-file-empty-icon {
-    font-size: 32px;
-    margin-bottom: 8px;
+    font-size: 40px;
+    margin-bottom: 12px;
+    opacity: 0.7;
 }
 
 .case-file-empty-text {
-    max-width: 360px;
+    max-width: 320px;
     margin: 0 auto;
+    line-height: 1.5;
 }
 """

@@ -65,10 +65,10 @@ def create_ui_components() -> dict:
                             elem_classes="transcript-panel",
                         )
 
-                    # Suspects list
+                    # Suspects list - expanded by default
                     with gr.Accordion(
                         "🎭 SUSPECTS",
-                        open=False,
+                        open=True,
                         elem_classes="side-panel suspects-panel",
                     ):
                         suspects_list_html = gr.HTML(
@@ -129,11 +129,11 @@ def create_ui_components() -> dict:
                             elem_classes="audio-player",
                         )
                         
-                    # Input bar - sticky bottom record button
+                    # Input bar - sticky bottom record button (always visible)
                     with gr.Column(
-                        elem_classes="input-bar", 
+                        elem_classes="input-bar",
                         elem_id="sticky-record-bar",
-                        visible=False
+                        visible=True,
                     ) as input_row:
                         # Voice input - minimal, just the mic button
                         voice_input = gr.Audio(
@@ -180,14 +180,14 @@ def create_ui_components() -> dict:
                                     value="Random",
                                     interactive=True,
                                 )
-                        
-                        # Buttons row
-                        with gr.Row(elem_classes="wizard-buttons"):
-                            start_btn = gr.Button(
-                                "🚀 START MYSTERY",
-                                elem_classes="start-button wizard-primary-btn",
-                                size="lg",
-                            )
+                            
+                            # Start button inside the config panel
+                            with gr.Row(elem_classes="wizard-buttons"):
+                                start_btn = gr.Button(
+                                    "🚀 START MYSTERY",
+                                    elem_classes="start-button wizard-primary-btn",
+                                    size="lg",
+                                )
                     
                     # Tab group with accordion content (always visible)
                     with gr.Tabs(elem_classes="info-tabs") as info_tabs:
@@ -252,14 +252,6 @@ def create_ui_components() -> dict:
                                     </div>
                                 </div>'''
                             )
-                        
-                        # Case Board tab - Visual conspiracy board
-                        with gr.Tab("📋 CASE BOARD"):
-                            case_board_plot = gr.Plot(
-                                value=None,
-                                label="Case Board",
-                                elem_classes="case-board-plot",
-                            )
 
                 # === RIGHT: SIDE PANEL ===
                 with gr.Column(
@@ -284,6 +276,17 @@ def create_ui_components() -> dict:
                         clues_html = gr.HTML("<em>No clues yet...</em>")
 
 
+        # ----- DASHBOARD TAB -----
+        with gr.Tab("📊 Dashboard", elem_classes="dashboard-tab"):
+            with gr.Column(elem_classes="dashboard-column"):
+                dashboard_html_main = gr.HTML(
+                    '''<div class="dashboard-empty">
+                        <div class="dashboard-icon">📊</div>
+                        <div>Start a mystery to track your investigation.</div>
+                    </div>''',
+                    elem_classes="dashboard-main",
+                )
+
         # ----- CASE FILE TAB -----
         with gr.Tab("📋 Case File", elem_classes="case-file-tab"):
             with gr.Column(elem_classes="case-file-column"):
@@ -300,20 +303,6 @@ def create_ui_components() -> dict:
                     elem_classes="case-file-main",
                 )
 
-        # ----- CASE BOARD TAB -----
-        with gr.Tab("📋 Case Board", elem_classes="case-board-tab"):
-            with gr.Column(elem_classes="case-board-column"):
-                gr.Markdown("### 🔍 Investigation Board")
-                gr.Markdown(
-                    "Visual conspiracy board showing suspects, clues, and connections.\n"
-                    "**Hover over icons for details. Connections reveal as you investigate.**"
-                )
-                case_board_plot_main = gr.Plot(
-                    value=None,
-                    label="Case Board",
-                    elem_classes="case-board-plot-main",
-                )
-        
         # ----- TIMELINE TAB -----
         with gr.Tab("🕐 Timeline", elem_classes="timeline-tab"):
             with gr.Column(elem_classes="timeline-column"):
@@ -345,7 +334,7 @@ def create_ui_components() -> dict:
                 with gr.Group(elem_classes="api-keys-group"):
                     with gr.Row():
                         openai_key_input = gr.Textbox(
-                            label="OpenAI API Key",
+                            label="OpenAI API Key (required)",
                             placeholder="sk-...",
                             type="password",
                             scale=3,
@@ -357,12 +346,24 @@ def create_ui_components() -> dict:
                     
                     with gr.Row():
                         elevenlabs_key_input = gr.Textbox(
-                            label="ElevenLabs API Key (optional - for voice)",
+                            label="ElevenLabs API Key (required)",
                             placeholder="Your ElevenLabs key...",
                             type="password",
                             scale=3,
                         )
                         elevenlabs_key_status = gr.HTML(
+                            '<span class="key-status">❓ Not set</span>',
+                            elem_classes="key-status-container",
+                        )
+                    
+                    with gr.Row():
+                        huggingface_key_input = gr.Textbox(
+                            label="HuggingFace Token (required)",
+                            placeholder="hf_...",
+                            type="password",
+                            scale=3,
+                        )
+                        huggingface_key_status = gr.HTML(
                             '<span class="key-status">❓ Not set</span>',
                             elem_classes="key-status-container",
                         )
@@ -381,51 +382,10 @@ def create_ui_components() -> dict:
                 gr.Markdown(
                     "### ℹ️ About API Keys\n\n"
                     "- **OpenAI** (required): Powers the game master AI and mystery generation\n"
-                    "- **ElevenLabs** (optional): Enables voice acting for characters\n\n"
-                    "Without ElevenLabs, the game runs in 'silent film' mode with text only."
+                    "- **ElevenLabs** (required): Voice acting for characters\n"
+                    "- **HuggingFace** (required): Portrait and scene art generation\n\n"
+                    "All three keys are required to play the game."
                 )
-
-        # ----- DEBUG TAB -----
-        with gr.Tab("Debug"):
-            with gr.Column(elem_classes="settings-column"):
-                gr.Markdown("### 🔍 Reveal Status")
-                gr.Markdown(
-                    "Shows current emotional state of all suspects and what's needed for location/secret reveals.\n"
-                    "**Use this for targeted testing of reveal mechanics.**"
-                )
-                reveal_status_textbox = gr.Textbox(
-                    label="Suspect States & Reveal Thresholds",
-                    lines=25,
-                    value="Start a game, then click Refresh to see reveal criteria.",
-                    interactive=False,
-                    elem_classes="reveal-status",
-                )
-                refresh_reveal_btn = gr.Button("🔄 Refresh Reveal Status")
-                
-                gr.Markdown("---")
-                gr.Markdown("### ⏱️ Performance Tracker")
-                perf_summary_textbox = gr.Textbox(
-                    label="Timing & Parallelization",
-                    lines=15,
-                    value="Performance data will appear here after starting a mystery.",
-                    interactive=False,
-                    elem_classes="perf-summary",
-                )
-                refresh_perf_btn = gr.Button("🔄 Refresh Performance Data")
-                
-                gr.Markdown("---")
-                gr.Markdown(
-                    "### 📋 Debug Logs\n\n"
-                    "Server logs captured during gameplay.\n"
-                    "Copy/paste relevant lines when debugging."
-                )
-                debug_logs_textbox = gr.Textbox(
-                    label="Recent logs",
-                    lines=15,
-                    value="No logs captured yet. Interact with the game to generate logs.",
-                    interactive=False,
-                )
-                refresh_logs_btn = gr.Button("🔄 Refresh Logs")
 
     # Hidden timer for checking mystery completion (inactive by default)
     mystery_check_timer = gr.Timer(value=1.0, active=False)
@@ -453,14 +413,7 @@ def create_ui_components() -> dict:
         "timeline_html_tab": timeline_html_tab,
         "timeline_html_main": timeline_html_main,  # Main tab version
         "case_file_html_main": case_file_html_main,  # Case File (main tab)
-        "case_board_plot": case_board_plot,  # Visual conspiracy board (info tabs/mobile)
-        "case_board_plot_main": case_board_plot_main,  # Visual conspiracy board (main tab)
-        "reveal_status_textbox": reveal_status_textbox,
-        "refresh_reveal_btn": refresh_reveal_btn,
-        "debug_logs_textbox": debug_logs_textbox,
-        "refresh_logs_btn": refresh_logs_btn,
-        "perf_summary_textbox": perf_summary_textbox,
-        "refresh_perf_btn": refresh_perf_btn,
+        "dashboard_html_main": dashboard_html_main,  # Dashboard (main tab)
         "mystery_check_timer": mystery_check_timer,
         "voice_input": voice_input,
         # Setup wizard components
@@ -475,6 +428,8 @@ def create_ui_components() -> dict:
         "openai_key_status": openai_key_status,
         "elevenlabs_key_input": elevenlabs_key_input,
         "elevenlabs_key_status": elevenlabs_key_status,
+        "huggingface_key_input": huggingface_key_input,
+        "huggingface_key_status": huggingface_key_status,
         "save_keys_btn": save_keys_btn,
         "keys_status_html": keys_status_html,
         # Tabs for select events (lazy portrait loading)

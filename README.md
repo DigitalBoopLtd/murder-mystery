@@ -1,338 +1,376 @@
-# Murder Mystery Game
+---
+title: Murder Mystery Detective Game
+emoji: 🔍
+colorFrom: purple
+colorTo: red
+sdk: gradio
+sdk_version: "5.0"
+app_file: app.py
+pinned: false
+tags:
+  - mcp-in-action-track-creative
+  - agents
+  - game
+  - elevenlabs
+  - tts
+  - mcp
+---
 
-Voice‑first murder mystery game built with Gradio, LangChain, and LangGraph. Players investigate crimes, interrogate suspects, and solve fully generated mysteries in a 90s point‑and‑click adventure style, with optional AI voices and retro portraits/scenes.
+# 🔍 Murder Mystery Detective Game
 
-## Features
+A voice-first murder mystery game powered by **Model Context Protocol (MCP)**. Investigate crimes, interrogate AI suspects, and solve procedurally generated mysteries in a 90s point-and-click adventure style.
 
-- **Voice‑first gameplay**: Talk to the Game Master using your microphone; responses are spoken back with optional subtitles.
-- **Dynamic mystery generation**: Each game builds a fresh victim, suspects, locations, clues, and motives.
-- **Suspect interrogation tools**: The Game Master can call tools (e.g. interrogate a suspect) that respond in‑character.
-- **On‑demand 90s adventure art**: Optional portraits and scene art generated via HuggingFace in a vintage point‑and‑click style.
-- **Per‑session settings**: Choose era, setting, difficulty, and narrative tone before starting a new mystery.
-- **Stateful gameplay**: Game state, searched locations, suspects talked to, and clues are tracked across the session.
+---
 
-## Setup
+## 🔌 What is the MCP Server?
 
-You can use the helper script or do things manually.
+This project is built around a **Murder Mystery MCP Server** — a standalone game engine that exposes the entire murder mystery experience as composable tools via the [Model Context Protocol](https://modelcontextprotocol.io/).
 
-1. **(Recommended) Run the setup script**:
+### Why MCP?
+
+**MCP (Model Context Protocol)** is an open standard that lets AI agents use tools and access resources in a consistent way. By building the game as an MCP server:
+
+1. **Play anywhere** — The same game works in Claude Desktop, Cursor, custom agents, or this Gradio UI
+2. **Agent-agnostic** — Any LLM that supports MCP can be the "detective" playing the game
+3. **Composable** — Tools like `interrogate_suspect` and `search_location` can be mixed with other MCP servers
+4. **Separation of concerns** — The game logic is completely decoupled from the UI
+
+### What the MCP Server Does
+
+The MCP server (`murder-mystery-mcp/`) handles **all game logic**:
+
+| Responsibility | How It Works |
+|----------------|--------------|
+| **Mystery Generation** | Creates unique victims, suspects, motives, and an encounter graph |
+| **Suspect Interrogation** | Manages emotional states, conversation memory, and in-character responses |
+| **Clue Discovery** | Tracks which locations have been searched and what was found |
+| **RAG Memory** | Semantic search across all conversations to find contradictions |
+| **Accusation Validation** | Checks if the player correctly identified the murderer |
+| **Image Generation** | Creates 1990s adventure game-style portraits and scenes |
+
+### How It's Used
+
+**Option 1: Gradio UI (this project)**
+- The UI calls MCP tools to start games, interrogate suspects, etc.
+- Voice input is transcribed and sent as questions
+- Responses are spoken back with ElevenLabs TTS
+
+**Option 2: Claude Desktop**
+- Add the MCP server to your Claude Desktop config
+- Chat naturally: *"Start a mystery game"*, *"Talk to the butler"*
+- Claude uses the MCP tools to play the game
+
+**Option 3: Any MCP Client**
+- Build your own client in any language
+- Connect via stdio and call the tools programmatically
+
+---
+
+## 🎮 Demo
+
+[Link to your video]
+
+## 🐦 Social Media
+
+[Link to your X/LinkedIn post]
+
+## 👥 Team
+
+- @your-hf-username
+
+---
+
+## ✨ Features
+
+- **Voice-first gameplay** — Talk to the Game Master using your microphone; responses are spoken back with ElevenLabs TTS
+- **Procedural mystery generation** — Each game creates a unique victim, suspects, locations, clues, and an encounter graph
+- **MCP-powered game engine** — All game logic exposed as composable MCP tools that any agent can use
+- **Suspect interrogation** — Suspects have personalities, emotional states (trust/nervousness), and memory of past conversations
+- **RAG memory search** — Semantic search across all conversations and clues to find contradictions
+- **1990s adventure game art** — Portraits and scenes generated via HuggingFace in vintage LucasArts style
+- **Timeline & case file** — Visual investigation timeline and case file that updates as you discover clues
+
+---
+
+## 🏗️ Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                        MURDER MYSTERY SYSTEM                         │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                      │
+│  ┌─────────────────────┐         ┌─────────────────────────────┐   │
+│  │   Gradio UI         │         │  Claude Desktop / Cursor    │   │
+│  │   (this project)    │         │  or any MCP-compatible      │   │
+│  │                     │         │  agent                      │   │
+│  └──────────┬──────────┘         └──────────────┬──────────────┘   │
+│             │                                   │                   │
+│             │  MCP Protocol                     │  MCP Protocol     │
+│             │  (tools + resources)              │  (tools + resources)
+│             ▼                                   ▼                   │
+│  ┌──────────────────────────────────────────────────────────────┐  │
+│  │            MURDER MYSTERY MCP SERVER                          │  │
+│  │            (murder-mystery-mcp/)                              │  │
+│  ├──────────────────────────────────────────────────────────────┤  │
+│  │                                                               │  │
+│  │  TOOLS:                         RESOURCES:                    │  │
+│  │  • start_game                   • mystery://{id}/state        │  │
+│  │  • interrogate_suspect          • mystery://{id}/suspects     │  │
+│  │  • search_location              • mystery://{id}/clues        │  │
+│  │  • make_accusation                                            │  │
+│  │  • search_memory (RAG)                                        │  │
+│  │  • find_contradictions                                        │  │
+│  │  • get_timeline                                               │  │
+│  │  • generate_portrait                                          │  │
+│  │  • generate_scene_image                                       │  │
+│  │  • generate_title_card                                        │  │
+│  │                                                               │  │
+│  │  INTERNALS:                                                   │  │
+│  │  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐             │  │
+│  │  │ Mystery     │ │ RAG Memory  │ │ Emotional   │             │  │
+│  │  │ Oracle      │ │ (per-suspect│ │ Tracker     │             │  │
+│  │  │ (truth)     │ │  partitions)│ │             │             │  │
+│  │  └─────────────┘ └─────────────┘ └─────────────┘             │  │
+│  │                                                               │  │
+│  └──────────────────────────────────────────────────────────────┘  │
+│                                                                      │
+│  ┌──────────────────────────────────────────────────────────────┐  │
+│  │  IMAGE GENERATOR MCP (mcp_servers/image_generator.py)         │  │
+│  │  • generate_character_portrait                                │  │
+│  │  • generate_scene                                             │  │
+│  │  • generate_title_card                                        │  │
+│  └──────────────────────────────────────────────────────────────┘  │
+│                                                                      │
+│  ┌──────────────────────────────────────────────────────────────┐  │
+│  │  ELEVENLABS MCP (external: mcp-elevenlabs)                    │  │
+│  │  • get_voices                                                 │  │
+│  │  • text_to_speech                                             │  │
+│  └──────────────────────────────────────────────────────────────┘  │
+│                                                                      │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+### Key Design Principles
+
+1. **MCP-First** — The game engine is an MCP server. The UI is just one possible client.
+2. **Oracle Pattern** — The "truth" of the mystery (who is guilty, secrets) lives in a `MysteryOracle` that the player-facing agent cannot directly access.
+3. **Partitioned RAG** — Each suspect has their own vector store partition to prevent information bleeding.
+4. **Emotional State** — Suspects track trust and nervousness, affecting their responses.
+
+---
+
+## 🚀 Quick Start
+
+### Prerequisites
+
+- Python 3.10+
+- API Keys (all required):
+  - **OpenAI** — Mystery generation and LLM responses
+  - **ElevenLabs** — Voice synthesis for characters
+  - **HuggingFace** — Portrait and scene art generation
+
+### Installation
+
+```bash
+# Clone both repositories
+git clone https://github.com/your-username/murder-mystery.git
+git clone https://github.com/your-username/murder-mystery-mcp.git
+
+# Set up the MCP server first
+cd murder-mystery-mcp
+python -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+cp env.example .env
+# Edit .env with your OPENAI_API_KEY
+
+# Set up the UI
+cd ../murder-mystery
+python -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+cp env.example .env
+# Edit .env with all API keys
+```
+
+Or use the setup script:
 
 ```bash
 ./setup.sh
 ```
 
-This will:
-- Check for Python 3.8+  
-- Create a `venv` virtual environment (if needed)  
-- Install dependencies from `requirements.txt`  
-- Create a `.env` file from `env.example` if you don't already have one  
+### Running
 
-2. **(Manual) Install dependencies**:
+**Option 1: Gradio UI (recommended for playing)**
 
 ```bash
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-```
-
-3. **Configure environment variables**:
-
-- Copy `env.example` to `.env`:
-
-```bash
-cp env.example .env
-```
-
-- Edit `.env` and set at least:
-
-```bash
-OPENAI_API_KEY=your_openai_api_key_here
-```
-
-- Optionally enable extra features:
-
-```bash
-ELEVENLABS_API_KEY=your_elevenlabs_api_key_here  # Voice acting + TTS
-HF_TOKEN=your_huggingface_token_here             # Portraits and scene art
-
-# Advanced (optional) model overrides
-SUSPECT_RESOLVER_MODEL=gpt-4o-mini
-LOCATION_RESOLVER_MODEL=gpt-4o-mini
-```
-
-## Running the application
-
-```bash
+cd murder-mystery
 source venv/bin/activate
 python app.py
+# Open http://localhost:7860
 ```
 
-Then open your browser to `http://localhost:7860`.
+**Option 2: Claude Desktop (play via chat)**
 
-## How to Play
-
-1. **Start a new game**: Click the **“START NEW MYSTERY”** button in the UI.
-2. **Listen to the intro**: The Game Master will introduce the case via voice (and subtitles if available).
-3. **Investigate by speaking**: Use the microphone input and ask things like:
-   - “Describe the crime scene”
-   - “Tell me about the suspects”
-   - “Search the study for clues”
-   - “Let me talk to the heiress again”
-4. **Interrogate suspects**: Ask to speak with a specific suspect; they will answer in character and may have their own voice.
-5. **Make accusations**: When you’re ready, accuse someone of the murder. You win by correctly identifying the murderer with evidence; you lose after too many wrong accusations.
-
-## Project Structure
-
-- `app.py`: Voice‑first Gradio application and main entry point.
-- `app/`: Application wiring; exposes `create_app` for embedding the UI elsewhere.
-- `mystery_config.py`: Options, validation, and helper functions for era/setting/difficulty/tone.
-- `game/`:
-  - `actions.py`, `handlers.py`, `startup.py`: Core game loop, player actions, and startup wiring.
-  - `mystery_generator.py`, `parser.py`, `models.py`: Mystery generation, parsing, and structured data models.
-  - `state.py`, `state_manager.py`: Game state and per‑session management.
-  - `tools.py`: Tools available to the Game Master (e.g. interrogate suspect).
-- `services/`:
-  - `agent.py`: LangGraph/LangChain agent that runs the Game Master.
-  - `tts_service.py`, `voice_service.py`: ElevenLabs/OpenAI TTS and voice‑matching helpers.
-  - `image_service.py`: HuggingFace‑based portrait and scene generation.
-- `ui/`:
-  - `styles.py`: Retro 90s adventure‑style CSS.
-  - `formatters.py`: HTML formatting for victims, suspects, locations, and clues.
-- `config/settings.py`: Centralized environment/config dataclass for deployment‑level settings.
-
-## Architecture
-
-The application uses:
-- **LangGraph**: To orchestrate the Game Master agent, tools, and conversational memory.
-- **LangChain**: For OpenAI model integration and structured outputs.
-- **Gradio**: For the web UI, voice input, and audio/subtitle playback.
-- **Model Context Protocol (MCP)**: For exposing game state and services as composable tools.
-- **Pydantic / dataclasses**: For structured models and configuration.
-
-High‑level flow:
-1. Player starts a new game, which generates a fresh mystery and optional art.
-2. Player actions (spoken input) are transcribed with Whisper via OpenAI.
-3. The LangGraph agent and game handlers decide what happens next (search, interrogate, reveal clues, etc.).
-4. A response is generated, voiced with ElevenLabs (if configured), and the UI is updated with state panels and art.
-
----
-
-## 🔌 MCP Architecture (Model Context Protocol)
-
-This project demonstrates **MCP in Action** through MCP servers that expose game functionality as composable tools and resources.
-
-### MCP Servers
-
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                     MURDER MYSTERY MCP ECOSYSTEM                     │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                      │
-│  ┌─────────────────────────────────────────────────────────────┐   │
-│  │  Image Generator MCP (mcp_servers/image_generator.py)       │   │
-│  ├─────────────────────────────────────────────────────────────┤   │
-│  │                                                             │   │
-│  │  RESOURCES:                    TOOLS:                       │   │
-│  │  • images://cache              • generate_character_portrait│   │
-│  │  • images://cache/{key}        • generate_scene             │   │
-│  │  • images://styles             • generate_title_card        │   │
-│  │  • images://stats              • list_cached_images         │   │
-│  │                                • get_image_by_key           │   │
-│  │                                                             │   │
-│  │  Purpose: 1990s adventure game art generation with caching  │   │
-│  └─────────────────────────────────────────────────────────────┘   │
-│                                                                      │
-│  ┌─────────────────────────────────────────────────────────────┐   │
-│  │  ElevenLabs MCP (external: mcp-elevenlabs)                  │   │
-│  ├─────────────────────────────────────────────────────────────┤   │
-│  │  TOOLS:                                                     │   │
-│  │  • get_voices - Fetch available voice catalog               │   │
-│  │  • text_to_speech - Generate speech from text               │   │
-│  │                                                             │   │
-│  │  Purpose: Voice synthesis for characters and Game Master    │   │
-│  └─────────────────────────────────────────────────────────────┘   │
-│                                                                      │
-│  ┌─────────────────────────────────────────────────────────────┐   │
-│  │  Image Agent (services/image_agent.py)                      │   │
-│  ├─────────────────────────────────────────────────────────────┤   │
-│  │  Demonstrates MCP tool composition:                         │   │
-│  │  • Connects to Image MCP server                             │   │
-│  │  • Calls tools to generate images                           │   │
-│  │  • Reads resources to check cache status                    │   │
-│  └─────────────────────────────────────────────────────────────┘   │
-│                                                                      │
-└─────────────────────────────────────────────────────────────────────┘
-```
-
-### Image Generator MCP Server (`mcp_servers/image_generator.py`)
-
-Generates 1990s point-and-click adventure game style artwork via HuggingFace.
-
-**Resources (MCP Resources):**
-
-| URI | Description |
-|-----|-------------|
-| `images://cache` | List all cached images with metadata |
-| `images://cache/{key}` | Get details of a specific cached image |
-| `images://styles` | Available art styles and presets |
-| `images://stats` | Cache statistics (total images, size, etc.) |
-
-**Tools:**
-
-| Tool | Description |
-|------|-------------|
-| `generate_character_portrait` | Create suspect/victim portraits |
-| `generate_scene` | Generate location backgrounds |
-| `generate_title_card` | Create atmospheric opening scenes |
-| `list_cached_images` | Query the image cache |
-| `get_image_by_key` | Retrieve a specific cached image |
-
-**Run standalone:**
-```bash
-python -m mcp_servers.image_generator
-```
-
-### ElevenLabs MCP Client (`services/mcp_elevenlabs.py`)
-
-Connects to the official ElevenLabs MCP server for voice synthesis.
-
-**Usage:**
-```python
-from services.mcp_elevenlabs import fetch_voices_via_mcp
-
-voices, status = await fetch_voices_via_mcp()
-```
-
-### Image Agent (`services/image_agent.py`)
-
-Demonstrates calling the Image MCP server from an agent:
-
-```python
-from services.image_agent import ImageAgent
-
-agent = ImageAgent()
-
-# Generate a portrait via MCP
-path = await agent.generate_portrait("Inspector Holmes", "Detective", "Analytical, observant")
-
-# Check cache stats via MCP Resource
-stats = await agent.get_cache_stats()
-```
-
-### Claude Desktop Configuration
-
-To use the Image MCP server with Claude Desktop:
+Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 
 ```json
 {
   "mcpServers": {
-    "murder-mystery-images": {
+    "murder-mystery": {
       "command": "python",
-      "args": ["-m", "mcp_servers.image_generator"],
-      "cwd": "/path/to/murder-mystery",
+      "args": ["/path/to/murder-mystery-mcp/server.py"],
       "env": {
-        "OPENAI_API_KEY": "your-key",
-        "HF_TOKEN": "your-token"
+        "OPENAI_API_KEY": "your-key-here",
+        "HF_TOKEN": "your-token-here"
       }
     }
   }
 }
 ```
 
-### MCP Integration Points
-
-The main application integrates MCP at several points:
-
-1. **Voice Fetching**: Uses ElevenLabs MCP to get available voices for character casting
-2. **Image Generation**: Parallel image requests via `ImageAgent` (`services/image_agent.py`)
-3. **Image Resources**: Cache status and generated images queryable via MCP Resources
-
-### Demo: MCP Tool Composition
-
-Run the Image Agent demo:
-```bash
-python -m services.image_agent
-```
-
-This demonstrates:
-- Connecting to the Image MCP server
-- Reading resources (`images://cache`, `images://styles`, `images://stats`)
-- Calling tools to generate images
-- Composing multiple MCP operations
+Then in Claude Desktop, say: *"Start a new murder mystery game"*
 
 ---
 
-## 🤖 Agentic Architecture
+## 🎮 How to Play
 
-### Game Master Agent (`services/agent.py`)
+1. **Enter API Keys** — On first load, go to the 🔑 Settings tab and enter your API keys (or set them in `.env`)
+2. **Start a new game** — Click **"START NEW MYSTERY"** to generate a fresh case
+3. **Listen to the intro** — The Game Master introduces the victim and suspects
+4. **Investigate by speaking** — Use the microphone to ask questions:
+   - *"Tell me about the suspects"*
+   - *"Let me talk to the butler"*
+   - *"Search the library for clues"*
+   - *"What did Marcus say about his alibi?"*
+5. **Find contradictions** — Use the RAG memory to catch suspects in lies
+6. **Make an accusation** — When confident, accuse the murderer with evidence
 
-The Game Master is a **LangGraph agent** with tools, not just an LLM. It:
-- Decides when to call tools (interrogate suspect, search location, make accusation)
-- Maintains conversation state via LangGraph checkpoints
-- Uses tools to access game information securely
+### Win/Lose Conditions
 
-**Tools Available:**
+- **Win**: Correctly identify the murderer with supporting evidence
+- **Lose**: 3 wrong accusations and you're removed from the case
 
-| Tool | Purpose |
-|------|---------|
-| `interrogate_suspect` | Talk to a suspect in-character |
-| `describe_scene_for_image` | Generate scene descriptions for image generation |
-| `make_accusation` | Formally accuse a suspect of murder |
-| `search_past_statements` | RAG search over conversation history |
+---
+
+## 🔧 MCP Tools Reference
+
+### Gameplay Tools
+
+| Tool | Description |
+|------|-------------|
+| `start_game` | Start a new murder mystery (optional: era, tone) |
+| `get_game_state` | Get suspects, clues, locations, progress |
+| `interrogate_suspect` | Ask a suspect a question |
+| `search_location` | Search a location for clues |
+| `make_accusation` | Formally accuse a suspect |
+| `search_memory` | RAG search past statements |
 | `find_contradictions` | Detect inconsistencies in statements |
-| `get_investigation_hint` | Get contextual hints for the player |
+| `get_timeline` | Get investigation timeline |
 
-### Investigation Assistant (`services/investigation_agent.py`)
+### Image Generation Tools
 
-A **separate assistant agent** demonstrating MCP composition:
-- Analyzes case evidence and suggests next steps
-- Uses structured outputs (Pydantic models)
-- Non-blocking - doesn't affect gameplay latency
+| Tool | Description |
+|------|-------------|
+| `generate_scene_image` | Generate location artwork |
+| `generate_portrait` | Generate suspect portrait |
+| `generate_title_card` | Generate mystery title card |
 
-```python
-from services.investigation_agent import InvestigationAssistant
+### MCP Resources
 
-assistant = InvestigationAssistant()
-report = await assistant.analyze_case()
-suggestions = await assistant.suggest_next_steps()
-```
-
-### Structured Outputs (vs Regex Markers)
-
-The game uses **structured Pydantic outputs** for reliable parsing:
-
-```python
-# Old approach (fragile regex):
-# "[SEARCHED:library] You find a torn letter..."
-
-# New approach (structured output):
-from game.models import GameMasterResponse, GameAction
-
-response = GameMasterResponse(
-    narrative="You carefully search the library...",
-    action=GameAction(
-        action_type="search_location",
-        target="library",
-        clue_ids_revealed=["clue_torn_letter"]
-    ),
-    scene_brief=SceneBrief(
-        location="Victorian Library",
-        visual_description="Dusty shelves, scattered papers...",
-        camera_angle="medium shot"
-    )
-)
-```
-
-See `game/models.py` for structured output schemas and `game/structured_parser.py` for the parser.
+| URI Pattern | Description |
+|-------------|-------------|
+| `mystery://{session_id}/state` | Current game state (JSON) |
+| `mystery://{session_id}/suspects` | Suspect list with public info |
+| `mystery://{session_id}/clues` | Discovered clues |
 
 ---
 
-## Requirements
+## 📁 Project Structure
 
-- Python 3.8+
-- OpenAI API key (`OPENAI_API_KEY`)
-- Optional: ElevenLabs API key (`ELEVENLABS_API_KEY`) for voices
-- Optional: HuggingFace token (`HF_TOKEN`) for images
-- See `requirements.txt` for Python dependencies
+```
+murder-mystery/                    # Gradio UI (this repo)
+├── app.py                         # Main entry point
+├── app/
+│   ├── main.py                    # App wiring
+│   ├── ui_components.py           # Gradio components
+│   └── event_handlers.py          # UI event handlers
+├── services/
+│   ├── mcp_client.py              # MCP client for game server
+│   ├── game_router.py             # Routes calls to MCP
+│   ├── tts_service.py             # ElevenLabs TTS
+│   ├── voice_service.py           # Voice matching
+│   └── image_agent.py             # Image MCP client
+├── ui/
+│   ├── formatters.py              # HTML formatting
+│   └── styles/                    # CSS styling
+├── mcp_servers/
+│   └── image_generator.py         # Standalone image MCP server
+└── config/
+    └── settings.py                # Environment config
 
+murder-mystery-mcp/                # Game Engine MCP Server
+├── server.py                      # MCP server with tools
+├── game/
+│   ├── state.py                   # Game session state
+│   ├── memory.py                  # Partitioned RAG
+│   ├── emotional_tracker.py       # Trust/nervousness
+│   └── contradiction_detector.py  # LLM contradiction detection
+├── image_generator.py             # Image generation
+└── requirements.txt
+```
 
+---
+
+## 🔐 API Keys
+
+All three keys are **required** to play:
+
+| Key | Environment Variable | Purpose |
+|-----|---------------------|---------|
+| OpenAI | `OPENAI_API_KEY` | Mystery generation, LLM responses |
+| ElevenLabs | `ELEVENLABS_API_KEY` | Voice synthesis for characters |
+| HuggingFace | `HF_TOKEN` | Portrait and scene art generation |
+
+Set in `.env` file or enter via the 🔑 Settings tab in the UI.
+
+---
+
+## 🎨 Customization
+
+### Mystery Settings
+
+When starting a game, you can customize:
+
+- **Era**: Victorian, 1920s, Cyberpunk, Modern, etc.
+- **Tone**: Noir, Cozy, Gothic Horror, Comedy, etc.
+- **Difficulty**: Easy, Normal, Hard (affects RAG hints)
+
+### Art Style
+
+All generated images use a **1990s LucasArts point-and-click adventure game** aesthetic (think *The Secret of Monkey Island*, *Gabriel Knight*).
+
+---
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Submit a pull request
+
+---
+
+## 📜 License
+
+MIT
+
+---
+
+## 🙏 Acknowledgments
+
+- **LangChain/LangGraph** — Agent orchestration
+- **Gradio** — Web UI framework
+- **ElevenLabs** — Voice synthesis
+- **HuggingFace** — Image generation
+- **MCP** — Model Context Protocol for tool composition
