@@ -661,6 +661,26 @@ CSS_GAME_COMPONENTS = """/* ========== BASE PANEL TITLE (fallback) ========== */
     animation: pulse 1.5s ease-in-out infinite;
 }
 
+/* Compact suspects list in desktop/tab view: small thumbnail + name/role only */
+.suspects-list .suspect-card-compact .suspect-card-portrait {
+    flex: 0 0 56px;
+    max-width: 56px;
+    aspect-ratio: 1 / 1;
+}
+
+.suspects-list .suspect-card-compact .suspect-card-info {
+    padding: 8px 10px;
+}
+
+.suspects-list .suspect-card-compact .suspect-card-name {
+    font-size: 14px;
+}
+
+.suspects-list .suspect-card-compact .suspect-card-role {
+    font-size: 12px;
+    margin-bottom: 4px;
+}
+
 @keyframes pulse {
     0%, 100% { opacity: 0.5; }
     50% { opacity: 1; }

@@ -711,27 +711,22 @@ def process_player_action(
         actions["accusation_has_evidence"] = tool_store.accusation.has_sufficient_evidence
         
         # Apply accusation result to game state
-        # Only count accusations that had sufficient evidence
-        if tool_store.accusation.has_sufficient_evidence:
-            if tool_store.accusation.is_correct:
-                state.won = True
-                state.game_over = True
-                logger.info("✅ CORRECT ACCUSATION with evidence! Player wins!")
-            else:
-                state.wrong_accusations += 1
-                logger.info(
-                    "❌ Wrong accusation: %s (attempt %d/3)",
-                    tool_store.accusation.suspect_name,
-                    state.wrong_accusations
-                )
-                if state.wrong_accusations >= 3:
-                    state.game_over = True
-                    logger.info("💀 3 wrong accusations - GAME OVER!")
+        # ANY formal accusation costs one of the three attempts unless it's the final, correct one.
+        if tool_store.accusation.is_correct and tool_store.accusation.has_sufficient_evidence:
+            state.won = True
+            state.game_over = True
+            logger.info("✅ CORRECT ACCUSATION with evidence! Player wins!")
         else:
+            state.wrong_accusations += 1
             logger.info(
-                "⚠️ Accusation rejected - insufficient evidence (%d clues found)",
-                tool_store.accusation.clues_found_count
+                "❌ Failed accusation (evidence=%s): %s (attempt %d/3)",
+                "sufficient" if tool_store.accusation.has_sufficient_evidence else "insufficient",
+                tool_store.accusation.suspect_name,
+                state.wrong_accusations,
             )
+            if state.wrong_accusations >= 3:
+                state.game_over = True
+                logger.info("💀 3 failed accusations - GAME OVER!")
     
     # Clean up any leftover markers from response (legacy support)
     clean_response = clean_response_markers(clean_response)

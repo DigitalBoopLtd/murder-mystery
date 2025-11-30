@@ -552,6 +552,30 @@ CSS_SIDE_PANELS = """/* ========== SIDE PANELS - BASE ========== */
     background: var(--terminal-green);
 }
 
+/* ========== TIMELINE MAIN TAB ========== */
+.timeline-tab .timeline-column {
+    padding: 20px;
+}
+
+.timeline-main {
+    min-height: 400px;
+    max-height: 70vh;
+    overflow-y: auto;
+    padding: 16px;
+    background: rgba(0, 20, 0, 0.3);
+    border: 1px solid var(--terminal-green-border-soft);
+    border-radius: 8px;
+}
+
+.timeline-main .timeline-entries {
+    padding: 0;
+}
+
+.timeline-main .timeline-entry {
+    padding: 12px 16px;
+    margin-bottom: 12px;
+}
+
 /* ========== VERTICAL TABS IN LEFT COLUMN ========== */
 .vertical-tabs-container {
     display: flex !important;
@@ -626,6 +650,286 @@ CSS_SIDE_PANELS = """/* ========== SIDE PANELS - BASE ========== */
 .vertical-tab-panel {
     width: 100% !important;
     height: 100% !important;
+}
+
+/* ========== INVESTIGATION TIMELINE ========== */
+.investigation-timeline {
+    position: relative;
+    z-index: 20;
+    padding: 12px;
+}
+
+.timeline-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--terminal-green-border-soft);
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.timeline-title {
+    font-family: var(--font-retro-mono);
+    font-size: 14px;
+    color: var(--terminal-green);
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    text-shadow: 0 0 8px var(--terminal-green);
+}
+
+.timeline-legend {
+    display: flex;
+    gap: 12px;
+    font-size: 10px;
+    color: var(--terminal-green-muted);
+}
+
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.legend-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+}
+
+.legend-dot.alibi {
+    background: var(--terminal-green);
+}
+
+.legend-dot.witness {
+    background: #ffcc00;
+}
+
+.legend-dot.clue {
+    background: #00ccff;
+}
+
+.legend-dot.contradiction {
+    background: #ff4444;
+    animation: contradiction-pulse 1s ease-in-out infinite;
+}
+
+.timeline-content {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.timeline-row {
+    display: flex;
+    gap: 12px;
+    padding: 8px 0;
+    border-bottom: 1px dashed var(--terminal-green-border-soft);
+}
+
+.timeline-time {
+    width: 70px;
+    min-width: 70px;
+    font-family: var(--font-retro-mono);
+    font-size: 12px;
+    color: var(--terminal-green);
+    text-shadow: 0 0 6px var(--terminal-green);
+    padding-top: 4px;
+}
+
+.timeline-events {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.timeline-event {
+    display: flex;
+    gap: 8px;
+    padding: 8px;
+    background: rgba(0, 20, 0, 0.4);
+    border-left: 3px solid var(--terminal-green);
+    border-radius: 0 4px 4px 0;
+}
+
+.timeline-event.alibi {
+    border-left-color: var(--terminal-green);
+}
+
+.timeline-event.witness {
+    border-left-color: #ffcc00;
+}
+
+.timeline-event.clue {
+    border-left-color: #00ccff;
+}
+
+.timeline-event.contradiction {
+    border-left-color: #ff4444;
+    background: rgba(255, 68, 68, 0.1);
+    animation: contradiction-glow 2s ease-in-out infinite;
+}
+
+@keyframes contradiction-glow {
+    0%, 100% { box-shadow: inset 0 0 10px rgba(255, 68, 68, 0.2); }
+    50% { box-shadow: inset 0 0 15px rgba(255, 68, 68, 0.4); }
+}
+
+.event-icon {
+    font-size: 16px;
+    line-height: 1;
+}
+
+.event-content {
+    flex: 1;
+    min-width: 0;
+}
+
+.event-suspect {
+    font-family: var(--font-retro-mono);
+    font-size: 11px;
+    color: var(--terminal-green);
+    margin-bottom: 2px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.verified-badge {
+    font-size: 10px;
+    color: #00ff00;
+    background: rgba(0, 255, 0, 0.2);
+    padding: 1px 4px;
+    border-radius: 2px;
+}
+
+.event-desc {
+    font-size: 12px;
+    color: var(--terminal-green);
+    line-height: 1.4;
+}
+
+.event-source {
+    font-size: 10px;
+    color: var(--terminal-green-muted);
+    margin-top: 4px;
+    font-style: italic;
+}
+
+.timeline-empty {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--terminal-green-muted);
+}
+
+.timeline-empty-icon {
+    font-size: 48px;
+    margin-bottom: 12px;
+    opacity: 0.5;
+}
+
+.timeline-empty-text {
+    font-family: var(--font-retro-mono);
+    font-size: 14px;
+    color: var(--terminal-green);
+    margin-bottom: 8px;
+}
+
+.timeline-empty-hint {
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.timeline-tip {
+    margin-top: 12px;
+    padding: 8px;
+    background: rgba(255, 204, 0, 0.1);
+    border: 1px solid rgba(255, 204, 0, 0.3);
+    font-size: 11px;
+    color: #ffcc00;
+    border-radius: 4px;
+}
+
+/* Scrollbar for timeline */
+.timeline-content::-webkit-scrollbar {
+    width: 6px;
+}
+
+.timeline-content::-webkit-scrollbar-track {
+    background: rgba(0, 20, 0, 0.3);
+}
+
+.timeline-content::-webkit-scrollbar-thumb {
+    background: var(--terminal-green-muted);
+}
+
+.timeline-content::-webkit-scrollbar-thumb:hover {
+    background: var(--terminal-green);
+}
+
+/* =========================================================
+   CASE BOARD - Visual conspiracy board
+   ========================================================= */
+
+.case-board-plot {
+    min-height: 400px;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+/* Main tab version - full height */
+.case-board-tab .case-board-column {
+    padding: 20px;
+}
+
+.case-board-plot-main {
+    min-height: 500px;
+    max-height: 80vh;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+/* Override Plotly modebar */
+.case-board-plot .modebar {
+    background: rgba(0, 0, 0, 0.7) !important;
+}
+
+.case-board-plot .modebar-btn {
+    color: var(--terminal-green) !important;
+}
+
+.case-board-plot .modebar-btn:hover {
+    color: #00ff00 !important;
+}
+
+/* Text fallback styling */
+.case-board-text {
+    padding: 20px;
+    font-family: var(--font-mono);
+    color: var(--terminal-green);
+}
+
+.case-board-text .board-title {
+    font-size: 16px;
+    font-weight: bold;
+    margin-bottom: 16px;
+    color: #00ff00;
+    text-transform: uppercase;
+}
+
+.case-board-text .board-section {
+    margin: 12px 0;
+    font-size: 13px;
+}
+
+.case-board-text .board-item {
+    margin-left: 16px;
+    font-size: 12px;
+    color: var(--terminal-green-muted);
 }
 
 """

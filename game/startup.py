@@ -23,6 +23,7 @@ from game.mystery_generator import (
     generate_mystery_premise,
     prepare_game_prompt,
 )
+from game.parallel_mystery import generate_skeleton_sync
 from game.media import _prewarm_scene_images
 from mystery_config import create_validated_config
 from services.agent import create_game_master_agent, process_message
@@ -34,6 +35,8 @@ from game.state_manager import (
 )
 from services.game_memory import initialize_game_memory, reset_game_memory
 from services.voice_service import get_voice_service, Voice
+from services.mystery_oracle import initialize_mystery_oracle, reset_mystery_oracle
+from game.public_mystery import create_public_mystery
 
 logger = logging.getLogger(__name__)
 
@@ -318,6 +321,9 @@ def start_new_game(session_id: str):
     state.premise_setting = premise.setting
     state.premise_victim_name = premise.victim_name
     state.premise_victim_background = premise.victim_background
+    
+    # NOTE: Skeleton generation moved to background thread for faster startup
+    # Suspects will appear in UI shortly after welcome message
 
     # Build a lightweight system prompt for the intro, based only on the premise.
     state.system_prompt = f"""You are the Game Master for a murder mystery game.
@@ -439,16 +445,58 @@ system or background tasks. Stay purely in-world."""
             except Exception:  # noqa: BLE001
                 bg_state.tone_instruction = None
 
-            logger.info("[BG] Starting full mystery generation in background...")
+            # =====================================================================
+            # PHASE 1: SKELETON FIRST (fast ~2s) - Get suspect names for early UI
+            # =====================================================================
+            import sys
+            print(f"[BG] Phase 1: sess={sess_id[:8] if sess_id else 'None'} - Generating skeleton...", flush=True)
+            sys.stdout.flush()
+            logger.info("[BG] Phase 1: Generating skeleton for early suspect display...")
+            perf.start("bg_skeleton", is_parallel=True, parallel_count=1, details="Skeleton only")
+            try:
+                print("[BG] Starting skeleton generation...", flush=True)
+                logger.info("[BG] Starting skeleton generation...")
+                skeleton = generate_skeleton_sync(premise=premise_obj, config=bg_config)
+                print("[BG] Skeleton generated, extracting previews...", flush=True)
+                logger.info("[BG] Skeleton generated, extracting previews...")
+                # Update state with suspect previews IMMEDIATELY
+                if skeleton and skeleton.suspect_previews:
+                    bg_state.suspect_previews = [
+                        {"name": sp.name, "role": sp.role}
+                        for sp in skeleton.suspect_previews
+                    ]
+                    print(f"[BG] ✅ sess={sess_id[:8]} previews set: {[sp['name'] for sp in bg_state.suspect_previews]}", flush=True)
+                    logger.info("[BG] ✅ Suspect previews set: %s", 
+                               [sp["name"] for sp in bg_state.suspect_previews])
+                else:
+                    bg_state.suspect_previews = []
+                    logger.warning("[BG] ⚠️ Skeleton has no suspect_previews!")
+                bg_state.skeleton = skeleton
+                perf.end("bg_skeleton", details=f"{len(bg_state.suspect_previews)} suspects ready for UI")
+            except Exception as skel_err:
+                logger.error("[BG] ❌ Skeleton failed: %s", skel_err, exc_info=True)
+                perf.end("bg_skeleton", status="error", details=str(skel_err))
+                bg_state.skeleton = None
+                bg_state.suspect_previews = []  # Explicitly set to empty
+            
+            # =====================================================================
+            # PHASE 2: FULL MYSTERY (slower ~8s) - Encounter graph, alibis, clues
+            # Uses cached skeleton to ensure suspect names match previews shown in UI
+            # =====================================================================
+            logger.info("[BG] Phase 2: Starting full mystery generation...")
             logger.info("[BG] Voice mode: %s (summary length: %d chars)", 
                         bg_state.voice_mode, len(bg_voice_summary) if bg_voice_summary else 0)
+            if bg_state.skeleton:
+                logger.info("[BG] Using cached skeleton (ensures suspect names match UI previews)")
             
-            perf.start("bg_full_mystery", is_parallel=True, parallel_count=1, details="Background thread")
+            perf.start("bg_full_mystery", is_parallel=True, parallel_count=1, details="Full mystery")
             # Pass voice_summary so LLM assigns voices during character generation
+            # Pass skeleton to ensure suspects match the previews already shown in UI
             full_mystery = generate_mystery(
                 premise=premise_obj, 
                 config=bg_config,
-                voice_summary=bg_voice_summary if bg_voice_summary else None
+                voice_summary=bg_voice_summary if bg_voice_summary else None,
+                skeleton=bg_state.skeleton,  # Use cached skeleton for consistency!
             )
             
             # Log voice assignments
@@ -457,6 +505,23 @@ system or background tasks. Stay purely in-world."""
                         assigned_count, len(full_mystery.suspects))
             
             bg_state.mystery = full_mystery
+            
+            # SECURE ARCHITECTURE: Initialize truth authority and public view
+            # - MysteryOracle holds full truth (murderer, secrets, alibis)
+            # - PublicMystery is sanitized view for GM agent (no secrets!)
+            initialize_mystery_oracle(full_mystery, encounter_graph=None)
+            bg_state.public_mystery = create_public_mystery(full_mystery)
+            logger.info("[BG] Initialized MysteryOracle and PublicMystery for session %s", sess_id)
+            
+            # FALLBACK: If skeleton failed, populate suspect_previews from full mystery
+            # This ensures the UI eventually shows suspects even if skeleton generation failed
+            if not bg_state.suspect_previews and full_mystery.suspects:
+                bg_state.suspect_previews = [
+                    {"name": s.name, "role": s.role}
+                    for s in full_mystery.suspects
+                ]
+                logger.info("[BG] Populated suspect_previews from full mystery (skeleton failed earlier): %s",
+                           [sp["name"] for sp in bg_state.suspect_previews])
             
             # NOTE: NO locations are unlocked at start.
             # All locations must be earned through suspect interrogation.

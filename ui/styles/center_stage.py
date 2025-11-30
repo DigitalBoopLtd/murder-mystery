@@ -373,4 +373,116 @@ img { border: 4px solid white !important; }
     padding: 8px !important;
 }
 
+/* ========== API KEYS SECTION ========== */
+
+/* Settings tab styling */
+.settings-tab .settings-column {
+    padding: 20px;
+    max-width: 800px;
+}
+
+.api-keys-group {
+    padding: 16px;
+    background: rgba(0, 20, 0, 0.3);
+    border: 1px solid var(--terminal-green-border-soft);
+    border-radius: 8px;
+    margin: 16px 0;
+}
+
+.api-keys-group input[type="password"] {
+    background: rgba(0, 30, 0, 0.5) !important;
+    border: 1px solid var(--terminal-green-border-soft) !important;
+}
+
+.api-keys-group input[type="password"]:focus {
+    border-color: var(--terminal-green) !important;
+}
+
+/* Legacy accordion styling (can be removed if not used) */
+.api-keys-accordion {
+    margin-bottom: 16px !important;
+}
+
+.api-keys-accordion .label-wrap {
+    background: rgba(255, 204, 0, 0.1) !important;
+    border: 1px solid rgba(255, 204, 0, 0.3) !important;
+}
+
+.api-keys-info {
+    font-size: 12px;
+    color: var(--terminal-green-muted);
+    margin-bottom: 12px;
+    padding: 8px;
+    background: rgba(0, 20, 0, 0.3);
+    border-radius: 4px;
+    border-left: 3px solid var(--terminal-green);
+}
+
+.api-keys-info p {
+    margin: 0;
+}
+
+.key-status-container {
+    display: flex;
+    align-items: center;
+    padding-left: 8px;
+}
+
+.key-status {
+    font-size: 12px;
+    font-family: var(--font-mono);
+    padding: 4px 8px;
+    border-radius: 4px;
+}
+
+.key-ok {
+    color: #00ff00;
+    background: rgba(0, 255, 0, 0.1);
+}
+
+.key-env {
+    color: #00ccff;
+    background: rgba(0, 204, 255, 0.1);
+}
+
+.key-error {
+    color: #ff4444;
+    background: rgba(255, 68, 68, 0.1);
+}
+
+.key-missing {
+    color: #ff8800;
+    background: rgba(255, 136, 0, 0.1);
+}
+
+.key-optional {
+    color: #888888;
+    background: rgba(136, 136, 136, 0.1);
+}
+
+.save-keys-btn {
+    background: rgba(255, 204, 0, 0.2) !important;
+    border: 1px solid rgba(255, 204, 0, 0.5) !important;
+    color: #ffcc00 !important;
+}
+
+.save-keys-btn:hover {
+    background: rgba(255, 204, 0, 0.3) !important;
+}
+
+.keys-ready {
+    color: #00ff00;
+    font-size: 13px;
+    font-weight: bold;
+}
+
+.keys-not-ready {
+    color: #ff8800;
+    font-size: 13px;
+}
+
+.keys-overall-status {
+    padding: 8px;
+}
+
 """

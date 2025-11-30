@@ -15,8 +15,11 @@ import re
 import json
 import random
 import logging
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 from langchain_openai import ChatOpenAI
+
+if TYPE_CHECKING:
+    from game.public_mystery import PublicMystery
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import PydanticOutputParser
 from langchain_core.runnables import RunnableLambda
@@ -320,6 +323,7 @@ def generate_mystery(
     premise: Optional[MysteryPremise] = None,
     config: Optional[MysteryConfig] = None,
     voice_summary: Optional[str] = None,
+    skeleton=None,  # Optional MysterySkeleton - avoids circular import
 ) -> Mystery:
     """Generate a complete murder mystery scenario.
     
@@ -334,6 +338,7 @@ def generate_mystery(
         premise: Optional preset premise (setting, victim)
         config: Game configuration for difficulty/tone
         voice_summary: Available voices for character casting
+        skeleton: Optional pre-generated skeleton (for early UI display consistency)
         
     Returns:
         Complete Mystery object ready for gameplay
@@ -347,6 +352,7 @@ def generate_mystery(
         premise=premise,
         config=config,
         voice_summary=voice_summary,
+        skeleton=skeleton,
     )
 
 
@@ -840,3 +846,86 @@ The player can see suspects, locations, and found clues in sidebar cards.
 Welcome the player with atmosphere and ask what they'd like to investigate!"""
 
     return system_prompt
+
+
+def prepare_secure_game_prompt(
+    public_mystery: "PublicMystery",
+    tone_instruction: Optional[str] = None,
+) -> str:
+    """Prepare the system prompt using ONLY public information.
+    
+    SECURE VERSION: Uses PublicMystery (sanitized view) instead of full Mystery.
+    This ensures the GM agent CANNOT access:
+    - Who the murderer is
+    - Suspect secrets
+    - Whether alibis are true/false
+    
+    Args:
+        public_mystery: The sanitized public view of the mystery
+        tone_instruction: Optional tone guidance
+    """
+    from game.public_mystery import build_gm_context
+    
+    # Get the context from public mystery
+    case_context = build_gm_context(public_mystery)
+    
+    # Build suspect profiles from public info only
+    suspect_profiles = "\n".join(
+        f"""
+### {s.name}
+Role: {s.role}
+Personality: {s.personality}
+Alibi claim: "{s.alibi}"
+Status: {"INTERROGATED" if s.has_been_interrogated else "Not yet questioned"}
+"""
+        for s in public_mystery.suspects
+    )
+    
+    tone_block = ""
+    if tone_instruction:
+        tone_block = f"\n## TONE\n{tone_instruction}\n"
+    
+    return f"""You are the Game Master for a murder mystery game.
+
+{case_context}
+
+## SUSPECT PROFILES (for interrogate_suspect tool)
+{suspect_profiles}
+
+## YOUR ROLE AS GAME MASTER
+
+CRITICAL: You can ONLY reveal information the player has EARNED through investigation!
+- Clues are revealed when the player SEARCHES the correct location
+- Suspect secrets emerge through INTERROGATION via the tool
+- You do NOT know who the murderer is - only the Oracle knows
+
+### AVAILABLE TOOLS
+
+1. **interrogate_suspect** - When player wants to talk to someone
+   - Pass: suspect_name, player_question
+   - The Oracle generates the suspect's response
+   - You receive ONLY the response text (no secrets exposed)
+
+2. **describe_scene_for_image** - When player searches a location
+   - Pass: location_name
+   - Returns narration + image brief
+
+3. **make_accusation** - When player formally accuses someone
+   - Only for FINAL accusations, not theorizing
+
+4. **RAG Memory Tools** - For recalling past conversations
+   - search_past_statements, find_contradictions, get_cross_references
+
+## GAME RULES
+- 3 wrong accusations = lose
+- Win = name murderer + provide evidence
+- NEVER reveal murderer until correct accusation
+- NEVER reveal clue details until player searches
+
+## RESPONSE STYLE
+- Keep responses SHORT for voice narration
+- TALK: ~60-80 words
+- SEARCH: ~50 words (just what they SEE)
+- Be atmospheric and conversational
+{tone_block}
+Continue the investigation based on the player's message."""

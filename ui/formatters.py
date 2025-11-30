@@ -69,46 +69,135 @@ def format_clues_html(clues: List[str]) -> str:
 
 
 def get_suspect_relationships(suspect_name: str) -> List[Tuple[str, str]]:
-    """Get relationship labels for a suspect from RAG cross-references.
+    """Get relationship labels for a suspect.
     
     Returns list of (other_suspect, relationship_type) tuples.
-    Relationship types: "accused_by", "alibi_from", "mentioned_by"
+    Relationship types:
+    - "alibi"      → this other suspect / statement helps or claims to help their alibi
+    - "accused"    → this other suspect / statement points suspicion at them
+    - "mentioned"  → softer/neutral mention
     
-    De-duplicates by speaker to avoid showing the same person multiple times.
+    Priority:
+    1) Structured mystery data (witness_statements, structured_alibi)
+    2) RAG cross-references as a fallback/enrichment.
     """
     try:
-        from services.game_memory import get_game_memory
-        memory = get_game_memory()
+        relationships: Dict[str, str] = {}
+
+        # ===== 1) Structured relationships from current mystery (truth-aware) =====
+        try:
+            from game.state_manager import get_game_state
+            state = get_game_state()
+            mystery = getattr(state, "mystery", None) if state else None
+        except Exception:
+            state = None
+            mystery = None
         
-        if not memory.is_available:
-            return []
-        
-        cross_refs = memory.search_cross_references(suspect_name, k=5)
-        
-        # De-duplicate by speaker - keep first (strongest) relationship per person
-        seen_speakers = {}
-        
-        for speaker, statement in cross_refs:
-            if speaker in seen_speakers:
-                continue  # Skip duplicate speakers
-                
-            statement_lower = statement.lower()
+        if mystery:
+            # a) Mystery-level witness statements
+            #    - If someone truthfully saw this suspect → alibi
+            #    - If the murderer lies about this suspect → treat as "accused"
+            for ws in getattr(mystery, "witness_statements", []):
+                try:
+                    if ws.subject != suspect_name:
+                        continue
+                    other = ws.witness
+                    if not other or other == suspect_name:
+                        continue
+                    if ws.is_truthful:
+                        # Truthful sighting / corroboration
+                        relationships.setdefault(other, "alibi")
+                    else:
+                        # Lying about this suspect to shift suspicion
+                        relationships.setdefault(other, "accused")
+                except Exception:
+                    continue
             
-            # Detect relationship type from statement content
-            if any(word in statement_lower for word in ["saw", "with", "together", "alibi"]):
-                seen_speakers[speaker] = "alibi"
-            elif any(word in statement_lower for word in ["suspicious", "lying", "guilty", "killed", "murder"]):
-                seen_speakers[speaker] = "accused"
-            else:
-                seen_speakers[speaker] = "mentioned"
+            # b) Structured alibis that name this suspect as corroborator
+            for s in mystery.suspects:
+                try:
+                    alibi = getattr(s, "structured_alibi", None)
+                    if not alibi or not alibi.corroborator:
+                        continue
+                    if alibi.corroborator != suspect_name:
+                        continue
+                    # This suspect is named as corroborator for s
+                    other = s.name
+                    # Being someone's corroborator ties them via alibi
+                    relationships.setdefault(other, "alibi")
+                except Exception:
+                    continue
+
+        # ===== 2) RAG-based cross-references (fallback / extra context) =====
+        try:
+            from services.game_memory import get_game_memory
+            memory = get_game_memory()
+        except Exception:
+            memory = None
         
-        # Convert to list and limit to 2 most relevant
-        relationships = [(speaker, rel_type) for speaker, rel_type in seen_speakers.items()]
-        return relationships[:2]
+        if memory and memory.is_available:
+            try:
+                cross_refs = memory.search_cross_references(suspect_name, k=5)
+                
+                for speaker, statement in cross_refs:
+                    # Skip if we already have a stronger structured relationship
+                    if speaker in relationships:
+                        continue
+                    
+                    statement_lower = statement.lower()
+                    
+                    if any(word in statement_lower for word in ["saw", "with", "together", "alibi"]):
+                        relationships.setdefault(speaker, "alibi")
+                    elif any(word in statement_lower for word in ["suspicious", "lying", "guilty", "killed", "murder"]):
+                        relationships.setdefault(speaker, "accused")
+                    else:
+                        relationships.setdefault(speaker, "mentioned")
+            except Exception as e:
+                logger.debug("[FORMATTER] RAG cross-references failed: %s", e)
         
+        # Convert to list and limit to a couple of most relevant entries
+        result = [(speaker, rel_type) for speaker, rel_type in relationships.items()]
+        return result[:2]
+    
     except Exception as e:
         logger.debug("[FORMATTER] Could not get relationships: %s", e)
         return []
+
+
+def format_suspect_previews_html(
+    suspect_previews: List[Dict[str, str]],
+    layout: str = "row",
+) -> str:
+    """Format early suspect previews (before full mystery is ready).
+    
+    Shows minimal cards with just name and role while full details load.
+    
+    Args:
+        suspect_previews: List of {name: str, role: str} dicts from skeleton
+        layout: "row" for horizontal layout, "column" for vertical layout
+    """
+    if not suspect_previews:
+        return '<em style="color: var(--accent-gold);">🔍 Gathering suspect information...</em>'
+    
+    cards = []
+    for preview in suspect_previews:
+        name = preview.get("name", "Unknown")
+        role = preview.get("role", "Unknown")
+        
+        # Simple preview card - no portrait, just name and role
+        cards.append(f'''
+        <div class="suspect-card suspect-card-minimal suspect-card-preview" title="Details loading...">
+            <div class="suspect-card-info">
+                <div class="suspect-card-name">{name}</div>
+                <div class="suspect-card-role">{role}</div>
+                <div class="suspect-card-loading">
+                    <span style="color: var(--accent-gold); font-size: 10px;">⏳ Loading details...</span>
+                </div>
+            </div>
+        </div>''')
+    
+    layout_class = "suspects-card-grid" if layout == "row" else "suspects-card-grid suspects-card-grid-column"
+    return f'<div class="{layout_class}">{"".join(cards)}</div>'
 
 
 def format_suspects_list_html(
@@ -268,18 +357,34 @@ def format_suspects_list_html(
             # Not talked to yet - show locked
             motive_html = f'<div class="suspect-motive" style="color: #666;"><strong>🔒 Secret:</strong> <em>Talk to them to learn more...</em></div>'
         
-        cards.append(f'''
-        <div class="{card_class}" title="Click to see details">
-            {portrait_html}
-            <div class="suspect-card-info">
-                <div class="suspect-card-name">{suspect.name}{contradiction_badge}</div>
-                <div class="suspect-card-role">{suspect.role}</div>
-                {meters_html}
-                {relationship_labels}
-                {motive_html}
-                {badges_html}
-            </div>
-        </div>''')
+        # Compact vs detailed layout:
+        # - Row layout (tabs / desktop view): show compact card so all suspects fit in viewport
+        # - Column layout (side panel): show full details (meters, relationships, secret hint)
+        if layout == "row":
+            # Compact: thumbnail + name/role + badges only
+            cards.append(f'''
+            <div class="{card_class} suspect-card-compact" title="Click to talk to this suspect">
+                {portrait_html}
+                <div class="suspect-card-info">
+                    <div class="suspect-card-name">{suspect.name}{contradiction_badge}</div>
+                    <div class="suspect-card-role">{suspect.role}</div>
+                    {badges_html}
+                </div>
+            </div>''')
+        else:
+            # Detailed: full meters, relationships, secret progress
+            cards.append(f'''
+            <div class="{card_class}" title="Click to see details">
+                {portrait_html}
+                <div class="suspect-card-info">
+                    <div class="suspect-card-name">{suspect.name}{contradiction_badge}</div>
+                    <div class="suspect-card-role">{suspect.role}</div>
+                    {meters_html}
+                    {relationship_labels}
+                    {motive_html}
+                    {badges_html}
+                </div>
+            </div>''')
     
     # Use layout class to control card arrangement
     layout_class = "suspects-card-grid" if layout == "row" else "suspects-card-grid suspects-card-grid-column"
@@ -799,6 +904,155 @@ def format_accusations_tab_html(
         {remaining_html}
         {checklist_html}
         {history_html}
+    </div>
+    '''
+
+
+# =============================================================================
+# TIMELINE VISUALIZATION
+# =============================================================================
+
+def format_timeline_html(
+    discovered_events: List[Dict],
+    loading: bool = False,
+) -> str:
+    """Format a visual timeline of what the player has discovered.
+    
+    Args:
+        discovered_events: List of timeline events the player has learned about.
+            Each event has: time_slot, source, event_type, description, suspect_name, is_verified
+        loading: Show loading state
+    
+    Event types:
+        - alibi_claim: Suspect claimed to be somewhere
+        - witness_sighting: Someone says they saw someone else
+        - clue_implication: A clue reveals timing information
+        - contradiction: Two pieces of info don't match
+    """
+    if loading:
+        return '<em style="color: var(--accent-gold);">🔍 Building timeline...</em>'
+    
+    if not discovered_events:
+        return '''
+        <div class="timeline-empty">
+            <div class="timeline-empty-icon">🕐</div>
+            <div class="timeline-empty-text">Timeline Empty</div>
+            <div class="timeline-empty-hint">
+                Interrogate suspects and search for clues to piece together what happened that night.
+            </div>
+        </div>
+        '''
+    
+    # Group events by time slot
+    time_slots = {}
+    for event in discovered_events:
+        slot = event.get("time_slot", "Unknown")
+        if slot not in time_slots:
+            time_slots[slot] = []
+        time_slots[slot].append(event)
+    
+    # Sort time slots (assuming format like "8:00 PM", "9:00 PM", etc.)
+    def sort_time(t):
+        try:
+            # Handle "Unknown" or malformed times
+            if t == "Unknown":
+                return 99
+            # Parse time like "9:00 PM" -> 21
+            parts = t.replace(" ", "").upper().split(":")
+            hour = int(parts[0])
+            is_pm = "PM" in t.upper()
+            if is_pm and hour != 12:
+                hour += 12
+            elif not is_pm and hour == 12:
+                hour = 0
+            return hour
+        except:
+            return 50
+    
+    sorted_slots = sorted(time_slots.keys(), key=sort_time)
+    
+    # Build timeline HTML
+    timeline_rows = []
+    
+    for slot in sorted_slots:
+        events = time_slots[slot]
+        
+        # Group by suspect within each time slot
+        by_suspect = {}
+        for event in events:
+            suspect = event.get("suspect_name", "Unknown")
+            if suspect not in by_suspect:
+                by_suspect[suspect] = []
+            by_suspect[suspect].append(event)
+        
+        event_cards = []
+        for suspect, suspect_events in by_suspect.items():
+            for event in suspect_events:
+                event_type = event.get("event_type", "unknown")
+                description = event.get("description", "")
+                source = event.get("source", "")
+                is_verified = event.get("is_verified", False)
+                is_contradiction = event.get("is_contradiction", False)
+                
+                # Event type icons and colors
+                type_config = {
+                    "alibi_claim": ("🗣️", "alibi", "Claims"),
+                    "witness_sighting": ("👁️", "witness", "Saw"),
+                    "clue_implication": ("🔎", "clue", "Clue"),
+                    "contradiction": ("⚠️", "contradiction", "Conflict"),
+                }
+                icon, css_class, label = type_config.get(event_type, ("❓", "unknown", "Info"))
+                
+                # Add contradiction styling
+                if is_contradiction:
+                    css_class = "contradiction"
+                    icon = "⚠️"
+                
+                # Verified badge
+                verified_badge = '<span class="verified-badge">✓</span>' if is_verified else ''
+                
+                event_cards.append(f'''
+                <div class="timeline-event {css_class}">
+                    <div class="event-icon">{icon}</div>
+                    <div class="event-content">
+                        <div class="event-suspect">{suspect} {verified_badge}</div>
+                        <div class="event-desc">{description}</div>
+                        <div class="event-source">Source: {source}</div>
+                    </div>
+                </div>
+                ''')
+        
+        timeline_rows.append(f'''
+        <div class="timeline-row">
+            <div class="timeline-time">{slot}</div>
+            <div class="timeline-events">
+                {''.join(event_cards)}
+            </div>
+        </div>
+        ''')
+    
+    # Build legend
+    legend = '''
+    <div class="timeline-legend">
+        <span class="legend-item"><span class="legend-dot alibi"></span> Alibi Claim</span>
+        <span class="legend-item"><span class="legend-dot witness"></span> Witness Sighting</span>
+        <span class="legend-item"><span class="legend-dot clue"></span> Clue Evidence</span>
+        <span class="legend-item"><span class="legend-dot contradiction"></span> Contradiction!</span>
+    </div>
+    '''
+    
+    return f'''
+    <div class="investigation-timeline">
+        <div class="timeline-header">
+            <span class="timeline-title">🕐 TIMELINE OF EVENTS</span>
+            {legend}
+        </div>
+        <div class="timeline-content">
+            {''.join(timeline_rows)}
+        </div>
+        <div class="timeline-tip">
+            💡 Look for contradictions - if two events can't both be true, someone is lying!
+        </div>
     </div>
     '''
 

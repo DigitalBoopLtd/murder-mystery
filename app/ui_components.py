@@ -129,16 +129,19 @@ def create_ui_components() -> dict:
                             elem_classes="audio-player",
                         )
                         
-                                        # Input bar - voice only
+                    # Input bar - sticky bottom record button
                     with gr.Column(
-                        elem_classes="input-bar", visible=False
+                        elem_classes="input-bar", 
+                        elem_id="sticky-record-bar",
+                        visible=False
                     ) as input_row:
-                        # Voice input - only input method
+                        # Voice input - minimal, just the mic button
                         voice_input = gr.Audio(
                             sources=["microphone"],
                             type="filepath",
                             label=None,
                             show_label=False,
+                            elem_classes="record-audio-minimal",
                         )
 
                     # ====== SETUP WIZARD ======
@@ -243,14 +246,24 @@ def create_ui_components() -> dict:
                                 "</span></div>"
                             )
                         
-                        # Detective Notebook tab
-                        with gr.Tab("📓 DETECTIVE NOTEBOOK"):
-                            notebook_html_tab = gr.HTML(
-                                '''<div class="notebook-empty">
-                                    <div class="notebook-icon">📓</div>
-                                    <div>No interrogations recorded yet.</div>
-                                    <div class="notebook-hint">Talk to suspects to fill your notebook.</div>
+                        # Investigation Timeline tab
+                        with gr.Tab("🕐 TIMELINE"):
+                            timeline_html_tab = gr.HTML(
+                                '''<div class="timeline-empty">
+                                    <div class="timeline-empty-icon">🕐</div>
+                                    <div class="timeline-empty-text">Timeline Empty</div>
+                                    <div class="timeline-empty-hint">
+                                        Interrogate suspects and search for clues to piece together what happened.
+                                    </div>
                                 </div>'''
+                            )
+                        
+                        # Case Board tab - Visual conspiracy board
+                        with gr.Tab("📋 CASE BOARD"):
+                            case_board_plot = gr.Plot(
+                                value=None,
+                                label="Case Board",
+                                elem_classes="case-board-plot",
                             )
 
                 # === RIGHT: SIDE PANEL ===
@@ -275,19 +288,91 @@ def create_ui_components() -> dict:
                     ):
                         clues_html = gr.HTML("<em>No clues yet...</em>")
 
-                    # Detective Notebook - conversation timeline & contradictions
-                    with gr.Accordion(
-                        "📓 DETECTIVE NOTEBOOK",
-                        open=False,
-                        elem_classes="side-panel",
-                    ):
-                        notebook_html = gr.HTML(
-                            '''<div class="notebook-empty">
-                                <div class="notebook-icon">📓</div>
-                                <div>No interrogations recorded yet.</div>
-                                <div class="notebook-hint">Talk to suspects to fill your notebook.</div>
-                            </div>'''
+
+        # ----- CASE BOARD TAB -----
+        with gr.Tab("📋 Case Board", elem_classes="case-board-tab"):
+            with gr.Column(elem_classes="case-board-column"):
+                gr.Markdown("### 🔍 Investigation Board")
+                gr.Markdown(
+                    "Visual conspiracy board showing suspects, clues, and connections.\n"
+                    "**Hover over icons for details. Connections reveal as you investigate.**"
+                )
+                case_board_plot_main = gr.Plot(
+                    value=None,
+                    label="Case Board",
+                    elem_classes="case-board-plot-main",
+                )
+
+        # ----- TIMELINE TAB -----
+        with gr.Tab("🕐 Timeline", elem_classes="timeline-tab"):
+            with gr.Column(elem_classes="timeline-column"):
+                gr.Markdown("### 🕐 Investigation Timeline")
+                gr.Markdown(
+                    "Track alibis, witness sightings, and contradictions as you uncover them.\n"
+                    "**Events are logged chronologically as you interrogate suspects and find clues.**"
+                )
+                timeline_html_main = gr.HTML(
+                    '''<div class="timeline-empty">
+                        <div class="timeline-empty-icon">🕐</div>
+                        <div class="timeline-empty-text">Timeline Empty</div>
+                        <div class="timeline-empty-hint">
+                            Interrogate suspects and search for clues to piece together what happened.
+                        </div>
+                    </div>''',
+                    elem_classes="timeline-main",
+                )
+
+        # ----- API KEYS TAB -----
+        with gr.Tab("🔑 Settings", elem_classes="settings-tab"):
+            with gr.Column(elem_classes="settings-column"):
+                gr.Markdown("### 🔑 API Keys")
+                gr.Markdown(
+                    "Enter your own API keys to play. Keys are stored in memory only (session) and **never saved to disk**.\n"
+                    "For local development, you can also set keys in your `.env` file."
+                )
+                
+                with gr.Group(elem_classes="api-keys-group"):
+                    with gr.Row():
+                        openai_key_input = gr.Textbox(
+                            label="OpenAI API Key",
+                            placeholder="sk-...",
+                            type="password",
+                            scale=3,
                         )
+                        openai_key_status = gr.HTML(
+                            '<span class="key-status">❓ Not set</span>',
+                            elem_classes="key-status-container",
+                        )
+                    
+                    with gr.Row():
+                        elevenlabs_key_input = gr.Textbox(
+                            label="ElevenLabs API Key (optional - for voice)",
+                            placeholder="Your ElevenLabs key...",
+                            type="password",
+                            scale=3,
+                        )
+                        elevenlabs_key_status = gr.HTML(
+                            '<span class="key-status">❓ Not set</span>',
+                            elem_classes="key-status-container",
+                        )
+                    
+                    with gr.Row():
+                        save_keys_btn = gr.Button(
+                            "💾 Save Keys to Session",
+                            elem_classes="save-keys-btn",
+                            variant="primary",
+                        )
+                        keys_status_html = gr.HTML(
+                            '<span class="keys-overall-status"></span>'
+                        )
+                
+                gr.Markdown("---")
+                gr.Markdown(
+                    "### ℹ️ About API Keys\n\n"
+                    "- **OpenAI** (required): Powers the game master AI and mystery generation\n"
+                    "- **ElevenLabs** (optional): Enables voice acting for characters\n\n"
+                    "Without ElevenLabs, the game runs in 'silent film' mode with text only."
+                )
 
         # ----- DEBUG TAB -----
         with gr.Tab("Debug"):
@@ -347,14 +432,16 @@ def create_ui_components() -> dict:
         "locations_html": locations_html,
         "clues_html": clues_html,
         "accusations_html": accusations_html,
-        "notebook_html": notebook_html,
         "dashboard_html_tab": dashboard_html_tab,
         "victim_scene_html_tab": victim_scene_html_tab,
         "suspects_list_html_tab": suspects_list_html_tab,
         "locations_html_tab": locations_html_tab,
         "clues_html_tab": clues_html_tab,
         "accusations_html_tab": accusations_html_tab,
-        "notebook_html_tab": notebook_html_tab,
+        "timeline_html_tab": timeline_html_tab,
+        "timeline_html_main": timeline_html_main,  # Main tab version
+        "case_board_plot": case_board_plot,  # Visual conspiracy board (info tabs/mobile)
+        "case_board_plot_main": case_board_plot_main,  # Visual conspiracy board (main tab)
         "reveal_status_textbox": reveal_status_textbox,
         "refresh_reveal_btn": refresh_reveal_btn,
         "debug_logs_textbox": debug_logs_textbox,
@@ -370,6 +457,13 @@ def create_ui_components() -> dict:
         "wizard_setting_dropdown": wizard_setting_dropdown,
         "wizard_difficulty_radio": wizard_difficulty_radio,
         "wizard_tone_radio": wizard_tone_radio,
+        # API Key inputs
+        "openai_key_input": openai_key_input,
+        "openai_key_status": openai_key_status,
+        "elevenlabs_key_input": elevenlabs_key_input,
+        "elevenlabs_key_status": elevenlabs_key_status,
+        "save_keys_btn": save_keys_btn,
+        "keys_status_html": keys_status_html,
         "refresh_voices_btn": refresh_voices_btn,
         # Tabs for select events (lazy portrait loading)
         "info_tabs": info_tabs,

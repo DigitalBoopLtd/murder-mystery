@@ -12,6 +12,8 @@ huggingface_hub>=0.36.0
 Pillow>=11.3.0
 mcp>=1.22.0
 mcp-elevenlabs>=0.0.2
+plotly>=6.0.0
+networkx>=3.0
 
 # Note:
 # - langchain core packages are pulled in transitively via langchain-openai/community

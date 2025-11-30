@@ -1,8 +1,11 @@
 """Game state management."""
 
-from typing import Dict, Optional, List, Any
+from typing import Dict, Optional, List, Any, TYPE_CHECKING
 from game.models import Mystery, SuspectState, AccusationAttempt, AccusationRequirements
 from mystery_config import MysteryConfig, create_validated_config
+
+if TYPE_CHECKING:
+    from game.public_mystery import PublicMystery
 
 
 class GameState:
@@ -53,6 +56,19 @@ class GameState:
         # Setup wizard state
         self.setup_step: int = 1  # 1 = configure, 2 = casting
         self.setup_ready: bool = False  # True when voices fetched and ready to proceed
+        
+        # Early suspect display (from skeleton generation)
+        # These are available BEFORE the full mystery is ready
+        self.suspect_previews: List[Dict[str, str]] = []  # [{name: str, role: str}, ...]
+        self.skeleton: Any = None  # Cached skeleton for background mystery generation
+        
+        # Investigation timeline - what the player has discovered
+        # Each event: {time_slot, source, event_type, description, suspect_name, is_verified, is_contradiction}
+        self.discovered_timeline: List[Dict] = []
+        
+        # SECURE ARCHITECTURE: Public view of mystery for GM agent
+        # The full mystery is in MysteryOracle - GM only sees this sanitized view
+        self.public_mystery: Optional["PublicMystery"] = None
 
     def is_new_game(self, message: str) -> bool:
         """Check if the message indicates a new game."""
@@ -63,6 +79,7 @@ class GameState:
     def reset_game(self):
         """Reset the game state for a new game."""
         self.mystery = None
+        self.public_mystery = None  # Reset public mystery view
         self.system_prompt = None
         self.messages = []
         self.clues_found = []
@@ -90,12 +107,98 @@ class GameState:
         # Reset setup state for new game
         self.setup_step = 1
         self.setup_ready = False
+        # Reset early suspect display
+        self.suspect_previews = []
+        self.skeleton = None
+        # Reset investigation timeline
+        self.discovered_timeline = []
 
     def add_clue(self, clue_id: str, clue_description: str):
         """Add a discovered clue."""
         if clue_id not in self.clue_ids_found:
             self.clue_ids_found.append(clue_id)
             self.clues_found.append(clue_description)
+
+    def add_timeline_event(
+        self,
+        time_slot: str,
+        event_type: str,
+        description: str,
+        suspect_name: str,
+        source: str,
+        is_verified: bool = False,
+    ) -> bool:
+        """Add a discovered event to the investigation timeline.
+        
+        Args:
+            time_slot: When the event occurred (e.g., "9:00 PM")
+            event_type: One of: alibi_claim, witness_sighting, clue_implication, contradiction
+            description: What happened
+            suspect_name: Who this event is about
+            source: Where this info came from (e.g., "Interview with Marcus", "Found at Library")
+            is_verified: Whether this is corroborated by another source
+            
+        Returns:
+            True if a new contradiction was detected
+        """
+        # Check for contradictions using AI
+        # Explicit contradiction types are always marked
+        is_contradiction = event_type == "contradiction"
+        contradiction_detected = is_contradiction
+        
+        # For alibi claims and witness sightings, use LLM to check for contradictions
+        # Only compare statements about the SAME suspect
+        if event_type in ["alibi_claim", "witness_sighting"] and suspect_name:
+            from game.contradiction_detector import check_contradiction_sync
+            
+            for existing in self.discovered_timeline:
+                # Only compare with statements about the same suspect
+                if (existing.get("suspect_name") == suspect_name and 
+                    existing.get("event_type") in ["alibi_claim", "witness_sighting"]):
+                    
+                    existing_desc = existing.get("description", "")
+                    
+                    # Skip if descriptions are too similar (same statement)
+                    if existing_desc.lower().strip() == description.lower().strip():
+                        continue
+                    
+                    # Use LLM to check if they contradict
+                    try:
+                        result = check_contradiction_sync(
+                            existing_desc, description, suspect_name
+                        )
+                        if result.is_contradiction and result.confidence > 0.7:
+                            is_contradiction = True
+                            contradiction_detected = True
+                            existing["is_contradiction"] = True
+                            existing["contradiction_explanation"] = result.explanation
+                            break  # One contradiction is enough
+                    except Exception as e:
+                        # On error, don't mark as contradiction
+                        import logging
+                        logging.getLogger(__name__).warning(
+                            "[TIMELINE] Contradiction check failed: %s", e
+                        )
+        
+        self.discovered_timeline.append({
+            "time_slot": time_slot,
+            "event_type": event_type,
+            "description": description,
+            "suspect_name": suspect_name,
+            "source": source,
+            "is_verified": is_verified,
+            "is_contradiction": is_contradiction,
+        })
+        
+        return contradiction_detected
+    
+    def get_timeline_for_suspect(self, suspect_name: str) -> List[Dict]:
+        """Get all timeline events related to a specific suspect."""
+        return [e for e in self.discovered_timeline if e.get("suspect_name") == suspect_name]
+    
+    def get_contradictions(self) -> List[Dict]:
+        """Get all contradiction events."""
+        return [e for e in self.discovered_timeline if e.get("is_contradiction")]
 
     def add_searched_location(self, location: str):
         """Mark a location as searched."""

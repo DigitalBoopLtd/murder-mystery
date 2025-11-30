@@ -40,6 +40,8 @@ from app.event_handlers import (
     on_audio_stop,
     on_suspects_tab_select,
     on_refresh_suspects_click,
+    on_save_api_keys,
+    check_api_keys_status,
 )
 
 # Logging - set up early
@@ -158,14 +160,16 @@ def create_app():
         locations_html = components["locations_html"]
         clues_html = components["clues_html"]
         accusations_html = components["accusations_html"]
-        notebook_html = components["notebook_html"]
         dashboard_html_tab = components["dashboard_html_tab"]
         victim_scene_html_tab = components["victim_scene_html_tab"]
         suspects_list_html_tab = components["suspects_list_html_tab"]
         locations_html_tab = components["locations_html_tab"]
         clues_html_tab = components["clues_html_tab"]
         accusations_html_tab = components["accusations_html_tab"]
-        notebook_html_tab = components["notebook_html_tab"]
+        timeline_html_tab = components["timeline_html_tab"]
+        timeline_html_main = components["timeline_html_main"]  # Main tab version
+        case_board_plot = components["case_board_plot"]  # Visual conspiracy board (info tabs/mobile)
+        case_board_plot_main = components["case_board_plot_main"]  # Visual conspiracy board (main tab)
         reveal_status_textbox = components["reveal_status_textbox"]
         refresh_reveal_btn = components["refresh_reveal_btn"]
         debug_logs_textbox = components["debug_logs_textbox"]
@@ -181,6 +185,13 @@ def create_app():
         wizard_setting_dropdown = components["wizard_setting_dropdown"]
         wizard_difficulty_radio = components["wizard_difficulty_radio"]
         wizard_tone_radio = components["wizard_tone_radio"]
+        # API Key inputs
+        openai_key_input = components["openai_key_input"]
+        openai_key_status = components["openai_key_status"]
+        elevenlabs_key_input = components["elevenlabs_key_input"]
+        elevenlabs_key_status = components["elevenlabs_key_status"]
+        save_keys_btn = components["save_keys_btn"]
+        keys_status_html = components["keys_status_html"]
         refresh_voices_btn = components["refresh_voices_btn"]
         # Tabs and buttons for lazy portrait loading
         info_tabs = components["info_tabs"]
@@ -198,7 +209,7 @@ def create_app():
             locations_html,
             clues_html,
             accusations_html,
-            notebook_html,
+            timeline_html_main,  # Main tab version
             # Tab components (replicated from accordions)
             dashboard_html_tab,
             victim_scene_html_tab,
@@ -206,7 +217,9 @@ def create_app():
             locations_html_tab,
             clues_html_tab,
             accusations_html_tab,
-            notebook_html_tab,
+            timeline_html_tab,
+            case_board_plot,  # Visual conspiracy board (info tabs/mobile)
+            case_board_plot_main,  # Visual conspiracy board (main tab)
         ]
 
         # ====== WIZARD EVENT HANDLERS ======
@@ -263,6 +276,20 @@ def create_app():
             outputs=None,
         )
         
+        # Save API keys button
+        getattr(save_keys_btn, "click")(
+            fn=on_save_api_keys,
+            inputs=[openai_key_input, elevenlabs_key_input, session_id],
+            outputs=[openai_key_status, elevenlabs_key_status, keys_status_html],
+        )
+        
+        # Check API keys status on page load
+        getattr(app, "load")(
+            fn=check_api_keys_status,
+            inputs=[session_id],
+            outputs=[openai_key_status, elevenlabs_key_status, keys_status_html],
+        )
+        
         # Note: Voices are fetched on-demand when START is clicked.
         # The refresh button allows manual refresh before starting.
         getattr(refresh_voices_btn, "click")(
@@ -292,7 +319,9 @@ def create_app():
                 locations_html_tab,
                 clues_html_tab,
                 accusations_html_tab,
-                notebook_html_tab,
+                timeline_html_tab,
+                case_board_plot,  # Visual conspiracy board (info tabs/mobile)
+                case_board_plot_main,  # Visual conspiracy board (main tab)
                 mystery_check_timer,  # Timer activation
             ],
         )
@@ -311,6 +340,8 @@ def create_app():
                 victim_scene_html_tab,
                 suspects_list_html_tab,
                 locations_html_tab,
+                case_board_plot,  # Update case board as mystery loads (info tabs/mobile)
+                case_board_plot_main,  # Update case board (main tab)
                 mystery_check_timer,
             ],
         )
