@@ -133,11 +133,14 @@ def create_favicon() -> str:
 
 def convert_alignment_to_subtitles(
     alignment_data: Optional[List[Dict]],
+    offset_seconds: float = None,
 ) -> Optional[List[Dict]]:
     """Convert alignment_data format to Gradio subtitles format.
 
     Args:
         alignment_data: List of dicts with 'word', 'start', 'end' keys from TTS alignment
+        offset_seconds: Time offset to add to all timestamps (positive = subtitles later, negative = earlier)
+                       If None, uses SUBTITLE_OFFSET_SECONDS env var (default 0.0)
 
     Returns:
         List of dicts in format Gradio expects: [{"timestamp": [start, end], "text": str}, ...]
@@ -146,39 +149,53 @@ def convert_alignment_to_subtitles(
     Note:
         Gradio expects 'timestamp' field as a list/tuple [start, end] and 'text' field for each subtitle.
         Uses alignment data words directly - they represent what was actually spoken in the audio.
-        Preserves ALL words from alignment data to ensure perfect sync with audio.
+        
+    Tuning:
+        If subtitles appear TOO EARLY (before words are spoken): use positive offset (e.g., 0.2)
+        If subtitles appear TOO LATE (after words are spoken): use negative offset (e.g., -0.2)
+        Set via: export SUBTITLE_OFFSET_SECONDS=0.2
     """
     logger = logging.getLogger(__name__)
     if not alignment_data:
         logger.warning("[Subtitles] No alignment data provided")
         return None
 
+    # Get offset from parameter or environment variable
+    if offset_seconds is None:
+        offset_seconds = float(os.getenv("SUBTITLE_OFFSET_SECONDS", "0.0"))
+
     # Gradio subtitles format: list of dicts with 'timestamp' (as [start, end]) and 'text' keys
-    # Use alignment data words exactly as they are - they match what's spoken in the audio
     subtitles = []
     for word_data in alignment_data:
         word = word_data.get("word", "")
-        start = word_data.get("start", 0.0)
-        end = word_data.get("end", 0.0)
+        start = word_data.get("start", 0.0) + offset_seconds
+        end = word_data.get("end", 0.0) + offset_seconds
+        
+        # Ensure timestamps don't go negative
+        start = max(0.0, start)
+        end = max(start, end)
 
-        # Preserve the word as-is (don't strip - might remove important characters)
-        # Only skip if completely empty
-        if (
-            word or word == ""
-        ):  # Include even empty strings if they're in alignment (spaces/punctuation)
-            # But actually, skip truly empty strings to avoid issues
-            if word.strip():  # Only add if word has content after stripping whitespace
-                subtitles.append(
-                    {
-                        "timestamp": [float(start), float(end)],
-                        "text": word,  # Use word exactly as it appears in alignment data
-                    }
-                )
+        # Only add if word has content after stripping whitespace
+        if word.strip():
+            subtitles.append(
+                {
+                    "timestamp": [float(start), float(end)],
+                    "text": word,
+                }
+            )
 
-    logger.info(
-        "[Subtitles] Converted %d alignment words to %d subtitles",
-        len(alignment_data),
-        len(subtitles),
-    )
+    if offset_seconds != 0.0:
+        logger.info(
+            "[Subtitles] Converted %d words to %d subtitles (offset: %.2fs)",
+            len(alignment_data),
+            len(subtitles),
+            offset_seconds,
+        )
+    else:
+        logger.info(
+            "[Subtitles] Converted %d alignment words to %d subtitles",
+            len(alignment_data),
+            len(subtitles),
+        )
     return subtitles if subtitles else None
 
