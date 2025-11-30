@@ -18,6 +18,7 @@ class SuspectState(BaseModel):
         description="List of {question, answer, turn} exchanges"
     )
     contradictions_caught: int = Field(default=0, description="Times caught in a lie")
+    secret_revealed: bool = Field(default=False, description="True when they've revealed their secret/motive")
 
 
 # =============================================================================

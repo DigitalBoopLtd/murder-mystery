@@ -736,6 +736,25 @@ def on_voice_input(audio_path: str, sess_id, progress=gr.Progress()):
     from game.state_manager import get_tool_output_store
     tool_store = get_tool_output_store(sess_id)
     alignment_data_from_tool = tool_store.audio_alignment_data
+    
+    # Check if a secret was revealed this turn (for UI notification)
+    secret_reveal_notification = ""
+    if tool_store.secret_revealed and tool_store.secret_revealed_by:
+        secret_reveal_notification = f'''
+        <div class="secret-revealed-notification" style="
+            background: linear-gradient(135deg, #2d1b4e 0%, #1a1a2e 100%);
+            border: 2px solid #9b59b6;
+            border-radius: 8px;
+            padding: 12px 16px;
+            margin: 8px 0;
+            animation: pulse-glow 2s ease-in-out infinite;
+        ">
+            <span style="font-size: 1.2em;">🔓</span>
+            <strong style="color: #bb86fc;">{tool_store.secret_revealed_by}</strong>
+            <span style="color: #e0e0e0;"> revealed their secret!</span>
+            <div style="color: #aaa; font-size: 0.9em; margin-top: 4px;">Check the Suspects panel to see what they confessed.</div>
+        </div>'''
+        logger.info("🔓 [UI] Secret reveal notification for %s", tool_store.secret_revealed_by)
 
     # Get images dict (may not have new portrait yet)
     images = mystery_images.get(sess_id, {})
@@ -810,8 +829,11 @@ def on_voice_input(audio_path: str, sess_id, progress=gr.Progress()):
         else gr.update()
     )
 
+    # Build speaker HTML with optional secret notification
+    speaker_html = f'<div class="speaker-name" style="padding: 16px 0 !important;">🗣️ {speaker} SPEAKING...</div>{secret_reveal_notification}'
+    
     yield [
-        f'<div class="speaker-name" style="padding: 16px 0 !important;">🗣️ {speaker} SPEAKING...</div>',
+        speaker_html,
         gr.update(),  # Audio placeholder - will be filled in stage 2
         portrait_update,
         format_victim_scene_html(state.mystery),
@@ -961,7 +983,18 @@ def on_voice_input(audio_path: str, sess_id, progress=gr.Progress()):
         logger.info("No portrait available in Stage 2; keeping existing image")
 
     # Convert alignment_data to Gradio subtitles format
+    # DEBUG: Log what we're using for audio vs subtitles
+    logger.info("[AUDIO/SUBTITLE DEBUG] audio_resp=%s", audio_resp[:50] if audio_resp else "None")
+    logger.info("[AUDIO/SUBTITLE DEBUG] alignment_data has %d words", len(alignment_data) if alignment_data else 0)
+    if alignment_data and len(alignment_data) > 0:
+        first_words = [w.get("word", "?") for w in alignment_data[:5]]
+        last_words = [w.get("word", "?") for w in alignment_data[-3:]]
+        logger.info("[AUDIO/SUBTITLE DEBUG] First 5 words: %s", first_words)
+        logger.info("[AUDIO/SUBTITLE DEBUG] Last 3 words: %s", last_words)
+    logger.info("[AUDIO/SUBTITLE DEBUG] clean_response first 100 chars: %s", clean_response[:100] if clean_response else "None")
+    
     subtitles = convert_alignment_to_subtitles(alignment_data)
+    logger.info("[AUDIO/SUBTITLE DEBUG] Generated %d subtitle entries", len(subtitles) if subtitles else 0)
 
     # YIELD STAGE 2: Final update with audio + updated portrait
     progress(1.0, desc="Done!")
@@ -977,7 +1010,7 @@ def on_voice_input(audio_path: str, sess_id, progress=gr.Progress()):
     )
 
     yield [
-        f'<div class="speaker-name" style="padding: 16px 0 !important;">🗣️ {speaker} SPEAKING...</div>',
+        speaker_html,  # Includes secret reveal notification if applicable
         (
             gr.update(value=audio_resp, subtitles=subtitles, autoplay=True)
             if audio_resp

@@ -274,7 +274,69 @@ def create_game_master_agent():
             else:
                 filtered_messages.append(msg)
 
-        logger.info("Invoking LLM with %d messages", len(filtered_messages))
+        logger.info("Invoking LLM with %d messages (before final validation)", len(filtered_messages))
+
+        # FINAL VALIDATION: Ensure every AIMessage with tool_calls has ALL its responses
+        # OpenAI will reject the request if any tool_call_id is missing a response
+        final_messages = []
+        i = 0
+        while i < len(filtered_messages):
+            msg = filtered_messages[i]
+            if isinstance(msg, AIMessage) and hasattr(msg, "tool_calls") and msg.tool_calls:
+                # Get all tool_call_ids from this AIMessage
+                expected_ids = set()
+                for tc in msg.tool_calls:
+                    tc_id = tc.get("id") if isinstance(tc, dict) else getattr(tc, "id", None)
+                    if tc_id:
+                        expected_ids.add(tc_id)
+                
+                # Collect all ToolMessages that immediately follow
+                tool_messages = []
+                j = i + 1
+                while j < len(filtered_messages) and isinstance(filtered_messages[j], ToolMessage):
+                    tool_messages.append(filtered_messages[j])
+                    j += 1
+                
+                # Check which IDs have responses
+                responded_ids = set()
+                for tm in tool_messages:
+                    tc_id = getattr(tm, "tool_call_id", None)
+                    if tc_id:
+                        responded_ids.add(tc_id)
+                
+                missing_ids = expected_ids - responded_ids
+                if missing_ids:
+                    logger.warning(
+                        "FINAL VALIDATION: AIMessage at index %d has %d missing tool responses: %s",
+                        i, len(missing_ids), missing_ids
+                    )
+                    # Add placeholders for missing tool responses
+                    final_messages.append(msg)
+                    for tm in tool_messages:
+                        final_messages.append(tm)
+                    for tc in msg.tool_calls:
+                        tc_id = tc.get("id") if isinstance(tc, dict) else getattr(tc, "id", None)
+                        tc_name = tc.get("name") if isinstance(tc, dict) else getattr(tc, "name", "unknown")
+                        if tc_id in missing_ids:
+                            placeholder = ToolMessage(
+                                content=f"[Tool '{tc_name}' response unavailable]",
+                                tool_call_id=tc_id,
+                                name=tc_name
+                            )
+                            final_messages.append(placeholder)
+                            logger.info("FINAL VALIDATION: Added placeholder for tool_call_id %s", tc_id)
+                    i = j  # Skip past the tool messages we just processed
+                else:
+                    final_messages.append(msg)
+                    for tm in tool_messages:
+                        final_messages.append(tm)
+                    i = j
+            else:
+                final_messages.append(msg)
+                i += 1
+        
+        filtered_messages = final_messages
+        logger.info("After final validation: %d messages", len(filtered_messages))
 
         # Log what we're sending
         for i, msg in enumerate(filtered_messages):
@@ -284,14 +346,21 @@ def create_game_master_agent():
                 logger.info("  [%d] Human: %s...", i, msg.content[:100])
             elif isinstance(msg, AIMessage):
                 has_tools = hasattr(msg, "tool_calls") and msg.tool_calls
+                tc_ids = []
+                if has_tools:
+                    for tc in msg.tool_calls:
+                        tc_id = tc.get("id") if isinstance(tc, dict) else getattr(tc, "id", None)
+                        tc_ids.append(tc_id[:12] + "..." if tc_id and len(tc_id) > 12 else tc_id)
                 logger.info(
-                    "  [%d] AI: %s | tools=%s",
+                    "  [%d] AI: %s | tools=%s ids=%s",
                     i,
-                    msg.content[:80] if msg.content else "(no content)",
+                    msg.content[:60] if msg.content else "(no content)",
                     has_tools,
+                    tc_ids if has_tools else "[]",
                 )
             elif isinstance(msg, ToolMessage):
-                logger.info("  [%d] Tool: %s...", i, msg.content[:80])
+                tc_id = getattr(msg, "tool_call_id", "?")
+                logger.info("  [%d] Tool[%s]: %s...", i, tc_id[:12] + "..." if len(tc_id) > 12 else tc_id, msg.content[:60])
 
         response = llm_with_tools.invoke(filtered_messages)
 

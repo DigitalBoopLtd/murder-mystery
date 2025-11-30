@@ -292,6 +292,21 @@ def create_ui_components() -> dict:
         # ----- DEBUG TAB -----
         with gr.Tab("Debug"):
             with gr.Column(elem_classes="settings-column"):
+                gr.Markdown("### 🔍 Reveal Status")
+                gr.Markdown(
+                    "Shows current emotional state of all suspects and what's needed for location/secret reveals.\n"
+                    "**Use this for targeted testing of reveal mechanics.**"
+                )
+                reveal_status_textbox = gr.Textbox(
+                    label="Suspect States & Reveal Thresholds",
+                    lines=25,
+                    value="Start a game, then click Refresh to see reveal criteria.",
+                    interactive=False,
+                    elem_classes="reveal-status",
+                )
+                refresh_reveal_btn = gr.Button("🔄 Refresh Reveal Status")
+                
+                gr.Markdown("---")
                 gr.Markdown("### ⏱️ Performance Tracker")
                 perf_summary_textbox = gr.Textbox(
                     label="Timing & Parallelization",
@@ -340,6 +355,8 @@ def create_ui_components() -> dict:
         "clues_html_tab": clues_html_tab,
         "accusations_html_tab": accusations_html_tab,
         "notebook_html_tab": notebook_html_tab,
+        "reveal_status_textbox": reveal_status_textbox,
+        "refresh_reveal_btn": refresh_reveal_btn,
         "debug_logs_textbox": debug_logs_textbox,
         "refresh_logs_btn": refresh_logs_btn,
         "perf_summary_textbox": perf_summary_textbox,

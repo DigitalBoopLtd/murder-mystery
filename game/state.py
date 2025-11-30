@@ -124,9 +124,7 @@ class GameState:
         - High trust (>= 65)
         - High nervousness (>= 75)  
         - Catching them in a contradiction
-        - 3+ conversations with that suspect
-        
-        The crime scene (murder_location) is unlocked at game start.
+        - 5+ conversations with that suspect (requires sustained engagement)
         """
         if suspect_name not in self.suspects_talked_to:
             self.suspects_talked_to.append(suspect_name)

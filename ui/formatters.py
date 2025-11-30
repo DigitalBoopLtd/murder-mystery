@@ -73,6 +73,8 @@ def get_suspect_relationships(suspect_name: str) -> List[Tuple[str, str]]:
     
     Returns list of (other_suspect, relationship_type) tuples.
     Relationship types: "accused_by", "alibi_from", "mentioned_by"
+    
+    De-duplicates by speaker to avoid showing the same person multiple times.
     """
     try:
         from services.game_memory import get_game_memory
@@ -81,21 +83,28 @@ def get_suspect_relationships(suspect_name: str) -> List[Tuple[str, str]]:
         if not memory.is_available:
             return []
         
-        cross_refs = memory.search_cross_references(suspect_name, k=3)
-        relationships = []
+        cross_refs = memory.search_cross_references(suspect_name, k=5)
+        
+        # De-duplicate by speaker - keep first (strongest) relationship per person
+        seen_speakers = {}
         
         for speaker, statement in cross_refs:
+            if speaker in seen_speakers:
+                continue  # Skip duplicate speakers
+                
             statement_lower = statement.lower()
             
             # Detect relationship type from statement content
             if any(word in statement_lower for word in ["saw", "with", "together", "alibi"]):
-                relationships.append((speaker, "alibi"))
+                seen_speakers[speaker] = "alibi"
             elif any(word in statement_lower for word in ["suspicious", "lying", "guilty", "killed", "murder"]):
-                relationships.append((speaker, "accused"))
+                seen_speakers[speaker] = "accused"
             else:
-                relationships.append((speaker, "mentioned"))
+                seen_speakers[speaker] = "mentioned"
         
-        return relationships[:2]  # Limit to 2 most relevant
+        # Convert to list and limit to 2 most relevant
+        relationships = [(speaker, rel_type) for speaker, rel_type in seen_speakers.items()]
+        return relationships[:2]
         
     except Exception as e:
         logger.debug("[FORMATTER] Could not get relationships: %s", e)
@@ -143,22 +152,33 @@ def format_suspects_list_html(
     for suspect in mystery.suspects:
         state = suspect_states.get(suspect.name)
         is_talked = suspect.name in talked_to
-        card_class = "suspect-card talked-to" if is_talked else "suspect-card"
+        card_class = "suspect-card talked-to" if is_talked else "suspect-card suspect-card-minimal"
         
-        # Portrait image or placeholder
-        portrait_path = portrait_images.get(suspect.name) or getattr(suspect, 'portrait_path', None)
-        data_uri = None
-        if portrait_path:
-            logger.info("[FORMATTER] Attempting to load portrait for %s from: %s", suspect.name, portrait_path)
-            data_uri = _image_to_data_uri(portrait_path)
+        # Portrait image - ONLY shown after questioning (no placeholder before)
+        # Images are fetched on-demand when you question a suspect
+        portrait_html = ""
+        if is_talked:
+            portrait_path = portrait_images.get(suspect.name) or getattr(suspect, 'portrait_path', None)
+            data_uri = None
+            if portrait_path:
+                logger.info("[FORMATTER] Attempting to load portrait for %s from: %s", suspect.name, portrait_path)
+                data_uri = _image_to_data_uri(portrait_path)
+                if data_uri:
+                    logger.info("[FORMATTER] ✅ Successfully converted portrait for %s to data URI", suspect.name)
+                else:
+                    logger.warning("[FORMATTER] ❌ Failed to convert portrait for %s (path: %s)", suspect.name, portrait_path)
+            
             if data_uri:
-                logger.info("[FORMATTER] ✅ Successfully converted portrait for %s to data URI", suspect.name)
+                portrait_html = f'''
+                <div class="suspect-card-portrait">
+                    <img src="{data_uri}" alt="{suspect.name}" />
+                </div>'''
+            # If talked to but no image yet (still generating), show loading indicator
             else:
-                logger.warning("[FORMATTER] ❌ Failed to convert portrait for %s (path: %s)", suspect.name, portrait_path)
-        
-        # Always render placeholder so card size is stable; overlay image when available
-        placeholder_html = '<div class="suspect-card-portrait-placeholder">🎭</div>'
-        img_html = f'<img src="{data_uri}" alt="{suspect.name}" />' if data_uri else ""
+                portrait_html = '''
+                <div class="suspect-card-portrait">
+                    <div class="suspect-card-portrait-loading">⏳</div>
+                </div>'''
         
         # Status badges (simple chips in header)
         badges = []
@@ -178,76 +198,29 @@ def format_suspects_list_html(
         if is_talked and state:
             trust_pct = state.trust
             nervousness_pct = state.nervousness
-            conversations = len(state.conversations)
-            contradictions = state.contradictions_caught
             
             # Trust meter - green when high, yellow when medium, red when low
             trust_color = "#33ff33" if trust_pct > 60 else "#ffcc00" if trust_pct > 30 else "#ff4444"
             
-            # Nervousness meter - inverse: green when low, red when high (nervous = bad for them)
-            nervousness_color = "#33ff33" if nervousness_pct < 40 else "#ffcc00" if nervousness_pct < 70 else "#ff4444"
-            
-            # Location unlock conditions (for debugging)
-            # Conditions: trust >= 65, nervousness >= 75, contradictions >= 1, conversations >= 3
-            unlock_conditions = []
-            if trust_pct >= 65:
-                unlock_conditions.append("✅ Trust")
-            else:
-                unlock_conditions.append(f"❌ Trust ({trust_pct}/65)")
-            
-            if nervousness_pct >= 75:
-                unlock_conditions.append("✅ Nervous")
-            else:
-                unlock_conditions.append(f"❌ Nerve ({nervousness_pct}/75)")
-            
-            if contradictions >= 1:
-                unlock_conditions.append("✅ Caught")
-            else:
-                unlock_conditions.append("❌ No catch")
-            
-            if conversations >= 3:
-                unlock_conditions.append("✅ Persist")
-            else:
-                unlock_conditions.append(f"❌ Convos ({conversations}/3)")
-            
-            # Check if location would unlock
-            location_hint = getattr(suspect, 'location_hint', None)
-            will_unlock = (trust_pct >= 65 or nervousness_pct >= 75 or contradictions >= 1 or conversations >= 3)
-            unlock_icon = "🔓" if will_unlock else "🔒"
-            unlock_color = "#33ff33" if will_unlock else "#ff6666"
-            
-            # Build unlock debug HTML
-            unlock_debug = f'''
-            <div class="unlock-debug" style="margin-top: 6px; padding: 4px; background: rgba(0,0,0,0.3); border-radius: 4px; font-size: 10px;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-                    <span style="color: {unlock_color};">{unlock_icon} LOCATION</span>
-                    <span style="color: #888;">Convos: {conversations}</span>
-                </div>
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2px; color: #aaa;">
-                    <span style="font-size: 9px;">{unlock_conditions[0]}</span>
-                    <span style="font-size: 9px;">{unlock_conditions[1]}</span>
-                    <span style="font-size: 9px;">{unlock_conditions[2]}</span>
-                    <span style="font-size: 9px;">{unlock_conditions[3]}</span>
-                </div>
-            </div>'''
+            # Nervousness meter - red when high (they're cracking), yellow medium, green low
+            nervousness_color = "#ff4444" if nervousness_pct > 70 else "#ffcc00" if nervousness_pct > 40 else "#888888"
             
             meters_html = f'''
             <div class="suspect-meters">
-                <div class="meter-row">
+                <div class="meter-row" title="Build trust with friendly questions">
                     <span class="meter-label">TRUST</span>
                     <div class="meter-bar">
                         <div class="meter-fill" style="width: {trust_pct}%; background: {trust_color};"></div>
                     </div>
                     <span class="meter-value">{trust_pct}%</span>
                 </div>
-                <div class="meter-row">
+                <div class="meter-row" title="Apply pressure to make them nervous">
                     <span class="meter-label">NERVE</span>
                     <div class="meter-bar">
                         <div class="meter-fill" style="width: {nervousness_pct}%; background: {nervousness_color};"></div>
                     </div>
                     <span class="meter-value">{nervousness_pct}%</span>
                 </div>
-                {unlock_debug}
             </div>'''
             
             # Contradiction badge (larger, under name)
@@ -275,30 +248,29 @@ def format_suspects_list_html(
                     {"".join(labels)}
                 </div>'''
         
-        # Motive/secret - only revealed when unlock conditions are met!
-        # Same conditions as location reveals: trust >= 65, nervousness >= 75, contradictions >= 1, or 3+ convos
+        # Motive/secret - revealed through interrogation (tracked via secret_revealed flag)
+        # Unlock conditions: relevant questions, emotional breakthroughs, or random chance
+        # Murderer is much harder to crack!
         motive_html = ""
         if state:
-            secret_unlocked = (
-                state.trust >= 65 or 
-                state.nervousness >= 75 or 
-                state.contradictions_caught >= 1 or 
-                len(state.conversations) >= 3
-            )
-            if secret_unlocked:
+            if state.secret_revealed:
                 motive_html = f'<div class="suspect-motive"><strong>🔓 Secret:</strong> <em>{suspect.secret}</em></div>'
             else:
-                motive_html = f'<div class="suspect-motive" style="color: #666;"><strong>🔒 Secret:</strong> <em>Keep questioning to uncover...</em></div>'
+                # Show progress hints based on emotional state
+                if state.trust >= 50 or state.nervousness >= 60:
+                    hint = "They're starting to open up... keep probing."
+                elif len(state.conversations) >= 3:
+                    hint = "Ask about motives, relationships, or past events..."
+                else:
+                    hint = "Keep questioning to uncover..."
+                motive_html = f'<div class="suspect-motive" style="color: #666;"><strong>🔒 Secret:</strong> <em>{hint}</em></div>'
         else:
             # Not talked to yet - show locked
             motive_html = f'<div class="suspect-motive" style="color: #666;"><strong>🔒 Secret:</strong> <em>Talk to them to learn more...</em></div>'
         
         cards.append(f'''
         <div class="{card_class}" title="Click to see details">
-            <div class="suspect-card-portrait">
-                {placeholder_html}
-                {img_html}
-            </div>
+            {portrait_html}
             <div class="suspect-card-info">
                 <div class="suspect-card-name">{suspect.name}{contradiction_badge}</div>
                 <div class="suspect-card-role">{suspect.role}</div>
@@ -332,7 +304,14 @@ def format_locations_html(
     """
     if not mystery:
         if loading:
-            return '<em style="color: var(--accent-gold);">🔍 Mapping the crime scene...</em>'
+            # Show locked state from the start - locations are earned through interrogation
+            return '''
+            <div class="locations-empty">
+                <div class="locations-icon">🔒</div>
+                <div class="locations-message">No locations unlocked yet</div>
+                <div class="locations-hint">Build trust, apply pressure, or catch contradictions — suspects reveal locations when they're ready to talk</div>
+            </div>
+            '''
         return "<em>Start a game to see locations</em>"
 
     searched = searched or []

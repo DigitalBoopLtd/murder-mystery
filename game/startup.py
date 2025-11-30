@@ -23,7 +23,7 @@ from game.mystery_generator import (
     generate_mystery_premise,
     prepare_game_prompt,
 )
-from game.media import _prewarm_suspect_portraits, _prewarm_scene_images
+from game.media import _prewarm_scene_images
 from mystery_config import create_validated_config
 from services.agent import create_game_master_agent, process_message
 from services.tts_service import text_to_speech
@@ -458,13 +458,10 @@ system or background tasks. Stay purely in-world."""
             
             bg_state.mystery = full_mystery
             
-            # ========== UNLOCK CRIME SCENE ==========
-            # The murder location is always accessible from the start.
-            # Other locations are unlocked through suspect interrogation.
-            if full_mystery.murder_method and full_mystery.murder_method.location_of_murder:
-                crime_scene = full_mystery.murder_method.location_of_murder
-                bg_state.unlock_location(crime_scene)
-                logger.info("[BG] 🔓 Crime scene unlocked at start: %s", crime_scene)
+            # NOTE: NO locations are unlocked at start.
+            # All locations must be earned through suspect interrogation.
+            # When a suspect's trust >= 65, nervousness >= 75, you catch them
+            # in a contradiction, or have 3+ conversations, they reveal a location.
             
             # NOTE: Location descriptions are NO LONGER pre-generated here.
             # The describe_scene_for_image tool generates clue-focused descriptions
@@ -479,19 +476,18 @@ system or background tasks. Stay purely in-world."""
             perf.end("bg_full_mystery", details=f"{len(full_mystery.suspects)} suspects, {len(full_mystery.clues)} clues")
             logger.info("[BG] Full mystery is ready for session %s", sess_id)
             
-            # ========== PREWARM IMAGES IN BACKGROUND ==========
-            # This runs AFTER mystery is ready, generating all images in background
-            # Portraits AND scene images run in parallel for faster startup
-            logger.info("[BG] Starting image prewarming for session %s...", sess_id)
-            perf.start("bg_prewarm_images", is_parallel=True, parallel_count=1, details="portraits + scenes")
+            # ========== PREWARM SCENE IMAGES IN BACKGROUND ==========
+            # Portraits are loaded on-demand when you question each suspect.
+            # This keeps the initial suspects list fast (just names/info, no images).
+            logger.info("[BG] Starting scene image prewarming for session %s...", sess_id)
+            perf.start("bg_prewarm_images", is_parallel=True, parallel_count=1, details="scenes only")
             try:
-                # Prewarm all suspect portraits (runs 3 workers in parallel)
-                _prewarm_suspect_portraits(sess_id, full_mystery)
-                # Prewarm scene images for all clue locations (runs 3 workers in parallel)
+                # Prewarm scene images for all clue locations (3 parallel workers)
                 # Uses clue info for focused images - eliminates ~4-5s wait during gameplay
+                # NOTE: Suspect portraits are NOT prewarmed - they load when you question someone
                 _prewarm_scene_images(sess_id, full_mystery)
                 num_locations = len(set(c.location for c in full_mystery.clues)) if full_mystery.clues else 0
-                perf.end("bg_prewarm_images", details=f"{len(full_mystery.suspects)} portraits + {num_locations} scenes")
+                perf.end("bg_prewarm_images", details=f"{num_locations} scenes (portraits on-demand)")
             except Exception as prewarm_err:  # noqa: BLE001
                 logger.error("[BG] Error prewarming images: %s", prewarm_err)
                 perf.end("bg_prewarm_images", status="error", details=str(prewarm_err))

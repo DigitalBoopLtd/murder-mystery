@@ -45,6 +45,125 @@ def get_ui_logs() -> str:
     return "\n".join(UI_LOG_BUFFER[-MAX_UI_LOG_LINES:])
 
 
+def get_reveal_status(session_id: str = None) -> str:
+    """Get detailed reveal criteria status for all suspects.
+    
+    Shows current emotional state and what's needed for location/secret reveals.
+    """
+    from game.state_manager import get_or_create_state
+    
+    if not session_id:
+        return "No session ID provided. Start a game first."
+    
+    state = get_or_create_state(session_id)
+    
+    if not state or not state.mystery:
+        return "No active game. Start a mystery first."
+    
+    lines = []
+    lines.append("=" * 60)
+    lines.append("🔍 REVEAL STATUS - Current State & Thresholds")
+    lines.append("=" * 60)
+    lines.append("")
+    
+    for suspect in state.mystery.suspects:
+        is_guilty = suspect.isGuilty
+        suspect_state = state.get_suspect_state(suspect.name)
+        
+        lines.append(f"{'🔴' if is_guilty else '⚪'} {suspect.name} {'(MURDERER)' if is_guilty else ''}")
+        lines.append("-" * 40)
+        
+        # Current stats
+        trust = suspect_state.trust
+        nervousness = suspect_state.nervousness
+        contradictions = suspect_state.contradictions_caught
+        convos = len(suspect_state.conversations)
+        secret_revealed = suspect_state.secret_revealed
+        
+        lines.append(f"  Trust:         {trust}%")
+        lines.append(f"  Nervousness:   {nervousness}%")
+        lines.append(f"  Contradictions: {contradictions}")
+        lines.append(f"  Conversations: {convos}")
+        lines.append("")
+        
+        # Location reveal criteria (single path: TRUST threshold)
+        lines.append("  📍 LOCATION REVEAL:")
+        if suspect.location_hint:
+            location_unlocked = suspect.location_hint in state.unlocked_locations
+            if location_unlocked:
+                lines.append(f"     ✅ ALREADY UNLOCKED: {suspect.location_hint}")
+            else:
+                if is_guilty:
+                    threshold = 85
+                    lines.append(f"     Location: {suspect.location_hint}")
+                    lines.append(f"     Need: trust ≥ {threshold}% (have {trust}%) [MURDERER]")
+                    if trust >= threshold:
+                        lines.append("     → ✅ WOULD REVEAL NOW (trust high enough)")
+                    else:
+                        lines.append(f"     → ❌ Need: trust +{threshold - trust}%")
+                else:
+                    threshold = 70
+                    lines.append(f"     Location: {suspect.location_hint}")
+                    lines.append(f"     Need: trust ≥ {threshold}% (have {trust}%)")
+                    if trust >= threshold:
+                        lines.append("     → ✅ WOULD REVEAL NOW (trust high enough)")
+                    else:
+                        lines.append(f"     → ❌ Need: trust +{threshold - trust}%")
+        else:
+            lines.append("     (No location hint)")
+        lines.append("")
+        
+        # Secret reveal criteria (single path)
+        lines.append("  🔓 SECRET REVEAL:")
+        if secret_revealed:
+            lines.append(f"     ✅ ALREADY REVEALED: {suspect.secret[:60]}...")
+        else:
+            lines.append(f"     Secret: {suspect.secret[:60]}...")
+            if is_guilty:
+                nerv_threshold = 90
+                needed_contradictions = 2
+                lines.append(f"     Need: nervousness ≥ {nerv_threshold}% AND contradictions ≥ {needed_contradictions}")
+                lines.append(f"     Current: nervousness={nervousness}%, contradictions={contradictions}")
+                if nervousness >= nerv_threshold and contradictions >= needed_contradictions:
+                    lines.append("     → ✅ WOULD REVEAL NOW (murderer cracked)")
+                else:
+                    needs = []
+                    if nervousness < nerv_threshold:
+                        needs.append(f"nervousness +{nerv_threshold - nervousness}%")
+                    if contradictions < needed_contradictions:
+                        needs.append(f"contradictions +{needed_contradictions - contradictions}")
+                    lines.append(f"     → ❌ Need: {', '.join(needs)}")
+            else:
+                trust_threshold = 60
+                lines.append(f"     Need: trust ≥ {trust_threshold}% AND a probing question")
+                lines.append(f"     Current: trust={trust}%")
+                if trust >= trust_threshold:
+                    lines.append("     → ✅ Trust high enough - ask a PROBING question (why/motive/secret/truth/etc.)")
+                else:
+                    lines.append(f"     → ❌ Need: trust +{trust_threshold - trust}% (and a probing question)")
+        
+        lines.append("")
+        lines.append("")
+    
+    # Add probing keywords reference
+    lines.append("=" * 60)
+    lines.append("📝 PROBING QUESTION KEYWORDS")
+    lines.append("(Using these with trust ≥ 60% can trigger secret reveal)")
+    lines.append("-" * 40)
+    lines.append("why, motive, reason, relationship, feel about,")
+    lines.append("hate, love, angry, jealous, money, inherit,")
+    lines.append("affair, secret, hiding, truth, really")
+    lines.append("")
+    lines.append("=" * 60)
+    lines.append("💡 TIPS FOR TESTING")
+    lines.append("-" * 40)
+    lines.append("• Friendly words increase trust: help, understand, sorry, please")
+    lines.append("• Aggressive words increase nervousness: liar, murder, guilty, confess")
+    lines.append("• Confrontation increases nervousness: 'but you said', 'contradict'")
+    
+    return "\n".join(lines)
+
+
 def create_favicon() -> str:
     """Create a female detective favicon for the browser tab.
 

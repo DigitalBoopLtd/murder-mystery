@@ -401,42 +401,152 @@ def generate_turn_media(
     def _portrait_task():
         if not portrait_suspect:
             return None
+        
         mystery_setting = state.mystery.setting if state.mystery else ""
-        logger.info("[GAME] Parallel: generating portrait for %s", speaker)
         perf.start(f"parallel_portrait_{speaker}", details="foreground parallel")
-        portrait_path = smart_generate_portrait(portrait_suspect, mystery_setting)
-        if portrait_path:
-            if session_id not in mystery_images:
-                mystery_images[session_id] = {}
-            mystery_images[session_id][speaker] = portrait_path
-            perf.end(f"parallel_portrait_{speaker}", details="success")
-            logger.info("[GAME] Parallel: portrait ready for %s", speaker)
-        else:
-            perf.end(f"parallel_portrait_{speaker}", status="error", details="no path")
-        return portrait_path
+        
+        # =====================================================================
+        # WAIT/RETRY LOGIC FOR PORTRAIT GENERATION
+        # 1. Check if already exists (background thread may have finished)
+        # 2. Wait up to 10s for background thread to complete
+        # 3. If still not ready, generate with up to 2 retries
+        # =====================================================================
+        
+        import time
+        
+        MAX_WAIT_SECONDS = 10
+        POLL_INTERVAL = 0.5
+        MAX_RETRIES = 2
+        
+        # Check if portrait already exists
+        session_imgs = mystery_images.get(session_id, {})
+        if speaker in session_imgs:
+            portrait_path = session_imgs[speaker]
+            logger.info("[GAME] ✅ Portrait already ready for %s (from background)", speaker)
+            perf.end(f"parallel_portrait_{speaker}", details="already_ready")
+            return portrait_path
+        
+        # Wait for background thread (it was started in run_action_logic)
+        logger.info("[GAME] ⏳ Waiting up to %ds for portrait background thread: %s", MAX_WAIT_SECONDS, speaker)
+        wait_start = time.time()
+        while time.time() - wait_start < MAX_WAIT_SECONDS:
+            session_imgs = mystery_images.get(session_id, {})
+            if speaker in session_imgs:
+                portrait_path = session_imgs[speaker]
+                wait_time = time.time() - wait_start
+                logger.info("[GAME] ✅ Portrait ready after %.1fs wait: %s", wait_time, speaker)
+                perf.end(f"parallel_portrait_{speaker}", details=f"waited_{wait_time:.1f}s")
+                return portrait_path
+            time.sleep(POLL_INTERVAL)
+        
+        logger.warning("[GAME] ⚠️ Background portrait not ready after %ds, generating now: %s", MAX_WAIT_SECONDS, speaker)
+        
+        # Generate ourselves with retries
+        portrait_path = None
+        for attempt in range(1, MAX_RETRIES + 1):
+            try:
+                logger.info("[GAME] 🔄 Portrait generation attempt %d/%d for %s", attempt, MAX_RETRIES, speaker)
+                portrait_path = smart_generate_portrait(portrait_suspect, mystery_setting)
+                if portrait_path:
+                    if session_id not in mystery_images:
+                        mystery_images[session_id] = {}
+                    mystery_images[session_id][speaker] = portrait_path
+                    logger.info("[GAME] ✅ Portrait generated on attempt %d: %s", attempt, speaker)
+                    perf.end(f"parallel_portrait_{speaker}", details=f"generated_attempt_{attempt}")
+                    return portrait_path
+                else:
+                    logger.warning("[GAME] ❌ Portrait generation returned None on attempt %d: %s", attempt, speaker)
+            except Exception as e:
+                logger.error("[GAME] ❌ Portrait generation error on attempt %d: %s - %s", attempt, speaker, e)
+            
+            if attempt < MAX_RETRIES:
+                logger.info("[GAME] Retrying portrait in 1s...")
+                time.sleep(1)
+        
+        logger.error("[GAME] ❌ Portrait generation failed after %d attempts: %s", MAX_RETRIES, speaker)
+        perf.end(f"parallel_portrait_{speaker}", status="error", details=f"failed_after_{MAX_RETRIES}_attempts")
+        return None
     
     def _scene_task():
         if not scene_info:
             return None
+        
         location, normalized_location, mystery_setting, context_text = scene_info
-        logger.info("[GAME] Parallel: generating scene for %s", normalized_location)
-        perf.start(f"parallel_scene_{normalized_location[:15]}", details="foreground parallel")
-        scene_path = smart_generate_scene(
-            location=normalized_location,
-            setting=mystery_setting,
-            mood="mysterious",
-            context=context_text,
-        )
-        if scene_path:
-            if session_id not in mystery_images:
-                mystery_images[session_id] = {}
-            mystery_images[session_id][normalized_location] = scene_path
-            if normalized_location != location:
-                mystery_images[session_id][location] = scene_path
-            perf.end(f"parallel_scene_{normalized_location[:15]}", details="success")
-            logger.info("[GAME] Parallel: scene ready for %s", normalized_location)
+        safe_loc = normalized_location[:15].replace(" ", "_")
+        perf.start(f"parallel_scene_{safe_loc}", details="foreground parallel")
+        
+        # =====================================================================
+        # WAIT/RETRY LOGIC FOR SCENE GENERATION
+        # 1. Check if already exists (prewarmed in background)
+        # 2. Wait up to 8s for prewarm to complete
+        # 3. If still not ready, generate with up to 2 retries
+        # =====================================================================
+        
+        import time
+        
+        MAX_WAIT_SECONDS = 8
+        POLL_INTERVAL = 0.5
+        MAX_RETRIES = 2
+        
+        # Check if scene already exists (from prewarm)
+        session_imgs = mystery_images.get(session_id, {})
+        if normalized_location in session_imgs:
+            scene_path = session_imgs[normalized_location]
+            logger.info("[GAME] ✅ Scene already ready for %s (from prewarm)", normalized_location)
+            perf.end(f"parallel_scene_{safe_loc}", details="already_ready")
             return scene_path
-        perf.end(f"parallel_scene_{normalized_location[:15]}", status="error", details="failed")
+        if location in session_imgs:
+            scene_path = session_imgs[location]
+            logger.info("[GAME] ✅ Scene already ready for %s (from prewarm)", location)
+            perf.end(f"parallel_scene_{safe_loc}", details="already_ready")
+            return scene_path
+        
+        # Wait for prewarm thread
+        logger.info("[GAME] ⏳ Waiting up to %ds for scene prewarm: %s", MAX_WAIT_SECONDS, normalized_location)
+        wait_start = time.time()
+        while time.time() - wait_start < MAX_WAIT_SECONDS:
+            session_imgs = mystery_images.get(session_id, {})
+            if normalized_location in session_imgs or location in session_imgs:
+                scene_path = session_imgs.get(normalized_location) or session_imgs.get(location)
+                wait_time = time.time() - wait_start
+                logger.info("[GAME] ✅ Scene ready after %.1fs wait: %s", wait_time, normalized_location)
+                perf.end(f"parallel_scene_{safe_loc}", details=f"waited_{wait_time:.1f}s")
+                return scene_path
+            time.sleep(POLL_INTERVAL)
+        
+        logger.warning("[GAME] ⚠️ Scene prewarm not ready after %ds, generating now: %s", MAX_WAIT_SECONDS, normalized_location)
+        
+        # Generate ourselves with retries
+        scene_path = None
+        for attempt in range(1, MAX_RETRIES + 1):
+            try:
+                logger.info("[GAME] 🔄 Scene generation attempt %d/%d for %s", attempt, MAX_RETRIES, normalized_location)
+                scene_path = smart_generate_scene(
+                    location=normalized_location,
+                    setting=mystery_setting,
+                    mood="mysterious",
+                    context=context_text,
+                )
+                if scene_path:
+                    if session_id not in mystery_images:
+                        mystery_images[session_id] = {}
+                    mystery_images[session_id][normalized_location] = scene_path
+                    if normalized_location != location:
+                        mystery_images[session_id][location] = scene_path
+                    logger.info("[GAME] ✅ Scene generated on attempt %d: %s", attempt, normalized_location)
+                    perf.end(f"parallel_scene_{safe_loc}", details=f"generated_attempt_{attempt}")
+                    return scene_path
+                else:
+                    logger.warning("[GAME] ❌ Scene generation returned None on attempt %d: %s", attempt, normalized_location)
+            except Exception as e:
+                logger.error("[GAME] ❌ Scene generation error on attempt %d: %s - %s", attempt, normalized_location, e)
+            
+            if attempt < MAX_RETRIES:
+                logger.info("[GAME] Retrying scene in 1s...")
+                time.sleep(1)
+        
+        logger.error("[GAME] ❌ Scene generation failed after %d attempts: %s", MAX_RETRIES, normalized_location)
+        perf.end(f"parallel_scene_{safe_loc}", status="error", details=f"failed_after_{MAX_RETRIES}_attempts")
         return None
     
     # Run all tasks in parallel

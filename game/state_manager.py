@@ -61,6 +61,8 @@ class ToolOutputStore:
     location_searched: Optional[str] = None
     clue_found: Optional[str] = None
     location_unlocked: Optional[str] = None  # Location revealed by suspect interrogation
+    secret_revealed: Optional[str] = None  # Secret/motive revealed by suspect (for UI notification)
+    secret_revealed_by: Optional[str] = None  # Name of suspect who revealed the secret
     audio_path: Optional[str] = None
     audio_alignment_data: Optional[List[Dict]] = None  # Word timestamps for subtitles
     
@@ -72,6 +74,8 @@ class ToolOutputStore:
         self.location_searched = None
         self.clue_found = None
         self.location_unlocked = None
+        self.secret_revealed = None
+        self.secret_revealed_by = None
         self.audio_path = None
         self.audio_alignment_data = None
     

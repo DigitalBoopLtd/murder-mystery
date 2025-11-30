@@ -1,15 +1,13 @@
 """Image generation service for character portraits and scene art.
 
-Uses HuggingFace Inference API with fal-ai provider for fast generation.
+Uses MCP (Model Context Protocol) server for image generation.
 Styled to look like 90s point-and-click adventure games (Monkey Island, Day of the Tentacle, Gabriel Knight, etc.)
 
-Supports two modes:
-1. Direct mode (default): Uses prompt_enhancer directly + HuggingFace API
-2. MCP mode (USE_MCP=true): Uses MCP server for parallel image generation
+Images are generated on-demand:
+- Scene images: Prewarmed in background after mystery loads
+- Suspect portraits: Generated when you question each suspect
 
-Prompts are enhanced using LLM (GPT-4o-mini) to generate detailed visual descriptions
-optimized for Z-Image-Turbo, which works best with long, detailed prompts and ignores
-negative prompts (guidance_scale=0.0).
+Prompts are enhanced using LLM (GPT-4o-mini) to generate detailed visual descriptions.
 """
 
 import os
@@ -21,7 +19,6 @@ import asyncio
 from typing import Optional, Dict
 from dataclasses import dataclass
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from huggingface_hub import InferenceClient
 
 from services.prompt_enhancer import (
     enhance_character_prompt,
@@ -29,28 +26,27 @@ from services.prompt_enhancer import (
     enhance_title_card_prompt,
 )
 
-# Check if MCP mode is enabled
-USE_MCP = os.getenv("USE_MCP", "false").lower() == "true"
-
-# Initialize MCP variables (will be set if MCP is available)
+# Initialize MCP - this is the only image generation path
 MCP_AVAILABLE = False
 ImageAgent = None
 mcp_generate_portrait = None
 mcp_generate_scene = None
 
-if USE_MCP:
-    try:
-        from services.image_agent import (
-            ImageAgent as _ImageAgent,
-            generate_portrait_sync as _mcp_generate_portrait,
-            generate_scene_sync as _mcp_generate_scene,
-        )
-        ImageAgent = _ImageAgent
-        mcp_generate_portrait = _mcp_generate_portrait
-        mcp_generate_scene = _mcp_generate_scene
-        MCP_AVAILABLE = True
-    except ImportError:
-        USE_MCP = False
+try:
+    from services.image_agent import (
+        ImageAgent as _ImageAgent,
+        generate_portrait_sync as _mcp_generate_portrait,
+        generate_scene_sync as _mcp_generate_scene,
+        generate_title_card_sync as _mcp_generate_title_card,
+    )
+    ImageAgent = _ImageAgent
+    mcp_generate_portrait = _mcp_generate_portrait
+    mcp_generate_scene = _mcp_generate_scene
+    mcp_generate_title_card = _mcp_generate_title_card
+    MCP_AVAILABLE = True
+except ImportError as e:
+    mcp_generate_title_card = None
+    logging.warning("⚠️ MCP image agent not available: %s", e)
 
 logger = logging.getLogger(__name__)
 
@@ -361,35 +357,33 @@ def generate_portrait_on_demand(suspect, mystery_setting: str) -> Optional[str]:
 
 
 def generate_title_card_on_demand(mystery, fast_mode: bool = False) -> Optional[str]:
-    """Generate an opening scene image for the mystery on-demand.
+    """Generate an opening scene image for the mystery via MCP.
     
     Args:
         mystery: Mystery object with victim and setting
-        fast_mode: If True, skip LLM prompt enhancement (~6s faster)
+        fast_mode: Ignored (kept for API compatibility)
         
     Returns:
         Path to generated image, or None on error
     """
-    service = get_image_service()
-    if not service.is_available:
-        logger.warning("Image service not available for opening scene generation")
+    if not MCP_AVAILABLE or mcp_generate_title_card is None:
+        logger.error("❌ Cannot generate title card - MCP not available")
         return None
     
     # Extract victim info
     victim_name = getattr(mystery.victim, "name", None) if hasattr(mystery, "victim") else None
     victim_background = getattr(mystery.victim, "background", None) if hasattr(mystery, "victim") else None
     
-    logger.info("Generating opening scene image on-demand (fast_mode=%s, victim=%s)...", fast_mode, victim_name)
-    path = service.generate_title_card(
-        title=f"The Murder of {mystery.victim.name}",
+    logger.info("🔌 [MCP] Generating title card for %s...", victim_name)
+    path = mcp_generate_title_card(
+        title=f"The Murder of {mystery.victim.name}" if hasattr(mystery, "victim") else "Murder Mystery",
         setting=mystery.setting,
-        victim_name=victim_name,
-        victim_background=victim_background,
-        fast_mode=fast_mode,
+        victim_name=victim_name or "",
+        victim_background=victim_background or "",
     )
     
     if path:
-        logger.info("✓ Generated opening scene image on-demand")
+        logger.info("✓ Generated title card via MCP")
     
     return path
 
@@ -643,16 +637,16 @@ def generate_scene_mcp(
 
 
 # =============================================================================
-# UNIFIED API (automatically chooses MCP or direct based on USE_MCP)
+# IMAGE GENERATION API (MCP only)
 # =============================================================================
 
 def smart_generate_portrait(suspect, mystery_setting: str) -> Optional[str]:
-    """Generate portrait using MCP if available, otherwise direct."""
-    if USE_MCP and MCP_AVAILABLE:
-        logger.info("🔌 [MCP] Portrait: %s (via MCP server)", suspect.name)
-        return generate_portrait_mcp(suspect, mystery_setting)
-    logger.info("🎨 [DIRECT] Portrait: %s (via HuggingFace API)", suspect.name)
-    return generate_portrait_on_demand(suspect, mystery_setting)
+    """Generate portrait using MCP server."""
+    if not MCP_AVAILABLE:
+        logger.error("❌ Cannot generate portrait - MCP not available")
+        return None
+    logger.info("🔌 [MCP] Portrait: %s", suspect.name)
+    return generate_portrait_mcp(suspect, mystery_setting)
 
 
 def smart_generate_scene(
@@ -661,27 +655,25 @@ def smart_generate_scene(
     mood: str = "mysterious",
     context: str = ""
 ) -> Optional[str]:
-    """Generate scene using MCP if available, otherwise direct."""
-    if USE_MCP and MCP_AVAILABLE:
-        logger.info("🔌 [MCP] Scene: %s (via MCP server)", location)
-        return generate_scene_mcp(location, setting, mood, context)
-    logger.info("🎨 [DIRECT] Scene: %s (via HuggingFace API)", location)
-    service = get_image_service()
-    return service.generate_scene(location, setting, mood, context)
+    """Generate scene using MCP server."""
+    if not MCP_AVAILABLE:
+        logger.error("❌ Cannot generate scene - MCP not available")
+        return None
+    logger.info("🔌 [MCP] Scene: %s", location)
+    return generate_scene_mcp(location, setting, mood, context)
 
 
 def smart_generate_all(mystery) -> Dict[str, str]:
-    """Generate all mystery images using MCP if available, otherwise direct."""
-    if USE_MCP and MCP_AVAILABLE:
-        logger.info("🔌 [MCP] Generating all images (via MCP server)")
-        return generate_all_mystery_images_mcp(mystery)
-    logger.info("🎨 [DIRECT] Generating all images (via HuggingFace API)")
-    return generate_all_mystery_images(mystery, generate_portraits=True, generate_title=True)
+    """Generate all mystery images using MCP server."""
+    if not MCP_AVAILABLE:
+        logger.error("❌ Cannot generate images - MCP not available")
+        return {}
+    logger.info("🔌 [MCP] Generating all images")
+    return generate_all_mystery_images_mcp(mystery)
 
 
 # Log MCP status on module load
-if USE_MCP:
-    if MCP_AVAILABLE:
-        logger.info("🔌 MCP mode ENABLED - Using MCP server for image generation")
-    else:
-        logger.warning("⚠️ USE_MCP=true but MCP client not available, falling back to direct mode")
+if MCP_AVAILABLE:
+    logging.info("🔌 MCP image generation ready")
+else:
+    logging.warning("⚠️ MCP not available - image generation will not work")

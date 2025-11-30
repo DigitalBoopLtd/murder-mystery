@@ -27,7 +27,7 @@ except ImportError:
 from services.tts_service import init_tts_service
 from services.perf_tracker import perf, get_perf_summary
 from game.state_manager import init_game_handlers, mystery_images
-from app.utils import setup_ui_logging, get_ui_logs
+from app.utils import setup_ui_logging, get_ui_logs, get_reveal_status
 from app.ui_components import create_ui_components
 from app.event_handlers import (
     on_config_generic_change,
@@ -166,6 +166,8 @@ def create_app():
         clues_html_tab = components["clues_html_tab"]
         accusations_html_tab = components["accusations_html_tab"]
         notebook_html_tab = components["notebook_html_tab"]
+        reveal_status_textbox = components["reveal_status_textbox"]
+        refresh_reveal_btn = components["refresh_reveal_btn"]
         debug_logs_textbox = components["debug_logs_textbox"]
         refresh_logs_btn = components["refresh_logs_btn"]
         perf_summary_textbox = components["perf_summary_textbox"]
@@ -322,6 +324,13 @@ def create_app():
             outputs=[voice_input],
         )
 
+        # Debug tab - refresh reveal status
+        getattr(refresh_reveal_btn, "click")(
+            fn=get_reveal_status,
+            inputs=[session_id],
+            outputs=[reveal_status_textbox],
+        )
+        
         # Debug tab - refresh logs
         getattr(refresh_logs_btn, "click")(
             fn=get_ui_logs,

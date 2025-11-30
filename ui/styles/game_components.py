@@ -639,6 +639,33 @@ CSS_GAME_COMPONENTS = """/* ========== BASE PANEL TITLE (fallback) ========== */
     visibility: hidden;
 }
 
+/* Minimal card style - no portrait area until questioned */
+.suspect-card-minimal {
+    min-height: auto;
+}
+
+.suspect-card-minimal .suspect-card-info {
+    padding: 16px;
+}
+
+/* Loading indicator while portrait generates */
+.suspect-card-portrait-loading {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 32px;
+    color: var(--terminal-green-muted);
+    background: linear-gradient(135deg, rgba(0, 30, 0, 0.6) 0%, rgba(0, 20, 0, 0.8) 100%);
+    animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 0.5; }
+    50% { opacity: 1; }
+}
+
 .suspect-card-info {
     flex: 1;
     min-width: 0;

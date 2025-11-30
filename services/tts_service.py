@@ -186,6 +186,10 @@ def text_to_speech_with_timestamps(
 
     voice_id = voice_id or GAME_MASTER_VOICE_ID
     enhanced_text = enhance_text_for_speech(text)
+    
+    # DEBUG: Log what text is being sent to TTS
+    logger.info("[TTS DEBUG] Original text first 100 chars: %s", text[:100])
+    logger.info("[TTS DEBUG] Enhanced text first 100 chars: %s", enhanced_text[:100])
 
     # Create persistent audio directory
     audio_dir = os.path.join(tempfile.gettempdir(), "murder_mystery_audio")

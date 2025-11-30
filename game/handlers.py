@@ -361,6 +361,7 @@ def process_player_action(
     # Assign voice on-demand before processing if talking to a suspect
     # This ensures the system prompt includes the voice_id for the tool
     suspect_to_assign = None
+    is_follow_up = False  # Track if this is a follow-up to enable better context
     
     if action_type == "talk" and target:
         # Direct talk action - target is the suspect name
@@ -372,41 +373,77 @@ def process_player_action(
         # Custom message - first try heuristic suspect matching (fast, offline)
         message_lower = custom_message.lower()
         message_words = set(message_lower.split())
-
-        for s in state.mystery.suspects:
-            name_parts = s.name.lower().split()
-
-            # Check if full name is in message
-            if s.name.lower() in message_lower:
-                suspect_to_assign = s
-                logger.info("Detected suspect mention (full name): %s", s.name)
-                break
-
-            # Check if 2+ consecutive name parts appear
-            for i in range(len(name_parts) - 1):
-                partial_name = f"{name_parts[i]} {name_parts[i+1]}"
-                if partial_name in message_lower:
-                    suspect_to_assign = s
-                    logger.info("Detected suspect mention (partial name): %s", s.name)
-                    break
-            if suspect_to_assign:
-                break
-
-            # Check if any significant name part (3+ chars) matches a word in the message
-            # This handles cases like "Ada" matching "Ada Syntax"
-            for part in name_parts:
-                if len(part) >= 3:  # Only match meaningful name parts
-                    # Check exact word match
-                    if part in message_words:
-                        suspect_to_assign = s
-                        logger.info(
-                            "Detected suspect mention (name part '%s'): %s",
-                            part,
-                            s.name,
-                        )
+        
+        # EARLY FOLLOW-UP DETECTION: Check for second-person pronouns or follow-up patterns
+        # This can skip the expensive AI resolver call
+        follow_up_indicators = ["you", "you're", "your", "yourself"]
+        follow_up_phrases = ["tell me more", "what about", "why did you", "what do you", 
+                           "how did you", "where were you", "go on", "continue", "and then",
+                           "really", "are you sure", "explain", "what else"]
+        
+        has_second_person = any(word in message_words for word in follow_up_indicators)
+        has_follow_up_phrase = any(phrase in message_lower for phrase in follow_up_phrases)
+        
+        if has_second_person or has_follow_up_phrase:
+            last_speaker = _get_last_suspect_speaker(state)
+            if last_speaker:
+                # Check if any OTHER suspect is explicitly mentioned
+                explicit_other = False
+                for s in state.mystery.suspects:
+                    if s.name == last_speaker:
+                        continue
+                    if s.name.lower() in message_lower:
+                        explicit_other = True
                         break
-            if suspect_to_assign:
-                break
+                
+                if not explicit_other:
+                    for s in state.mystery.suspects:
+                        if s.name == last_speaker:
+                            suspect_to_assign = s
+                            is_follow_up = True
+                            logger.info(
+                                "🔄 [EARLY FOLLOW-UP] Detected via %s - targeting: %s",
+                                "second-person pronoun" if has_second_person else "follow-up phrase",
+                                last_speaker,
+                            )
+                            break
+
+        # Only continue with name matching if early follow-up detection didn't find anything
+        if not suspect_to_assign:
+            for s in state.mystery.suspects:
+                name_parts = s.name.lower().split()
+
+                # Check if full name is in message
+                if s.name.lower() in message_lower:
+                    suspect_to_assign = s
+                    logger.info("Detected suspect mention (full name): %s", s.name)
+                    break
+
+                # Check if 2+ consecutive name parts appear
+                for i in range(len(name_parts) - 1):
+                    partial_name = f"{name_parts[i]} {name_parts[i+1]}"
+                    if partial_name in message_lower:
+                        suspect_to_assign = s
+                        logger.info("Detected suspect mention (partial name): %s", s.name)
+                        break
+                if suspect_to_assign:
+                    break
+
+                # Check if any significant name part (3+ chars) matches a word in the message
+                # This handles cases like "Ada" matching "Ada Syntax"
+                for part in name_parts:
+                    if len(part) >= 3:  # Only match meaningful name parts
+                        # Check exact word match
+                        if part in message_words:
+                            suspect_to_assign = s
+                            logger.info(
+                                "Detected suspect mention (name part '%s'): %s",
+                                part,
+                                s.name,
+                            )
+                            break
+                if suspect_to_assign:
+                    break
 
         # Hybrid fallback: if heuristics failed, ask a small LLM to resolve
         if not suspect_to_assign and state.mystery:
@@ -503,8 +540,9 @@ def process_player_action(
                     for s in state.mystery.suspects:
                         if s.name == last_speaker:
                             suspect_to_assign = s
+                            is_follow_up = True
                             logger.info(
-                                "Assuming follow-up question to last suspect speaker: %s",
+                                "🔄 [FOLLOW-UP] Detected follow-up question to last suspect speaker: %s",
                                 last_speaker,
                             )
                             break
@@ -524,10 +562,18 @@ def process_player_action(
     # lines like "I know you're lying, give it up" where the player doesn't repeat
     # the suspect's name but clearly intends to confront the last speaker.
     if action_type == "custom" and custom_message and suspect_to_assign:
-        message = (
-            f"I want to talk to {suspect_to_assign.name}. "
-            f"Here's what I say to them: {custom_message}"
-        )
+        if is_follow_up:
+            # Add context that this is a continuation of the conversation
+            message = (
+                f"[FOLLOW-UP to {suspect_to_assign.name}] Continue the conversation with {suspect_to_assign.name}. "
+                f"The player is following up on what was just said. Here's what they say: {custom_message}"
+            )
+            logger.info("🔄 [FOLLOW-UP] Rewritten message for continuation: %s", message[:100])
+        else:
+            message = (
+                f"I want to talk to {suspect_to_assign.name}. "
+                f"Here's what I say to them: {custom_message}"
+            )
         # Update the stored player message so state/messages stay in sync
         try:
             if state.messages:
@@ -962,6 +1008,8 @@ def run_action_logic(
 
     # Assign voice on-demand before processing if talking to a suspect
     suspect_to_assign = None
+    is_follow_up = False  # Track if this is a follow-up to enable better context
+    
     if action_type == "talk" and target:
         for s in state.mystery.suspects:
             if s.name == target:
@@ -971,6 +1019,40 @@ def run_action_logic(
         # Reuse the same heuristic + AI resolver logic as process_player_action
         message_lower = custom_message.lower()
         message_words = set(message_lower.split())
+        
+        # EARLY FOLLOW-UP DETECTION: Check for second-person pronouns or follow-up patterns
+        # This can skip the expensive AI resolver call
+        follow_up_indicators = ["you", "you're", "your", "yourself"]
+        follow_up_phrases = ["tell me more", "what about", "why did you", "what do you", 
+                           "how did you", "where were you", "go on", "continue", "and then",
+                           "really", "are you sure", "explain", "what else"]
+        
+        has_second_person = any(word in message_words for word in follow_up_indicators)
+        has_follow_up_phrase = any(phrase in message_lower for phrase in follow_up_phrases)
+        
+        if has_second_person or has_follow_up_phrase:
+            last_speaker = _get_last_suspect_speaker(state)
+            if last_speaker:
+                # Check if any OTHER suspect is explicitly mentioned
+                explicit_other = False
+                for s in state.mystery.suspects:
+                    if s.name == last_speaker:
+                        continue
+                    if s.name.lower() in message_lower:
+                        explicit_other = True
+                        break
+                
+                if not explicit_other:
+                    for s in state.mystery.suspects:
+                        if s.name == last_speaker:
+                            suspect_to_assign = s
+                            is_follow_up = True
+                            logger.info(
+                                "🔄 [EARLY FOLLOW-UP] Detected via %s - targeting: %s",
+                                "second-person pronoun" if has_second_person else "follow-up phrase",
+                                last_speaker,
+                            )
+                            break
 
         for s in state.mystery.suspects:
             name_parts = s.name.lower().split()
@@ -1096,8 +1178,10 @@ def run_action_logic(
                     for s in state.mystery.suspects:
                         if s.name == last_speaker:
                             suspect_to_assign = s
+                            # Mark this as a detected follow-up for message rewriting
+                            is_follow_up = True
                             logger.info(
-                                "Assuming follow-up question to last suspect speaker: %s",
+                                "🔄 [FOLLOW-UP] Detected follow-up question to last suspect speaker: %s",
                                 last_speaker,
                             )
                             break
@@ -1127,10 +1211,18 @@ def run_action_logic(
     # a suspect, rewrite the message to make that intent explicit so the agent
     # reliably calls the interrogate_suspect tool for follow-ups.
     if action_type == "custom" and custom_message and suspect_to_assign:
-        message = (
-            f"I want to talk to {suspect_to_assign.name}. "
-            f"Here's what I say to them: {custom_message}"
-        )
+        if is_follow_up:
+            # Add context that this is a continuation of the conversation
+            message = (
+                f"[FOLLOW-UP to {suspect_to_assign.name}] Continue the conversation with {suspect_to_assign.name}. "
+                f"The player is following up on what was just said. Here's what they say: {custom_message}"
+            )
+            logger.info("🔄 [FOLLOW-UP] Rewritten message for continuation: %s", message[:100])
+        else:
+            message = (
+                f"I want to talk to {suspect_to_assign.name}. "
+                f"Here's what I say to them: {custom_message}"
+            )
         try:
             if state.messages:
                 state.messages[-1]["content"] = message

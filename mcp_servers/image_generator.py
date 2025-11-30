@@ -170,13 +170,21 @@ def enhance_prompt(template: str, **kwargs) -> str:
     if not ENHANCE_PROMPTS:
         fallback = kwargs.get("fallback", "")
         context = kwargs.get("context", "")
+        # Use location for scenes, title for title cards, name for portraits
+        identifier = kwargs.get("location") or kwargs.get("title", "")[:30] or kwargs.get("name") or "unknown"
         if context:
             # Use context directly for clue-focused scenes
-            return f"{context}\n{ART_STYLE_SUFFIX}"
+            prompt = f"{context}\n{ART_STYLE_SUFFIX}"
+            logger.info("[PROMPT] Fast mode - using CONTEXT for '%s' (context=%d chars)", identifier, len(context))
+            return prompt
         if fallback:
-            return fallback + ART_STYLE_SUFFIX
+            prompt = fallback + ART_STYLE_SUFFIX
+            logger.info("[PROMPT] Fast mode - using FALLBACK for '%s': %s...", identifier, fallback[:80])
+            return prompt
         # Minimal fallback
-        return template.format(**{k: v for k, v in kwargs.items() if k != "fallback"})[:500] + ART_STYLE_SUFFIX
+        prompt = template.format(**{k: v for k, v in kwargs.items() if k != "fallback"})[:500] + ART_STYLE_SUFFIX
+        logger.info("[PROMPT] Fast mode - using TEMPLATE for '%s' (%d chars)", identifier, len(prompt))
+        return prompt
     
     client = get_openai_client()
     
@@ -269,7 +277,10 @@ def generate_image(prompt: str, width: int = 1024, height: int = 576) -> str:
     cache_key = get_cache_key(prompt)
     cached = get_cached_image(cache_key)
     if cached:
+        logger.info("[CACHE HIT] key=%s, prompt_preview='%s...'", cache_key, prompt[:80].replace('\n', ' '))
         return cached
+    
+    logger.info("[CACHE MISS] key=%s, generating new image", cache_key)
     
     # Generate new image
     client = get_hf_client()
@@ -527,29 +538,50 @@ if MCP_AVAILABLE:
                 return [TextContent(type="text", text=path)]
                 
             elif name == "generate_scene":
+                loc = arguments.get("location", "")
+                ctx = arguments.get("context", "")
+                logger.info("[SCENE] Generating: location='%s', context=%d chars", loc, len(ctx) if ctx else 0)
+                
                 prompt = enhance_prompt(
                     SCENE_TEMPLATE,
-                    location=arguments.get("location", ""),
+                    location=loc,
                     setting=arguments.get("setting", ""),
                     mood=arguments.get("mood", "mysterious"),
-                    context=arguments.get("context", ""),
-                    fallback=f"Scene of {arguments.get('location', 'a location')} in 1990s adventure game style."
+                    context=ctx,
+                    fallback=f"Scene of {loc or 'a location'} in 1990s adventure game style."
                 )
                 
                 path = generate_image(prompt)
+                logger.info("[SCENE] Result for '%s': %s", loc, path)
                 return [TextContent(type="text", text=path)]
                 
             elif name == "generate_title_card":
+                title = arguments.get("title", "Murder Mystery")
+                setting = arguments.get("setting", "")
+                victim_name = arguments.get("victim_name", "")
+                
+                logger.info("[TITLE] Generating: title='%s', setting=%d chars, victim='%s'", 
+                           title[:40], len(setting), victim_name)
+                
+                # Build a unique fallback that includes the mystery details
+                fallback_parts = [f"Atmospheric opening scene for '{title}'"]
+                if setting:
+                    fallback_parts.append(f"set in {setting[:100]}")
+                if victim_name:
+                    fallback_parts.append(f"about the death of {victim_name}")
+                fallback = " ".join(fallback_parts) + " in 1990s adventure game style."
+                
                 prompt = enhance_prompt(
                     TITLE_CARD_TEMPLATE,
-                    title=arguments.get("title", ""),
-                    setting=arguments.get("setting", ""),
-                    victim_name=arguments.get("victim_name", ""),
+                    title=title,
+                    setting=setting,
+                    victim_name=victim_name,
                     victim_background=arguments.get("victim_background", ""),
-                    fallback=f"Atmospheric opening scene for a murder mystery in 1990s adventure game style."
+                    fallback=fallback
                 )
                 
                 path = generate_image(prompt)
+                logger.info("[TITLE] Result: %s", path)
                 return [TextContent(type="text", text=path)]
             
             elif name == "list_cached_images":
