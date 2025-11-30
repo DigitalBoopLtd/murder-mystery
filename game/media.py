@@ -250,7 +250,7 @@ def _prewarm_scene_images(session_id: str, mystery):
                 )
 
     max_workers = 3
-    num_workers = min(max_workers, len(locations))
+    num_workers = min(max_workers, len(location_clues))
     threads = []
     for _ in range(num_workers):
         t = threading.Thread(target=_worker, daemon=True)
@@ -261,14 +261,14 @@ def _prewarm_scene_images(session_id: str, mystery):
         "[BG] Launched %d prewarm scene workers for session %s (locations=%d)",
         num_workers,
         session_id,
-        len(locations),
+        len(location_clues),
     )
     
     # Wait for all tasks to complete, then end perf tracking
     def _track_completion():
         task_queue.join()  # Wait for all tasks
-        perf.end("prewarm_scenes", details=f"{completed_count[0]}/{len(locations)} completed")
-        logger.info("[BG] Scene prewarm complete: %d/%d", completed_count[0], len(locations))
+        perf.end("prewarm_scenes", details=f"{completed_count[0]}/{len(location_clues)} completed")
+        logger.info("[BG] Scene prewarm complete: %d/%d", completed_count[0], len(location_clues))
     
     threading.Thread(target=_track_completion, daemon=True).start()
 

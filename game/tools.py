@@ -24,6 +24,56 @@ os.makedirs(AUDIO_DIR, exist_ok=True)
 _audio_alignment_cache = {}
 
 
+# =============================================================================
+# LOCATION REVEAL CRITERIA
+# =============================================================================
+# Suspects only reveal location hints when certain conditions are met.
+# Multiple paths to unlock - rewards different investigation playstyles.
+
+def should_reveal_location(suspect_state) -> bool:
+    """Check if suspect should reveal their location hint.
+    
+    Multiple paths to unlock - rewards different investigation styles:
+    - High trust (>= 65): They trust you enough to share
+    - High nervousness (>= 75): They slip up under pressure  
+    - Caught in contradiction: They reveal to deflect attention
+    - 3+ conversations: Persistence pays off
+    
+    Args:
+        suspect_state: SuspectState with trust, nervousness, conversations, contradictions
+        
+    Returns:
+        True if any unlock condition is met
+    """
+    if suspect_state is None:
+        return False
+        
+    return (
+        suspect_state.trust >= 65 or
+        suspect_state.nervousness >= 75 or
+        suspect_state.contradictions_caught >= 1 or
+        len(suspect_state.conversations) >= 3
+    )
+
+
+def get_reveal_reason(suspect_state) -> str:
+    """Get the reason why a location was revealed (for logging/debugging)."""
+    if suspect_state is None:
+        return "unknown"
+    
+    reasons = []
+    if suspect_state.trust >= 65:
+        reasons.append(f"high_trust({suspect_state.trust}%)")
+    if suspect_state.nervousness >= 75:
+        reasons.append(f"high_nervousness({suspect_state.nervousness}%)")
+    if suspect_state.contradictions_caught >= 1:
+        reasons.append(f"caught_contradiction({suspect_state.contradictions_caught})")
+    if len(suspect_state.conversations) >= 3:
+        reasons.append(f"persistence({len(suspect_state.conversations)}_convos)")
+    
+    return " + ".join(reasons) if reasons else "conditions_not_met"
+
+
 @tool
 def interrogate_suspect(
     suspect_name: Annotated[str, "The full name of the suspect to interrogate"],
@@ -118,6 +168,77 @@ You may have said something about this before - stay consistent:
 {relevant_statements}
 """
     
+    # =========================================================================
+    # UPDATE EMOTIONAL STATE BEFORE CHECKING LOCATION UNLOCK
+    # This ensures the current question's impact is considered for reveals
+    # =========================================================================
+    suspect_state = state.get_suspect_state(suspect.name) if state else None
+    
+    if suspect_state and state:
+        # Analyze question style to determine emotional impact
+        question_lower = player_question.lower()
+        trust_delta = 0
+        nervousness_delta = 0
+        
+        # Aggressive/accusatory language decreases trust, increases nervousness
+        aggressive_words = ["liar", "lying", "killed", "murder", "guilty", "confess",
+                          "admit", "truth", "suspicious", "caught", "evidence against",
+                          "you did it", "accuse", "blame"]
+        for word in aggressive_words:
+            if word in question_lower:
+                trust_delta -= 5
+                nervousness_delta += 10
+                break
+        
+        # Friendly/empathetic language increases trust, decreases nervousness
+        friendly_words = ["help", "understand", "sorry", "difficult", "must be hard",
+                        "appreciate", "thank", "please", "kind", "trust you"]
+        for word in friendly_words:
+            if word in question_lower:
+                trust_delta += 5
+                nervousness_delta -= 5
+                break
+        
+        # Direct confrontation with evidence increases nervousness
+        confrontation_phrases = ["but you said", "you told me", "earlier you", "contradict",
+                                "that doesn't match", "someone saw you", "witness"]
+        for phrase in confrontation_phrases:
+            if phrase in question_lower:
+                nervousness_delta += 15
+                break
+        
+        # Apply emotional changes BEFORE unlock check
+        if trust_delta != 0 or nervousness_delta != 0:
+            state.update_suspect_emotion(
+                suspect.name,
+                trust_delta=trust_delta,
+                nervousness_delta=nervousness_delta
+            )
+            logger.info(
+                "[EMOTION] Updated %s: trust=%d%% (%+d), nervousness=%d%% (%+d) (before unlock check)",
+                suspect.name, suspect_state.trust, trust_delta, suspect_state.nervousness, nervousness_delta
+            )
+        
+        # Record this conversation BEFORE unlock check (so conversation count is current)
+        suspect_state.conversations.append({
+            "question": player_question,
+            "answer": "[pending]",  # Will be updated after LLM response
+            "turn": state.current_turn
+        })
+    
+    # NOW check if location should be revealed (with UPDATED state)
+    will_reveal_location = should_reveal_location(suspect_state) if suspect_state else False
+    
+    # Build location hint instruction if conditions are met
+    location_instruction = ""
+    if suspect.location_hint and will_reveal_location and not state.is_location_unlocked(suspect.location_hint):
+        location_instruction = f"""
+🗺️ LOCATION HINT (work this naturally into your response):
+You're ready to share something helpful. You know something important happened at or near 
+"{suspect.location_hint}". Mention this location as a lead - perhaps you saw something there, 
+heard the victim went there, or think the detective should check it out. Be natural about it.
+"""
+    
     # Build the FULL profile internally (including secrets the GM shouldn't narrate)
     full_profile = f"""
 Name: {suspect.name}
@@ -131,6 +252,7 @@ Guilty: {suspect.isGuilty}
 
 {emotional_context}
 {memory_context}
+{location_instruction}
 """
 
     llm = ChatOpenAI(
@@ -181,6 +303,11 @@ Suspect Profile:
     )
 
     text_response = response.content
+    
+    # Update the "[pending]" answer we recorded earlier with the actual response
+    if suspect_state and suspect_state.conversations:
+        suspect_state.conversations[-1]["answer"] = text_response[:200]  # Truncate for storage
+        state.current_turn += 1  # Increment turn counter
 
     # Generate audio if voice_id is available
     audio_path = None
@@ -199,9 +326,32 @@ Suspect Profile:
         # Store alignment data directly in ToolOutputStore for reliable retrieval
         store.audio_alignment_data = alignment_data
     
-    logger.info("Interrogation stored: suspect=%s, audio=%s, alignment=%d words, memory_used=%s", 
+    # Unlock the location this suspect knows about (if criteria are met)
+    # Multiple paths: high trust, high nervousness, caught contradiction, or persistence
+    location_unlocked = None
+    if suspect.location_hint and suspect_state:
+        if should_reveal_location(suspect_state):
+            newly_unlocked = state.unlock_location(suspect.location_hint)
+            if newly_unlocked:
+                location_unlocked = suspect.location_hint
+                store.location_unlocked = location_unlocked
+                reveal_reason = get_reveal_reason(suspect_state)
+                logger.info(
+                    "🔓 Location unlocked by %s: %s (reason: %s)",
+                    suspect.name, location_unlocked, reveal_reason
+                )
+        else:
+            logger.info(
+                "📍 %s knows about '%s' but hasn't revealed it yet "
+                "(trust=%d%%, nervousness=%d%%, contradictions=%d, convos=%d)",
+                suspect.name, suspect.location_hint,
+                suspect_state.trust, suspect_state.nervousness,
+                suspect_state.contradictions_caught, len(suspect_state.conversations)
+            )
+    
+    logger.info("Interrogation stored: suspect=%s, audio=%s, alignment=%d words, memory_used=%s, location_unlocked=%s", 
                 suspect.name, bool(audio_path), len(alignment_data) if alignment_data else 0,
-                bool(past_conversations or relevant_statements))
+                bool(past_conversations or relevant_statements), location_unlocked)
 
     # Return ONLY the narrative - no markers needed!
     return text_response
@@ -245,6 +395,22 @@ def describe_scene_for_image(
     
     state = get_game_state()
     store = get_tool_output_store()
+    
+    # Check if location is unlocked before allowing search
+    if state and state.unlocked_locations:
+        # Check if requested location matches any unlocked location (fuzzy match)
+        location_lower = location_name.lower()
+        is_unlocked = any(
+            ul.lower() in location_lower or location_lower in ul.lower()
+            for ul in state.unlocked_locations
+        )
+        if not is_unlocked:
+            logger.warning("Location '%s' is not unlocked yet. Unlocked: %s", location_name, state.unlocked_locations)
+            return f"You haven't learned about this location yet. Talk to suspects to discover searchable areas. Currently unlocked locations: {', '.join(state.unlocked_locations) if state.unlocked_locations else 'None'}"
+    elif state and not state.unlocked_locations:
+        # No locations unlocked yet
+        logger.warning("No locations unlocked yet. Cannot search '%s'", location_name)
+        return "You haven't discovered any searchable locations yet. Talk to the suspects - they may reveal places worth investigating."
     
     clue = None
     clue_description = "an empty area"
@@ -716,6 +882,70 @@ class AccusationToolOutput(BaseModel):
 MIN_CLUES_FOR_VALID_ACCUSATION = 2
 
 
+def evaluate_case_strength(state, accused_name: str) -> dict:
+    """Evaluate the strength of the case against a suspect.
+    
+    Checks:
+    - Clues that contradict their alibi (strong evidence)
+    - Witness statements that contradict their claims
+    - General clue count
+    
+    Returns dict with case_strength, alibi_disproven, evidence_summary
+    """
+    if not state or not state.mystery:
+        return {"case_strength": "weak", "alibi_disproven": False, "evidence_summary": "No evidence"}
+    
+    # Find clues that contradict accused's alibi
+    alibi_contradictions = state.mystery.get_alibi_contradictions(accused_name)
+    found_contradictions = [cid for cid in alibi_contradictions if cid in state.clue_ids_found]
+    
+    # Check witness statements that contradict accused's alibi
+    witness_contradictions = []
+    accused_suspect = None
+    for s in state.mystery.suspects:
+        if s.name.lower() == accused_name.lower() or accused_name.lower() in s.name.lower():
+            accused_suspect = s
+            break
+    
+    if accused_suspect and accused_suspect.structured_alibi:
+        alibi = accused_suspect.structured_alibi
+        if alibi.corroborator:
+            # Check if we've talked to the corroborator
+            if alibi.corroborator in state.suspects_talked_to:
+                # If the alibi is false, the corroborator won't confirm it
+                if not alibi.is_truthful:
+                    witness_contradictions.append(alibi.corroborator)
+    
+    # Calculate case strength
+    total_clues = len(state.clue_ids_found)
+    alibi_disproven = len(found_contradictions) > 0 or len(witness_contradictions) > 0
+    
+    evidence_parts = []
+    if found_contradictions:
+        evidence_parts.append(f"Physical evidence contradicts alibi ({len(found_contradictions)} clues)")
+    if witness_contradictions:
+        evidence_parts.append(f"Witness testimony contradicts alibi")
+    if total_clues > 0:
+        evidence_parts.append(f"{total_clues} clues gathered")
+    
+    if alibi_disproven and total_clues >= 2:
+        case_strength = "strong"
+    elif alibi_disproven or total_clues >= 3:
+        case_strength = "moderate"
+    elif total_clues >= MIN_CLUES_FOR_VALID_ACCUSATION:
+        case_strength = "weak"
+    else:
+        case_strength = "insufficient"
+    
+    return {
+        "case_strength": case_strength,
+        "alibi_disproven": alibi_disproven,
+        "alibi_contradiction_clues": found_contradictions,
+        "witness_contradictions": witness_contradictions,
+        "evidence_summary": "; ".join(evidence_parts) if evidence_parts else "No substantial evidence",
+    }
+
+
 @tool
 def make_accusation(
     suspect_name: Annotated[str, "The full name of the suspect being accused of the murder"],
@@ -732,9 +962,10 @@ def make_accusation(
     
     This tool:
     1. Checks if the player has gathered enough evidence (minimum clues found)
-    2. If insufficient evidence, the accusation is rejected (doesn't count toward 3 strikes)
-    3. If sufficient evidence, checks if the accusation is correct
-    4. Returns a dramatic response for the Game Master to deliver
+    2. Evaluates case strength - did they disprove the alibi?
+    3. If insufficient evidence, the accusation is rejected (doesn't count toward 3 strikes)
+    4. If sufficient evidence, checks if the accusation is correct
+    5. Returns a dramatic response for the Game Master to deliver
     
     Returns only the narrative. Structured data is stored in ToolOutputStore.
     """
@@ -750,11 +981,16 @@ def make_accusation(
     state = get_game_state()
     store = get_tool_output_store()
     
+    # Evaluate case strength with alibi verification
+    case_eval = evaluate_case_strength(state, suspect_name)
+    
     # Check evidence: how many clues has the player found?
     clues_found_count = len(state.clue_ids_found) if state else 0
     has_sufficient_evidence = clues_found_count >= MIN_CLUES_FOR_VALID_ACCUSATION
     
     logger.info("Evidence check: %d clues found (need %d)", clues_found_count, MIN_CLUES_FOR_VALID_ACCUSATION)
+    logger.info("Case evaluation: strength=%s, alibi_disproven=%s", 
+                case_eval["case_strength"], case_eval["alibi_disproven"])
     
     # Check if accusation is correct (only matters if they have evidence)
     is_correct = False
@@ -773,14 +1009,21 @@ def make_accusation(
     
     structured_llm = llm.with_structured_output(AccusationToolOutput)
     
-    # Generate different response based on evidence status
+    # Generate different response based on evidence status and case strength
     if has_sufficient_evidence:
+        # Include case strength in the prompt for better responses
+        case_context = f"Case strength: {case_eval['case_strength'].upper()}"
+        if case_eval['alibi_disproven']:
+            case_context += " - Alibi has been DISPROVEN through evidence"
+        else:
+            case_context += " - Alibi NOT yet disproven (weaker case)"
+        
         prompt = ChatPromptTemplate.from_messages([
             ("system", """You are the Game Master for a murder mystery game. The player has made a FORMAL ACCUSATION with evidence to back it up.
 
 Generate a DRAMATIC response that:
 1. Acknowledges their accusation with gravitas
-2. References their evidence gathering
+2. References their evidence gathering (especially if they disproved an alibi!)
 3. Builds tension before the reveal
 4. Ends on a cliffhanger (the actual result will be shown by the game)
 
@@ -788,6 +1031,7 @@ Keep it SHORT (2-3 sentences) for voice narration. Be theatrical!"""),
             ("human", """Player formally accuses: {suspect_name}
 Their reasoning: {evidence}
 Clues they've gathered: {clue_count}
+{case_context}
 
 Generate the dramatic Game Master response.""")
         ])
@@ -798,13 +1042,15 @@ Generate the dramatic Game Master response.""")
 Generate a response that:
 1. Acknowledges their suspicion
 2. Explains that they need more evidence before making a formal accusation
-3. Encourages them to investigate more - search locations and talk to suspects
+3. Hint that they should verify alibis - search locations for physical evidence, talk to witnesses
 4. This accusation does NOT count against their 3 strikes
+5. The suspect is released without further questioning until more evidence is found
 
 Keep it SHORT (2-3 sentences) for voice narration. Be firm but encouraging."""),
             ("human", """Player tried to accuse: {suspect_name}
 Their reasoning: {evidence}
 Clues found so far: {clue_count} (need at least {min_clues})
+Evidence evaluation: {evidence_eval}
 
 Generate the Game Master response rejecting this premature accusation.""")
         ])
@@ -812,12 +1058,23 @@ Generate the Game Master response rejecting this premature accusation.""")
     chain = prompt | structured_llm
     
     try:
-        result: AccusationToolOutput = chain.invoke({
+        invoke_params = {
             "suspect_name": suspect_name,
             "evidence": evidence_summary or "Gut instinct - no specific evidence cited",
             "clue_count": clues_found_count,
             "min_clues": MIN_CLUES_FOR_VALID_ACCUSATION,
-        })
+        }
+        if has_sufficient_evidence:
+            case_context = f"Case strength: {case_eval['case_strength'].upper()}"
+            if case_eval['alibi_disproven']:
+                case_context += " - Alibi has been DISPROVEN through evidence"
+            else:
+                case_context += " - Alibi NOT yet disproven (weaker case)"
+            invoke_params["case_context"] = case_context
+        else:
+            invoke_params["evidence_eval"] = case_eval["evidence_summary"]
+        
+        result: AccusationToolOutput = chain.invoke(invoke_params)
         
         # Store structured data in ToolOutputStore (no regex markers!)
         store.accusation = AccusationOutput(
@@ -827,6 +1084,17 @@ Generate the Game Master response rejecting this premature accusation.""")
             has_sufficient_evidence=has_sufficient_evidence,
             clues_found_count=clues_found_count,
         )
+        
+        # Record accusation attempt in state history (for UI display)
+        if state and has_sufficient_evidence:
+            requirements = state.evaluate_accusation_requirements(suspect_name)
+            state.record_accusation(
+                accused_name=suspect_name,
+                evidence_cited=evidence_summary or "",
+                was_correct=is_correct,
+                had_evidence=has_sufficient_evidence,
+                requirements=requirements,
+            )
         
         logger.info(
             "Accusation stored: suspect=%s, correct=%s, has_evidence=%s, clues=%d",
@@ -851,6 +1119,19 @@ Generate the Game Master response rejecting this premature accusation.""")
             has_sufficient_evidence=has_sufficient_evidence,
             clues_found_count=clues_found_count,
         )
+        
+        # Record accusation attempt even in fallback
+        if state and has_sufficient_evidence:
+            from game.models import AccusationRequirements
+            requirements = AccusationRequirements(has_minimum_clues=clues_found_count >= MIN_CLUES_FOR_VALID_ACCUSATION)
+            state.record_accusation(
+                accused_name=suspect_name,
+                evidence_cited=evidence_summary or "",
+                was_correct=is_correct,
+                had_evidence=has_sufficient_evidence,
+                requirements=requirements,
+            )
+        
         return narrative
 
 

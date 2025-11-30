@@ -458,6 +458,14 @@ system or background tasks. Stay purely in-world."""
             
             bg_state.mystery = full_mystery
             
+            # ========== UNLOCK CRIME SCENE ==========
+            # The murder location is always accessible from the start.
+            # Other locations are unlocked through suspect interrogation.
+            if full_mystery.murder_method and full_mystery.murder_method.location_of_murder:
+                crime_scene = full_mystery.murder_method.location_of_murder
+                bg_state.unlock_location(crime_scene)
+                logger.info("[BG] 🔓 Crime scene unlocked at start: %s", crime_scene)
+            
             # NOTE: Location descriptions are NO LONGER pre-generated here.
             # The describe_scene_for_image tool generates clue-focused descriptions
             # on-demand when the player searches a location - these are MORE USEFUL

@@ -1,14 +1,13 @@
 """Mystery generation logic.
 
-This module provides two mystery generation modes:
-1. PARALLEL (default): Uses multiple sub-agents running concurrently (~6-8s)
-2. MONOLITHIC (fallback): Single large LLM call (~15s)
+Uses PARALLEL generation with structured outputs:
+- Skeleton → 4 suspects + clues generated concurrently (~6-8s total)
+- LangChain's with_structured_output() for reliable Pydantic parsing
+- Automatic retries with exponential backoff on failures
 
-Set USE_PARALLEL_GENERATION=false in .env to use monolithic mode.
-
-IMPORTANT: Neither mode creates an agent that users interact with.
+IMPORTANT: This does NOT create an agent that users interact with.
 The user-facing agent is the Game Master in services/agent.py.
-These generators only run once at game start to create the mystery content.
+This generator only runs once at game start to create the mystery content.
 """
 
 import os
@@ -26,15 +25,6 @@ from services.voice_service import get_voice_service
 from mystery_config import MysteryConfig
 
 logger = logging.getLogger(__name__)
-
-# Feature flag for parallel generation
-# Set to "false" in .env to use the slower monolithic generator
-USE_PARALLEL_GENERATION = os.getenv("USE_PARALLEL_GENERATION", "true").lower() == "true"
-
-if USE_PARALLEL_GENERATION:
-    logger.info("🚀 Using PARALLEL mystery generation (faster)")
-else:
-    logger.info("📦 Using MONOLITHIC mystery generation (slower)")
 
 
 # Diverse, tech/geek-friendly mystery settings
@@ -333,8 +323,8 @@ def generate_mystery(
 ) -> Mystery:
     """Generate a complete murder mystery scenario.
     
-    Routes to either parallel or monolithic generation based on
-    USE_PARALLEL_GENERATION environment variable.
+    Uses parallel generation with structured outputs and automatic retries.
+    No fallback to monolithic - parallel is now the only path.
     
     IMPORTANT: This is NOT the agent users interact with. Users talk to
     the Game Master Agent in services/agent.py. This function only runs
@@ -347,23 +337,17 @@ def generate_mystery(
         
     Returns:
         Complete Mystery object ready for gameplay
+        
+    Raises:
+        Exception: If mystery generation fails after all retries
     """
-    if USE_PARALLEL_GENERATION:
-        try:
-            from game.parallel_mystery import generate_mystery_parallel_sync
-            logger.info("[MYSTERY] Using PARALLEL generation (sub-agents)")
-            return generate_mystery_parallel_sync(
-                premise=premise,
-                config=config,
-                voice_summary=voice_summary,
-            )
-        except Exception as e:
-            logger.error("[MYSTERY] Parallel generation failed: %s", e)
-            logger.info("[MYSTERY] Falling back to monolithic generation")
-            # Fall through to monolithic
-    
-    logger.info("[MYSTERY] Using MONOLITHIC generation")
-    return _generate_mystery_monolithic(premise, config, voice_summary)
+    from game.parallel_mystery import generate_mystery_parallel_sync
+    logger.info("[MYSTERY] Using PARALLEL generation (structured output + retries)")
+    return generate_mystery_parallel_sync(
+        premise=premise,
+        config=config,
+        voice_summary=voice_summary,
+    )
 
 
 def _generate_mystery_monolithic(
@@ -488,6 +472,7 @@ TONE: Your audience appreciates clever references, subtle tech humor, and well-c
 Create an interesting victim with enemies, 4 distinct suspects with secrets and motives, and 5 clues that lead to solving the case. One suspect is the murderer. Include one red herring clue.
 
 IMPORTANT: For each suspect, include these fields:
+- "name": Do NOT use quotes or nicknames inside names (use "Vincent Malloy" not "Vincent "Vince" Malloy")
 - "gender": MUST be exactly "male" or "female"
 - "age": MUST be exactly one of: "young", "middle_aged", or "old" (based on their age)
 - "nationality": MUST be exactly one of: "american", "british", "australian", or "standard" (based on their accent/nationality background)
@@ -590,6 +575,17 @@ CRITICAL: Return ONLY valid JSON. Do NOT wrap it in markdown code blocks. Do NOT
             for suspect in mystery.suspects:
                 if suspect.portrait_path and not os.path.exists(suspect.portrait_path):
                     suspect.portrait_path = None
+            
+            # Assign location_hints to suspects (each suspect reveals one location)
+            # This allows locations to be "unlocked" through suspect interrogation
+            clue_locations = list(set(clue.location for clue in mystery.clues))
+            for idx, suspect in enumerate(mystery.suspects):
+                if idx < len(clue_locations):
+                    suspect.location_hint = clue_locations[idx]
+                    logger.info(
+                        "Assigned location_hint '%s' to suspect %s",
+                        suspect.location_hint, suspect.name
+                    )
             
             break
         except Exception as e:

@@ -178,12 +178,58 @@ def format_suspects_list_html(
         if is_talked and state:
             trust_pct = state.trust
             nervousness_pct = state.nervousness
+            conversations = len(state.conversations)
+            contradictions = state.contradictions_caught
             
             # Trust meter - green when high, yellow when medium, red when low
             trust_color = "#33ff33" if trust_pct > 60 else "#ffcc00" if trust_pct > 30 else "#ff4444"
             
             # Nervousness meter - inverse: green when low, red when high (nervous = bad for them)
             nervousness_color = "#33ff33" if nervousness_pct < 40 else "#ffcc00" if nervousness_pct < 70 else "#ff4444"
+            
+            # Location unlock conditions (for debugging)
+            # Conditions: trust >= 65, nervousness >= 75, contradictions >= 1, conversations >= 3
+            unlock_conditions = []
+            if trust_pct >= 65:
+                unlock_conditions.append("✅ Trust")
+            else:
+                unlock_conditions.append(f"❌ Trust ({trust_pct}/65)")
+            
+            if nervousness_pct >= 75:
+                unlock_conditions.append("✅ Nervous")
+            else:
+                unlock_conditions.append(f"❌ Nerve ({nervousness_pct}/75)")
+            
+            if contradictions >= 1:
+                unlock_conditions.append("✅ Caught")
+            else:
+                unlock_conditions.append("❌ No catch")
+            
+            if conversations >= 3:
+                unlock_conditions.append("✅ Persist")
+            else:
+                unlock_conditions.append(f"❌ Convos ({conversations}/3)")
+            
+            # Check if location would unlock
+            location_hint = getattr(suspect, 'location_hint', None)
+            will_unlock = (trust_pct >= 65 or nervousness_pct >= 75 or contradictions >= 1 or conversations >= 3)
+            unlock_icon = "🔓" if will_unlock else "🔒"
+            unlock_color = "#33ff33" if will_unlock else "#ff6666"
+            
+            # Build unlock debug HTML
+            unlock_debug = f'''
+            <div class="unlock-debug" style="margin-top: 6px; padding: 4px; background: rgba(0,0,0,0.3); border-radius: 4px; font-size: 10px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                    <span style="color: {unlock_color};">{unlock_icon} LOCATION</span>
+                    <span style="color: #888;">Convos: {conversations}</span>
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2px; color: #aaa;">
+                    <span style="font-size: 9px;">{unlock_conditions[0]}</span>
+                    <span style="font-size: 9px;">{unlock_conditions[1]}</span>
+                    <span style="font-size: 9px;">{unlock_conditions[2]}</span>
+                    <span style="font-size: 9px;">{unlock_conditions[3]}</span>
+                </div>
+            </div>'''
             
             meters_html = f'''
             <div class="suspect-meters">
@@ -201,6 +247,7 @@ def format_suspects_list_html(
                     </div>
                     <span class="meter-value">{nervousness_pct}%</span>
                 </div>
+                {unlock_debug}
             </div>'''
             
             # Contradiction badge (larger, under name)
@@ -228,8 +275,23 @@ def format_suspects_list_html(
                     {"".join(labels)}
                 </div>'''
         
-        # Motive snippet (always visible)
-        motive_html = f'<div class="suspect-motive"><strong>Motive:</strong> <em>{suspect.secret}</em></div>'
+        # Motive/secret - only revealed when unlock conditions are met!
+        # Same conditions as location reveals: trust >= 65, nervousness >= 75, contradictions >= 1, or 3+ convos
+        motive_html = ""
+        if state:
+            secret_unlocked = (
+                state.trust >= 65 or 
+                state.nervousness >= 75 or 
+                state.contradictions_caught >= 1 or 
+                len(state.conversations) >= 3
+            )
+            if secret_unlocked:
+                motive_html = f'<div class="suspect-motive"><strong>🔓 Secret:</strong> <em>{suspect.secret}</em></div>'
+            else:
+                motive_html = f'<div class="suspect-motive" style="color: #666;"><strong>🔒 Secret:</strong> <em>Keep questioning to uncover...</em></div>'
+        else:
+            # Not talked to yet - show locked
+            motive_html = f'<div class="suspect-motive" style="color: #666;"><strong>🔒 Secret:</strong> <em>Talk to them to learn more...</em></div>'
         
         cards.append(f'''
         <div class="{card_class}" title="Click to see details">
@@ -257,6 +319,7 @@ def format_locations_html(
     searched: List[str],
     loading: bool = False,
     location_images: Optional[Dict[str, str]] = None,
+    unlocked_locations: Optional[List[str]] = None,
 ) -> str:
     """Format locations as HTML, optionally with scene images.
 
@@ -265,6 +328,7 @@ def format_locations_html(
         searched: List of location names that have been searched
         loading: Whether to show loading state
         location_images: Dict mapping location name -> scene image path
+        unlocked_locations: List of locations revealed by suspects (only these are shown)
     """
     if not mystery:
         if loading:
@@ -273,9 +337,25 @@ def format_locations_html(
 
     searched = searched or []
     location_images = location_images or {}
-
-    # Collect unique locations from clues
-    locations = list(set(clue.location for clue in mystery.clues))
+    
+    # Only show unlocked locations (revealed through suspect interrogation)
+    # If unlocked_locations is None, fall back to showing all (legacy behavior)
+    if unlocked_locations is not None:
+        locations = unlocked_locations
+    else:
+        # Legacy fallback: show all locations from clues
+        locations = list(set(clue.location for clue in mystery.clues))
+    
+    # Show empty state if no locations unlocked yet
+    if not locations:
+        return '''
+        <div class="locations-empty">
+            <div class="locations-icon">🔒</div>
+            <div class="locations-message">No locations unlocked yet</div>
+            <div class="locations-hint">Build trust, apply pressure, or catch contradictions — suspects reveal locations when they're ready to talk</div>
+        </div>
+        '''
+    
     html_parts = []
 
     for loc in locations:
@@ -579,4 +659,167 @@ def format_dashboard_html(
         {progress_html}
         {suspicion_html}
     </div>'''
+
+
+def format_accusations_tab_html(
+    wrong_accusations: int = 0,
+    accusation_history: List = None,
+    current_requirements: dict = None,
+    fired: bool = False,
+) -> str:
+    """Format the accusations tab with history, checklist, and fired state.
+    
+    Args:
+        wrong_accusations: Number of failed accusations (0-3)
+        accusation_history: List of AccusationAttempt objects or dicts
+        current_requirements: Dict with current case requirements status
+        fired: Whether player has been fired (3 strikes)
+    """
+    accusation_history = accusation_history or []
+    current_requirements = current_requirements or {}
+    
+    # Show "Fired" screen if player has 3 failed accusations
+    if fired:
+        return '''
+        <div class="fired-screen">
+            <div class="fired-icon">🚫</div>
+            <div class="fired-title">YOU'RE FIRED</div>
+            <div class="fired-message">
+                After three failed accusations, the department has decided to remove you from this case.
+                The real murderer walks free, and justice remains unserved.
+            </div>
+            <div class="fired-hint">Click "Start New Mystery" to try again with a fresh case.</div>
+        </div>
+        '''
+    
+    # Accusations remaining display
+    remaining = 3 - wrong_accusations
+    pips_html = "".join([
+        '<span class="accusation-pip available">⚖️</span>' if i >= wrong_accusations 
+        else '<span class="accusation-pip used">❌</span>' 
+        for i in range(3)
+    ])
+    
+    remaining_html = f'''
+    <div class="accusations-remaining">
+        <div class="accusations-label">Accusations Remaining</div>
+        <div class="accusations-pips">{pips_html}</div>
+        <div class="accusations-count">{remaining} of 3</div>
+        <div class="accusations-warning">
+            {"⚠️ Last chance! Make sure you have solid evidence." if remaining == 1 else
+             "⚠️ Be careful - two strikes already!" if remaining == 2 else
+             "Build your case before making an accusation."}
+        </div>
+    </div>
+    '''
+    
+    # Iron-cast accusation checklist
+    has_clues = current_requirements.get('has_minimum_clues', False)
+    alibi_disproven = current_requirements.get('alibi_disproven', False)
+    motive_found = current_requirements.get('motive_established', False)
+    opportunity = current_requirements.get('opportunity_proven', False)
+    
+    case_strength = 0
+    if has_clues: case_strength += 25
+    if alibi_disproven: case_strength += 40
+    if motive_found: case_strength += 20
+    if opportunity: case_strength += 15
+    
+    def check_item(label: str, is_met: bool, importance: str) -> str:
+        icon = "✅" if is_met else "⬜"
+        cls = "met" if is_met else "unmet"
+        return f'''
+        <div class="checklist-item {cls}">
+            <span class="checklist-icon">{icon}</span>
+            <span class="checklist-label">{label}</span>
+            <span class="checklist-importance">{importance}</span>
+        </div>
+        '''
+    
+    checklist_html = f'''
+    <div class="accusations-checklist">
+        <div class="checklist-header">📋 IRON-CAST ACCUSATION CHECKLIST</div>
+        <div class="checklist-subtitle">What you need for a solid accusation:</div>
+        {check_item("Find at least 2 clues", has_clues, "Required")}
+        {check_item("Disprove suspect's alibi", alibi_disproven, "Critical!")}
+        {check_item("Establish a motive", motive_found, "Recommended")}
+        {check_item("Prove opportunity", opportunity, "Helps your case")}
+        <div class="checklist-strength">
+            <span>Case Strength:</span>
+            <div class="strength-bar">
+                <div class="strength-fill" style="width: {case_strength}%;"></div>
+            </div>
+            <span class="strength-pct">{case_strength}%</span>
+        </div>
+        <div class="checklist-tip">
+            {"💪 Strong case! You're ready to make an accusation." if case_strength >= 65 else
+             "🔍 Keep investigating - you need more evidence to make a solid accusation." if case_strength < 40 else
+             "📝 Getting there - try to disprove someone's alibi for a stronger case."}
+        </div>
+    </div>
+    '''
+    
+    # Accusation history
+    if accusation_history:
+        history_items = []
+        for i, attempt in enumerate(accusation_history):
+            # Handle both dict and AccusationAttempt objects
+            if hasattr(attempt, 'accused_name'):
+                accused = attempt.accused_name
+                outcome = attempt.outcome
+                reason = attempt.failure_reason
+                strength = attempt.requirements_met.get_strength_score() if hasattr(attempt, 'requirements_met') else 0
+            else:
+                accused = attempt.get('accused', 'Unknown')
+                outcome = attempt.get('outcome', 'unknown')
+                reason = attempt.get('failure_reason', '')
+                strength = attempt.get('case_strength', 0)
+            
+            outcome_icons = {
+                'success': '✅',
+                'wrong_suspect': '❌',
+                'insufficient_evidence': '⚠️',
+            }
+            outcome_icon = outcome_icons.get(outcome, '❓')
+            
+            outcome_labels = {
+                'success': 'CORRECT!',
+                'wrong_suspect': 'Wrong Suspect',
+                'insufficient_evidence': 'Rejected (insufficient evidence)',
+            }
+            outcome_label = outcome_labels.get(outcome, outcome)
+            
+            history_items.append(f'''
+            <div class="history-item {outcome}">
+                <div class="history-number">#{i + 1}</div>
+                <div class="history-details">
+                    <div class="history-accused">{outcome_icon} Accused: {accused}</div>
+                    <div class="history-outcome">{outcome_label}</div>
+                    <div class="history-reason">{reason or ''}</div>
+                    <div class="history-strength">Case strength: {strength}%</div>
+                </div>
+            </div>
+            ''')
+        
+        history_html = f'''
+        <div class="accusations-history">
+            <div class="history-header">📜 ACCUSATION HISTORY</div>
+            {"".join(history_items)}
+        </div>
+        '''
+    else:
+        history_html = '''
+        <div class="accusations-history">
+            <div class="history-header">📜 ACCUSATION HISTORY</div>
+            <div class="history-empty">No accusations made yet. Build your case before pointing fingers!</div>
+        </div>
+        '''
+    
+    return f'''
+    <div class="accusations-tab">
+        {remaining_html}
+        {checklist_html}
+        {history_html}
+    </div>
+    '''
 

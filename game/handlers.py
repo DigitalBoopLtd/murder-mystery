@@ -248,14 +248,13 @@ def _record_interrogation(
     question: str,
     answer: str
 ) -> None:
-    """Record an interrogation and update suspect emotional state.
+    """Index interrogation in RAG memory for semantic search.
     
-    This is the core of Phase 1 AI enhancements - the Game Master tracks
-    all conversations and emotional states, then passes this to stateless
-    suspect agents as context.
+    NOTE: Conversation recording and emotional state updates now happen
+    INSIDE the interrogate_suspect tool (before the unlock check) so that
+    trust/nervousness changes from the current question affect location reveals.
     
-    Phase 2 addition: Also indexes the conversation in the RAG vector store
-    for semantic search.
+    This function now ONLY handles RAG indexing for semantic search.
     
     Args:
         state: Current game state
@@ -264,15 +263,8 @@ def _record_interrogation(
         answer: The suspect's response
     """
     try:
-        # Record the conversation exchange (Phase 1: structured state)
-        state.record_interrogation(suspect_name, question, answer)
-        logger.info(
-            "[AI] Recorded interrogation with %s (turn %d)",
-            suspect_name,
-            state.current_turn
-        )
-        
-        # Phase 2: Index in vector store for RAG search
+        # Index in vector store for RAG search
+        # (Conversation is already recorded in the tool, we just need to index it)
         memory = get_game_memory()
         if memory.is_available:
             memory.add_conversation(
@@ -281,27 +273,13 @@ def _record_interrogation(
                 answer=answer,
                 turn=state.current_turn
             )
-        
-        # Analyze question style and update emotional state
-        trust_delta, nervousness_delta = _analyze_question_style(question)
-        
-        if trust_delta != 0 or nervousness_delta != 0:
-            state.update_suspect_emotion(
-                suspect_name,
-                trust_delta=trust_delta,
-                nervousness_delta=nervousness_delta
-            )
-            suspect_state = state.get_suspect_state(suspect_name)
             logger.info(
-                "[AI] Updated %s emotional state: trust=%d%% (%+d), nervousness=%d%% (%+d)",
+                "[AI] Indexed interrogation with %s in RAG memory (turn %d)",
                 suspect_name,
-                suspect_state.trust,
-                trust_delta,
-                suspect_state.nervousness,
-                nervousness_delta
+                state.current_turn
             )
     except Exception:
-        logger.exception("[AI] Failed to record interrogation with %s", suspect_name)
+        logger.exception("[AI] Failed to index interrogation with %s", suspect_name)
 
 def process_player_action(
     action_type: str, target: str, custom_message: str, session_id: str

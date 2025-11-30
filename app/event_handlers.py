@@ -19,6 +19,7 @@ from ui.formatters import (
     format_clues_html,
     format_detective_notebook_html,
     format_dashboard_html,
+    format_accusations_tab_html,
 )
 from app.utils import convert_alignment_to_subtitles
 
@@ -51,13 +52,39 @@ def ensure_config(sess_id):
     return state
 
 
-def format_accusations_html(wrong: int) -> str:
-    """Format accusations HTML with pips."""
-    pips = ""
-    for i in range(3):
-        cls = "accusations-pip used" if i < wrong else "accusations-pip"
-        pips += f'<span class="{cls}"></span>'
-    return f'<div class="accusations-display">Accusations:<span>{pips}</span></div>'
+def format_accusations_html(state) -> str:
+    """Format accusations HTML with history, checklist, and fired state.
+    
+    Args:
+        state: GameState object (or int for backward compatibility)
+    """
+    # Handle backward compatibility - if passed just an int, use simple format
+    if isinstance(state, int):
+        wrong = state
+        pips = ""
+        for i in range(3):
+            cls = "accusations-pip used" if i < wrong else "accusations-pip"
+            pips += f'<span class="{cls}"></span>'
+        return f'<div class="accusations-display">Accusations:<span>{pips}</span></div>'
+    
+    # Full state - use enhanced formatter
+    # Build current requirements if we have a mystery
+    current_requirements = {}
+    if hasattr(state, 'mystery') and state.mystery:
+        # Default requirements - will be populated when player has a target suspect
+        current_requirements = {
+            'has_minimum_clues': len(state.clue_ids_found) >= 2,
+            'alibi_disproven': False,  # Requires a target suspect
+            'motive_established': False,
+            'opportunity_proven': False,
+        }
+    
+    return format_accusations_tab_html(
+        wrong_accusations=state.wrong_accusations,
+        accusation_history=state.accusation_history,
+        current_requirements=current_requirements,
+        fired=state.fired,
+    )
 
 
 def on_config_generic_change(setting, era, difficulty, tone, sess_id):
@@ -294,7 +321,7 @@ def on_start_game(sess_id, progress=gr.Progress()):
         format_locations_html(None, state.searched_locations, loading=True),
         format_clues_html(state.clues_found),
         # Accusations
-        format_accusations_html(state.wrong_accusations),
+        format_accusations_html(state),
         # Tab components (replicated from accordions)
         format_dashboard_html(
             None,
@@ -308,7 +335,7 @@ def on_start_game(sess_id, progress=gr.Progress()):
         format_suspects_list_html(None, state.suspects_talked_to, loading=True, layout="row"),
         format_locations_html(None, state.searched_locations, loading=True),
         format_clues_html(state.clues_found),
-        format_accusations_html(state.wrong_accusations),
+        format_accusations_html(state),
         format_detective_notebook_html(state.suspect_states),
         # Activate timer to check when mystery is ready
         gr.update(active=True),
@@ -361,6 +388,7 @@ def check_mystery_ready(sess_id: str):
             state.searched_locations,
             loading=False,
             location_images=images,
+            unlocked_locations=state.unlocked_locations,
         )
         dashboard_html = format_dashboard_html(
             state.mystery,
@@ -563,9 +591,10 @@ def on_custom_message(message: str, sess_id: str):
             state.mystery,
             state.searched_locations,
             location_images=mystery_images.get(sess_id, {}),
+            unlocked_locations=state.unlocked_locations,
         ),
         format_clues_html(state.clues_found),
-        format_accusations_html(state.wrong_accusations),
+        format_accusations_html(state),
         format_detective_notebook_html(state.suspect_states),
         "",  # Clear text input
     ]
@@ -797,9 +826,10 @@ def on_voice_input(audio_path: str, sess_id, progress=gr.Progress()):
             state.mystery,
             state.searched_locations,
             location_images=mystery_images.get(sess_id, {}),
+            unlocked_locations=state.unlocked_locations,
         ),
         format_clues_html(state.clues_found),
-        format_accusations_html(state.wrong_accusations),
+        format_accusations_html(state),
         format_detective_notebook_html(state.suspect_states),
         # Tab components (replicated from accordions)
         format_dashboard_html(
@@ -822,9 +852,10 @@ def on_voice_input(audio_path: str, sess_id, progress=gr.Progress()):
             state.mystery,
             state.searched_locations,
             location_images=mystery_images.get(sess_id, {}),
+            unlocked_locations=state.unlocked_locations,
         ),
         format_clues_html(state.clues_found),
-        format_accusations_html(state.wrong_accusations),
+        format_accusations_html(state),
         format_detective_notebook_html(state.suspect_states),
     ]
 
@@ -965,9 +996,10 @@ def on_voice_input(audio_path: str, sess_id, progress=gr.Progress()):
             state.mystery,
             state.searched_locations,
             location_images=mystery_images.get(sess_id, {}),
+            unlocked_locations=state.unlocked_locations,
         ),
         format_clues_html(state.clues_found),
-        format_accusations_html(state.wrong_accusations),
+        format_accusations_html(state),
         format_detective_notebook_html(state.suspect_states),
         # Tab components (replicated from accordions)
         format_dashboard_html(
@@ -986,9 +1018,13 @@ def on_voice_input(audio_path: str, sess_id, progress=gr.Progress()):
             portrait_images=mystery_images.get(sess_id, {}),
             layout="row",  # Tabs: horizontal layout
         ),
-        format_locations_html(state.mystery, state.searched_locations),
+        format_locations_html(
+            state.mystery,
+            state.searched_locations,
+            unlocked_locations=state.unlocked_locations,
+        ),
         format_clues_html(state.clues_found),
-        format_accusations_html(state.wrong_accusations),
+        format_accusations_html(state),
         format_detective_notebook_html(state.suspect_states),
     ]
 

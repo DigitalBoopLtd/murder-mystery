@@ -20,6 +20,80 @@ class SuspectState(BaseModel):
     contradictions_caught: int = Field(default=0, description="Times caught in a lie")
 
 
+# =============================================================================
+# ACCUSATION TRACKING
+# =============================================================================
+
+class AccusationRequirements(BaseModel):
+    """Checklist of requirements for an iron-cast accusation.
+    
+    All of these should be True for a successful accusation.
+    """
+    
+    # Core requirements
+    has_minimum_clues: bool = Field(default=False, description="Found at least 2 clues")
+    alibi_disproven: bool = Field(default=False, description="Found evidence that contradicts their alibi")
+    motive_established: bool = Field(default=False, description="Discovered a motive for the accused")
+    opportunity_proven: bool = Field(default=False, description="Proved they had opportunity (time/place)")
+    
+    # Evidence details
+    contradicting_clue_ids: List[str] = Field(default_factory=list, description="Clues that disprove alibi")
+    witness_contradictions: List[str] = Field(default_factory=list, description="Witnesses who contradict alibi")
+    motive_evidence: Optional[str] = Field(default=None, description="What established the motive")
+    
+    def get_missing_requirements(self) -> List[str]:
+        """Get list of requirements not yet met."""
+        missing = []
+        if not self.has_minimum_clues:
+            missing.append("Need to find at least 2 clues")
+        if not self.alibi_disproven:
+            missing.append("Need to disprove the suspect's alibi (find contradicting evidence or witnesses)")
+        if not self.motive_established:
+            missing.append("Need to establish a motive")
+        if not self.opportunity_proven:
+            missing.append("Need to prove they had the opportunity")
+        return missing
+    
+    def is_iron_cast(self) -> bool:
+        """Check if all requirements are met for an iron-cast accusation."""
+        return self.has_minimum_clues and self.alibi_disproven
+    
+    def get_strength_score(self) -> int:
+        """Calculate case strength as percentage (0-100)."""
+        score = 0
+        if self.has_minimum_clues:
+            score += 25
+        if self.alibi_disproven:
+            score += 40  # Most important!
+        if self.motive_established:
+            score += 20
+        if self.opportunity_proven:
+            score += 15
+        return score
+
+
+class AccusationAttempt(BaseModel):
+    """Record of a single accusation attempt."""
+    
+    turn: int = Field(description="Game turn when accusation was made")
+    accused_name: str = Field(description="Name of the suspect accused")
+    evidence_cited: str = Field(default="", description="What evidence the player cited")
+    was_correct_suspect: bool = Field(default=False, description="Was this actually the murderer?")
+    had_sufficient_evidence: bool = Field(default=False, description="Did they have enough evidence?")
+    requirements_met: AccusationRequirements = Field(
+        default_factory=AccusationRequirements,
+        description="Which requirements were met at time of accusation"
+    )
+    failure_reason: Optional[str] = Field(
+        default=None,
+        description="Why the accusation failed (if it failed)"
+    )
+    outcome: str = Field(
+        default="pending",
+        description="'success', 'wrong_suspect', 'insufficient_evidence', or 'pending'"
+    )
+
+
 class Victim(BaseModel):
     """Victim information."""
 
@@ -29,13 +103,77 @@ class Victim(BaseModel):
     )
 
 
+# =============================================================================
+# ALIBI VERIFICATION SYSTEM
+# =============================================================================
+
+class AlibiClaim(BaseModel):
+    """A structured alibi that can be verified or disproven.
+    
+    Every suspect has an alibi. Innocent suspects have TRUE alibis.
+    The murderer has a FALSE alibi with specific holes that can be discovered.
+    """
+    
+    time_claimed: str = Field(
+        description="Time range claimed: e.g., '8:00 PM - 9:30 PM'"
+    )
+    location_claimed: str = Field(
+        description="Where they claim to have been"
+    )
+    activity: str = Field(
+        description="What they claim to have been doing"
+    )
+    corroborator: Optional[str] = Field(
+        default=None,
+        description="Name of another suspect who can verify (or contradict) this alibi"
+    )
+    corroboration_type: str = Field(
+        default="none",
+        description="How alibi can be verified: 'witness' (another suspect), 'physical' (clue), 'none' (alone)"
+    )
+    is_truthful: bool = Field(
+        default=True,
+        description="True if this alibi is real, False if fabricated (murderer only)"
+    )
+    # For false alibis only - how to catch the lie
+    contradiction_clue_id: Optional[str] = Field(
+        default=None,
+        description="ID of clue that disproves this alibi (for false alibis)"
+    )
+    actual_whereabouts: Optional[str] = Field(
+        default=None,
+        description="Where they ACTUALLY were (for false alibis - committing the murder)"
+    )
+
+
+class WitnessStatement(BaseModel):
+    """What one suspect claims to have seen about another.
+    
+    Used for corroboration - if A says they saw B, B's alibi should match.
+    If the murderer claims they were with someone, that person's statement
+    should contradict them.
+    """
+    
+    witness: str = Field(description="Name of the suspect making the statement")
+    subject: str = Field(description="Name of the suspect they're talking about")
+    claim: str = Field(
+        description="What they claim to have seen: 'I saw Eleanor in the library at 8:30'"
+    )
+    time_of_sighting: str = Field(description="When they claim to have seen them")
+    location_of_sighting: str = Field(description="Where they claim to have seen them")
+    is_truthful: bool = Field(
+        default=True,
+        description="True if this witness statement is accurate"
+    )
+
+
 class Suspect(BaseModel):
     """Suspect information."""
 
     name: str
     role: str = Field(description="Relationship to victim")
     personality: str = Field(description="2-3 key traits")
-    alibi: str
+    alibi: str = Field(description="Simple alibi statement for backward compatibility")
     secret: str = Field(description="What they are hiding")
     clue_they_know: str = Field(description="Info they share if asked right questions")
     isGuilty: bool
@@ -57,15 +195,45 @@ class Suspect(BaseModel):
     portrait_path: Optional[str] = Field(
         default=None, description="Path to generated portrait image"
     )
+    location_hint: Optional[str] = Field(
+        default=None,
+        description="A location this suspect reveals when interrogated. Unlocks that location for searching.",
+    )
+    # Enhanced alibi verification system
+    structured_alibi: Optional[AlibiClaim] = Field(
+        default=None,
+        description="Detailed alibi with verification method"
+    )
+    witness_statements: List[WitnessStatement] = Field(
+        default_factory=list,
+        description="What this suspect claims to have seen about others"
+    )
 
 
 class Clue(BaseModel):
-    """Clue information."""
+    """Clue information with alibi verification capabilities."""
 
     id: str
     description: str
     location: str
     significance: str
+    # Alibi verification fields
+    contradicts_alibi_of: Optional[str] = Field(
+        default=None,
+        description="Name of suspect whose alibi this clue DISPROVES"
+    )
+    supports_alibi_of: Optional[str] = Field(
+        default=None,
+        description="Name of suspect whose alibi this clue CONFIRMS"
+    )
+    timeline_implication: Optional[str] = Field(
+        default=None,
+        description="What this clue tells us about timing: e.g., 'Victim was alive at 8:15 PM'"
+    )
+    evidence_type: str = Field(
+        default="circumstantial",
+        description="Type: 'physical' (forensic), 'documentary' (letters/records), 'circumstantial'"
+    )
 
 
 class MysteryPremise(BaseModel):
@@ -83,6 +251,21 @@ class MysteryPremise(BaseModel):
     )
 
 
+class MurderMethod(BaseModel):
+    """Details of how the murder was committed - required for valid accusation."""
+    
+    weapon: str = Field(description="The murder weapon")
+    time_of_death: str = Field(description="Approximate time: e.g., '8:30 PM'")
+    location_of_murder: str = Field(description="Where it happened")
+    opportunity: str = Field(
+        description="How the murderer had the opportunity (e.g., 'while others were at dinner')"
+    )
+    evidence_trail: List[str] = Field(
+        default_factory=list,
+        description="Clue IDs that prove this method"
+    )
+
+
 class Mystery(BaseModel):
     """Complete murder mystery scenario."""
 
@@ -95,6 +278,31 @@ class Mystery(BaseModel):
     motive: str
     suspects: List[Suspect] = Field(min_length=4, max_length=4)
     clues: List[Clue] = Field(min_length=5, max_length=5)
+    # Enhanced verification system
+    murder_method: Optional[MurderMethod] = Field(
+        default=None,
+        description="Detailed method for evidence-based accusation"
+    )
+    witness_statements: List[WitnessStatement] = Field(
+        default_factory=list,
+        description="All witness statements across suspects for easy corroboration lookup"
+    )
+    
+    def get_alibi_contradictions(self, suspect_name: str) -> List[str]:
+        """Get clue IDs that contradict a suspect's alibi."""
+        return [c.id for c in self.clues if c.contradicts_alibi_of == suspect_name]
+    
+    def get_alibi_support(self, suspect_name: str) -> List[str]:
+        """Get clue IDs that support a suspect's alibi."""
+        return [c.id for c in self.clues if c.supports_alibi_of == suspect_name]
+    
+    def get_witness_statements_about(self, suspect_name: str) -> List[WitnessStatement]:
+        """Get all witness statements about a specific suspect."""
+        return [ws for ws in self.witness_statements if ws.subject == suspect_name]
+    
+    def get_witness_statements_by(self, suspect_name: str) -> List[WitnessStatement]:
+        """Get all witness statements made by a specific suspect."""
+        return [ws for ws in self.witness_statements if ws.witness == suspect_name]
 
 
 # =============================================================================

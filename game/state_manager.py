@@ -60,6 +60,7 @@ class ToolOutputStore:
     # Action flags (replaces [SEARCHED:], [CLUE_FOUND:], etc.)
     location_searched: Optional[str] = None
     clue_found: Optional[str] = None
+    location_unlocked: Optional[str] = None  # Location revealed by suspect interrogation
     audio_path: Optional[str] = None
     audio_alignment_data: Optional[List[Dict]] = None  # Word timestamps for subtitles
     
@@ -70,6 +71,7 @@ class ToolOutputStore:
         self.accusation = None
         self.location_searched = None
         self.clue_found = None
+        self.location_unlocked = None
         self.audio_path = None
         self.audio_alignment_data = None
     

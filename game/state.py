@@ -1,7 +1,7 @@
 """Game state management."""
 
 from typing import Dict, Optional, List, Any
-from game.models import Mystery, SuspectState
+from game.models import Mystery, SuspectState, AccusationAttempt, AccusationRequirements
 from mystery_config import MysteryConfig, create_validated_config
 
 
@@ -16,9 +16,12 @@ class GameState:
         self.clue_ids_found: List[str] = []  # Clue IDs for tracking
         self.suspects_talked_to: List[str] = []
         self.searched_locations: List[str] = []  # Locations that have been searched
+        self.unlocked_locations: List[str] = []  # Locations revealed by suspects (searchable)
         self.wrong_accusations: int = 0
         self.game_over: bool = False
         self.won: bool = False
+        self.fired: bool = False  # True when player fails 3 accusations - kicked off the case
+        self.accusation_history: List[AccusationAttempt] = []  # Track all accusation attempts
         # Fast-start fields
         self.mystery_ready: bool = False
         self.premise_setting: Optional[str] = None
@@ -66,9 +69,12 @@ class GameState:
         self.clue_ids_found = []
         self.suspects_talked_to = []
         self.searched_locations = []
+        self.unlocked_locations = []  # Reset unlocked locations
         self.wrong_accusations = 0
         self.game_over = False
         self.won = False
+        self.fired = False  # Reset fired status
+        self.accusation_history = []  # Reset accusation history
         self.mystery_ready = False
         self.premise_setting = None
         self.premise_victim_name = None
@@ -96,8 +102,32 @@ class GameState:
         if location not in self.searched_locations:
             self.searched_locations.append(location)
 
+    def unlock_location(self, location: str) -> bool:
+        """Unlock a location for searching (typically revealed by a suspect).
+        
+        Returns True if the location was newly unlocked, False if already unlocked.
+        """
+        if location and location not in self.unlocked_locations:
+            self.unlocked_locations.append(location)
+            return True
+        return False
+
+    def is_location_unlocked(self, location: str) -> bool:
+        """Check if a location has been unlocked for searching."""
+        return location in self.unlocked_locations
+
     def add_suspect_talked_to(self, suspect_name: str):
-        """Mark a suspect as talked to."""
+        """Mark a suspect as talked to.
+        
+        NOTE: Locations are NOT bulk-unlocked here. Each location is revealed
+        individually through suspect interrogation based on:
+        - High trust (>= 65)
+        - High nervousness (>= 75)  
+        - Catching them in a contradiction
+        - 3+ conversations with that suspect
+        
+        The crime scene (murder_location) is unlocked at game start.
+        """
         if suspect_name not in self.suspects_talked_to:
             self.suspects_talked_to.append(suspect_name)
 
@@ -114,7 +144,121 @@ class GameState:
             self.wrong_accusations += 1
             if self.wrong_accusations >= 3:
                 self.game_over = True
+                self.fired = True  # 3 failed accusations = fired from the case
             return False
+
+    def evaluate_accusation_requirements(self, accused_name: str) -> AccusationRequirements:
+        """Evaluate what requirements are met for accusing a suspect.
+        
+        This checks:
+        1. Has minimum clues (2+)
+        2. Has evidence that contradicts their alibi
+        3. Has established a motive
+        4. Has proven opportunity
+        """
+        reqs = AccusationRequirements()
+        
+        if not self.mystery:
+            return reqs
+        
+        # Requirement 1: Minimum clues
+        reqs.has_minimum_clues = len(self.clue_ids_found) >= 2
+        
+        # Find the accused suspect
+        accused_suspect = None
+        for s in self.mystery.suspects:
+            if s.name.lower() == accused_name.lower() or accused_name.lower() in s.name.lower():
+                accused_suspect = s
+                break
+        
+        if not accused_suspect:
+            return reqs
+        
+        # Requirement 2: Alibi disproven
+        alibi_contradictions = self.mystery.get_alibi_contradictions(accused_suspect.name)
+        found_contradictions = [cid for cid in alibi_contradictions if cid in self.clue_ids_found]
+        reqs.contradicting_clue_ids = found_contradictions
+        
+        # Check witness contradictions (if we talked to their alibi corroborator)
+        if accused_suspect.structured_alibi and accused_suspect.structured_alibi.corroborator:
+            corroborator = accused_suspect.structured_alibi.corroborator
+            if corroborator in self.suspects_talked_to:
+                # If the alibi is false and we talked to the "witness", they would have contradicted
+                if not accused_suspect.structured_alibi.is_truthful:
+                    reqs.witness_contradictions = [corroborator]
+        
+        reqs.alibi_disproven = len(found_contradictions) > 0 or len(reqs.witness_contradictions) > 0
+        
+        # Requirement 3: Motive established (found clues related to motive)
+        # Check if any found clue mentions motive-related keywords
+        for clue_id in self.clue_ids_found:
+            for clue in self.mystery.clues:
+                if clue.id == clue_id:
+                    sig_lower = clue.significance.lower()
+                    if any(word in sig_lower for word in ['motive', 'reason', 'why', 'jealous', 'angry', 'revenge', 'money', 'inherit']):
+                        reqs.motive_established = True
+                        reqs.motive_evidence = clue.significance
+                        break
+        
+        # Requirement 4: Opportunity proven (they were near the crime scene)
+        # If we've disproven their alibi, they had opportunity
+        reqs.opportunity_proven = reqs.alibi_disproven
+        
+        return reqs
+
+    def record_accusation(
+        self,
+        accused_name: str,
+        evidence_cited: str,
+        was_correct: bool,
+        had_evidence: bool,
+        requirements: AccusationRequirements
+    ) -> AccusationAttempt:
+        """Record an accusation attempt in history."""
+        
+        # Determine outcome and failure reason
+        if was_correct and had_evidence:
+            outcome = "success"
+            failure_reason = None
+        elif not had_evidence:
+            outcome = "insufficient_evidence"
+            missing = requirements.get_missing_requirements()
+            failure_reason = "Insufficient evidence: " + "; ".join(missing) if missing else "Not enough clues gathered"
+        else:
+            outcome = "wrong_suspect"
+            failure_reason = f"{accused_name} was not the murderer"
+        
+        attempt = AccusationAttempt(
+            turn=self.current_turn,
+            accused_name=accused_name,
+            evidence_cited=evidence_cited,
+            was_correct_suspect=was_correct,
+            had_sufficient_evidence=had_evidence,
+            requirements_met=requirements,
+            failure_reason=failure_reason,
+            outcome=outcome,
+        )
+        
+        self.accusation_history.append(attempt)
+        return attempt
+
+    def get_accusation_summary(self) -> dict:
+        """Get summary of all accusation attempts for UI display."""
+        return {
+            "total_attempts": len(self.accusation_history),
+            "remaining_attempts": 3 - self.wrong_accusations,
+            "fired": self.fired,
+            "history": [
+                {
+                    "turn": a.turn,
+                    "accused": a.accused_name,
+                    "outcome": a.outcome,
+                    "failure_reason": a.failure_reason,
+                    "case_strength": a.requirements_met.get_strength_score(),
+                }
+                for a in self.accusation_history
+            ]
+        }
 
     # =========================================================================
     # Investigation Scoring & Multiple Endings
@@ -143,8 +287,8 @@ class GameState:
         talked_suspects = len(self.suspects_talked_to)
         suspect_score = talked_suspects / total_suspects if total_suspects > 0 else 0
         
-        # Location coverage
-        total_locations = len(self.get_available_locations())
+        # Location coverage (use all locations for scoring, not just unlocked)
+        total_locations = len(self.get_all_locations())
         searched_locs = len(self.searched_locations)
         location_score = searched_locs / total_locations if total_locations > 0 else 0
         
@@ -251,7 +395,16 @@ class GameState:
         return narratives.get(ending, "The case has concluded.")
 
     def get_available_locations(self) -> List[str]:
-        """Get list of locations from clues."""
+        """Get list of UNLOCKED locations that can be searched.
+        
+        Locations are unlocked by talking to suspects (each suspect reveals a location).
+        """
+        if not self.mystery:
+            return []
+        return self.unlocked_locations.copy()
+
+    def get_all_locations(self) -> List[str]:
+        """Get list of ALL locations from clues (for internal use/scoring)."""
         if not self.mystery:
             return []
         return list(set(clue.location for clue in self.mystery.clues))
@@ -511,11 +664,24 @@ When player formally accuses someone:
 
 {tone_block}
 
+## HANDLING OFF-TOPIC OR INVALID REQUESTS
+If the player asks something that doesn't fit the investigation:
+- Gently redirect them back to the case IN CHARACTER
+- Remind them of available actions: "Perhaps you'd like to speak with one of the suspects, or investigate a location?"
+- If they try to do something impossible (e.g., leave the scene, call backup), explain why it's not possible within the story
+- NEVER break the fourth wall or mention game mechanics directly
+
+Example redirects:
+- "I'd love to help with that, but we need to focus on the case. Shall we question someone?"
+- "That's not something we can do right now. The suspects are waiting - who would you like to speak with?"
+- "Let's stay focused on finding the killer. Would you like to search somewhere or talk to someone?"
+
 ## RESPONSE STYLE
 - Keep responses atmospheric and conversational
 - Be concise - 2-4 paragraphs max
 - ASK for clarification rather than guessing wrong
 - Build suspense, don't spoil the mystery!
+- If unsure what the player wants, offer 2-3 specific options
 
 Continue the investigation based on the player's message."""
         else:

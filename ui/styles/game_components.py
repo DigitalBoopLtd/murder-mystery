@@ -82,6 +82,33 @@ CSS_GAME_COMPONENTS = """/* ========== BASE PANEL TITLE (fallback) ========== */
     font-weight: 700;
 }
 
+/* Locations empty state */
+.locations-empty {
+    text-align: center;
+    padding: 24px;
+    color: var(--terminal-green-muted);
+    font-family: var(--font-body);
+    font-size: 14px;
+    line-height: 1.6;
+}
+
+.locations-icon {
+    font-size: 36px;
+    margin-bottom: 12px;
+    opacity: 0.6;
+}
+
+.locations-message {
+    color: var(--terminal-green);
+    font-weight: 600;
+    margin-bottom: 6px;
+}
+
+.locations-hint {
+    font-style: italic;
+    opacity: 0.8;
+}
+
 /* ========== SUSPECT ITEMS ========== */
 .suspect-item {
     font-family: var(--font-body);
@@ -721,5 +748,281 @@ CSS_GAME_COMPONENTS = """/* ========== BASE PANEL TITLE (fallback) ========== */
     border-color: var(--terminal-green) !important;
     color: var(--terminal-green) !important;
     background: rgba(51, 255, 51, 0.1) !important;
+}
+
+/* ========== ACCUSATIONS TAB ========== */
+.accusations-tab {
+    padding: 16px;
+    font-family: var(--font-body);
+}
+
+/* Fired Screen */
+.fired-screen {
+    text-align: center;
+    padding: 40px 20px;
+    background: rgba(255, 50, 50, 0.1);
+    border: 2px solid #ff4444;
+    border-radius: 8px;
+    margin: 20px;
+}
+
+.fired-icon {
+    font-size: 64px;
+    margin-bottom: 16px;
+}
+
+.fired-title {
+    font-family: var(--font-retro-mono);
+    font-size: 32px;
+    color: #ff4444;
+    text-shadow: 0 0 20px #ff4444;
+    margin-bottom: 16px;
+    letter-spacing: 4px;
+}
+
+.fired-message {
+    font-size: 16px;
+    color: var(--text-primary);
+    line-height: 1.6;
+    max-width: 400px;
+    margin: 0 auto 20px;
+}
+
+.fired-hint {
+    font-size: 14px;
+    color: var(--terminal-green);
+    font-style: italic;
+}
+
+/* Accusations Remaining */
+.accusations-remaining {
+    background: rgba(0, 30, 0, 0.4);
+    border: 1px solid var(--terminal-green-border-soft);
+    padding: 16px;
+    margin-bottom: 16px;
+    text-align: center;
+}
+
+.accusations-label {
+    font-family: var(--font-retro-mono);
+    font-size: 14px;
+    color: var(--terminal-green);
+    letter-spacing: 2px;
+    margin-bottom: 12px;
+}
+
+.accusations-pips {
+    display: flex;
+    justify-content: center;
+    gap: 16px;
+    margin-bottom: 8px;
+}
+
+.accusation-pip {
+    font-size: 24px;
+}
+
+.accusation-pip.used {
+    opacity: 0.5;
+}
+
+.accusations-count {
+    font-size: 16px;
+    color: var(--terminal-green);
+    margin-bottom: 8px;
+}
+
+.accusations-warning {
+    font-size: 13px;
+    color: var(--terminal-green-accent);
+    font-style: italic;
+}
+
+/* Checklist */
+.accusations-checklist {
+    background: rgba(0, 20, 0, 0.4);
+    border: 1px solid var(--terminal-green-border-soft);
+    padding: 16px;
+    margin-bottom: 16px;
+}
+
+.checklist-header {
+    font-family: var(--font-retro-mono);
+    font-size: 14px;
+    color: var(--terminal-green);
+    letter-spacing: 2px;
+    margin-bottom: 4px;
+    text-shadow: 0 0 6px var(--terminal-green);
+}
+
+.checklist-subtitle {
+    font-size: 13px;
+    color: var(--terminal-green-muted);
+    margin-bottom: 12px;
+}
+
+.checklist-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px;
+    margin-bottom: 4px;
+    border-radius: 4px;
+}
+
+.checklist-item.met {
+    background: rgba(51, 255, 51, 0.1);
+}
+
+.checklist-item.unmet {
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.checklist-icon {
+    font-size: 16px;
+}
+
+.checklist-label {
+    flex: 1;
+    font-size: 14px;
+    color: var(--text-primary);
+}
+
+.checklist-importance {
+    font-size: 11px;
+    color: var(--terminal-green-accent);
+    font-style: italic;
+}
+
+.checklist-item.unmet .checklist-importance {
+    color: #ffcc00;
+}
+
+.checklist-strength {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--terminal-green-border-soft);
+    font-size: 14px;
+    color: var(--terminal-green);
+}
+
+.strength-bar {
+    flex: 1;
+    height: 12px;
+    background: rgba(0, 20, 0, 0.6);
+    border: 1px solid var(--terminal-green-border-soft);
+    border-radius: 2px;
+    overflow: hidden;
+}
+
+.strength-fill {
+    height: 100%;
+    background: var(--terminal-green);
+    transition: width 0.3s ease;
+}
+
+.strength-pct {
+    font-family: var(--font-retro-mono);
+    min-width: 40px;
+    text-align: right;
+}
+
+.checklist-tip {
+    margin-top: 12px;
+    padding: 10px;
+    background: rgba(51, 255, 51, 0.05);
+    border-radius: 4px;
+    font-size: 13px;
+    color: var(--terminal-green-accent);
+    text-align: center;
+}
+
+/* Accusation History */
+.accusations-history {
+    background: rgba(0, 20, 0, 0.4);
+    border: 1px solid var(--terminal-green-border-soft);
+    padding: 16px;
+}
+
+.history-header {
+    font-family: var(--font-retro-mono);
+    font-size: 14px;
+    color: var(--terminal-green);
+    letter-spacing: 2px;
+    margin-bottom: 12px;
+    text-shadow: 0 0 6px var(--terminal-green);
+}
+
+.history-empty {
+    text-align: center;
+    padding: 20px;
+    color: var(--terminal-green-muted);
+    font-style: italic;
+}
+
+.history-item {
+    display: flex;
+    gap: 12px;
+    padding: 12px;
+    margin-bottom: 8px;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 4px;
+    border-left: 3px solid transparent;
+}
+
+.history-item.success {
+    border-left-color: var(--terminal-green);
+    background: rgba(51, 255, 51, 0.1);
+}
+
+.history-item.wrong_suspect {
+    border-left-color: #ff4444;
+    background: rgba(255, 68, 68, 0.1);
+}
+
+.history-item.insufficient_evidence {
+    border-left-color: #ffcc00;
+    background: rgba(255, 204, 0, 0.1);
+}
+
+.history-number {
+    font-family: var(--font-retro-mono);
+    font-size: 16px;
+    color: var(--terminal-green-muted);
+    padding: 4px 8px;
+    background: rgba(0, 20, 0, 0.4);
+    border-radius: 4px;
+}
+
+.history-details {
+    flex: 1;
+}
+
+.history-accused {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+}
+
+.history-outcome {
+    font-size: 13px;
+    color: var(--terminal-green-accent);
+    margin-bottom: 4px;
+}
+
+.history-reason {
+    font-size: 12px;
+    color: var(--terminal-green-muted);
+    font-style: italic;
+}
+
+.history-strength {
+    font-size: 11px;
+    color: var(--terminal-green-muted);
+    margin-top: 4px;
 }
 """
