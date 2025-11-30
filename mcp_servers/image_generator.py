@@ -157,8 +157,27 @@ def save_to_cache(image, cache_key: str) -> str:
 # PROMPT ENHANCEMENT
 # =============================================================================
 
+# Check if prompt enhancement is enabled (default: true, set false for speed)
+ENHANCE_PROMPTS = os.getenv("ENHANCE_PROMPTS", "true").lower() == "true"
+
+if not ENHANCE_PROMPTS:
+    logger.info("⚡ Prompt enhancement DISABLED (ENHANCE_PROMPTS=false)")
+# =============================================================================
+
 def enhance_prompt(template: str, **kwargs) -> str:
-    """Enhance a prompt using GPT-4o-mini."""
+    """Enhance a prompt using GPT-4o-mini (if enabled)."""
+    # Fast path: skip enhancement if disabled
+    if not ENHANCE_PROMPTS:
+        fallback = kwargs.get("fallback", "")
+        context = kwargs.get("context", "")
+        if context:
+            # Use context directly for clue-focused scenes
+            return f"{context}\n{ART_STYLE_SUFFIX}"
+        if fallback:
+            return fallback + ART_STYLE_SUFFIX
+        # Minimal fallback
+        return template.format(**{k: v for k, v in kwargs.items() if k != "fallback"})[:500] + ART_STYLE_SUFFIX
+    
     client = get_openai_client()
     
     user_prompt = template.format(**kwargs)

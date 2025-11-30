@@ -8,6 +8,8 @@ Key insights from Z-Image-Turbo documentation:
 - Does NOT use negative prompts (guidance_scale=0.0)
 - No meta-tags like "8K", "masterpiece", "best quality"
 - Be literal and specific, avoid metaphors
+
+Set ENHANCE_PROMPTS=false to skip LLM enhancement and save ~8-13s per image.
 """
 
 import os
@@ -19,6 +21,12 @@ from typing import Optional, Dict
 from services.perf_tracker import perf
 
 logger = logging.getLogger(__name__)
+
+# Check if prompt enhancement is enabled (default: true for quality, false for speed)
+ENHANCE_PROMPTS = os.getenv("ENHANCE_PROMPTS", "true").lower() == "true"
+
+if not ENHANCE_PROMPTS:
+    logger.info("⚡ Prompt enhancement DISABLED (ENHANCE_PROMPTS=false) - faster generation")
 
 # Initialize OpenAI client lazily
 _client = None
@@ -183,6 +191,11 @@ def enhance_character_prompt(
     Returns:
         Enhanced prompt string (200-400 words)
     """
+    # Skip enhancement if disabled (saves ~8s per image)
+    if not ENHANCE_PROMPTS:
+        logger.info(f"[PE] ⚡ Using fast fallback for character {name} (enhancement disabled)")
+        return _fallback_character_prompt(name, role, personality, gender, setting)
+    
     # Check cache first
     cache_key = _cache_key("char", name=name, role=role, personality=personality[:50], gender=gender)
     with _cache_lock:
@@ -245,11 +258,16 @@ def enhance_scene_prompt(
         location: Location name
         setting: Overall setting description
         mood: Mood of the scene
-        context: Optional context from game response
+        context: Optional context from game response (includes clue details)
         
     Returns:
         Enhanced prompt string (200-400 words)
     """
+    # Skip enhancement if disabled (saves ~8-13s per scene)
+    if not ENHANCE_PROMPTS:
+        logger.info(f"[PE] ⚡ Using fast fallback for scene {location} (enhancement disabled)")
+        return _fallback_scene_prompt_with_context(location, setting, mood, context)
+    
     # Include context hash in cache key so clue-focused prompts aren't cached incorrectly
     context_hash = hashlib.md5((context or "").encode()).hexdigest()[:8] if context else "none"
     cache_key = _cache_key("scene", location=location, setting=setting[:100], mood=mood, ctx=context_hash)
@@ -321,9 +339,9 @@ def enhance_title_card_prompt(
     Returns:
         Enhanced prompt string (200-400 words)
     """
-    # Fast mode: use direct template without LLM call (for startup speed)
-    if fast_mode:
-        logger.info("[PE] Using fast mode for title card (no LLM enhancement)")
+    # Skip enhancement if disabled globally or fast_mode requested
+    if not ENHANCE_PROMPTS or fast_mode:
+        logger.info("[PE] ⚡ Using fast mode for title card (enhancement disabled)")
         return _fallback_title_prompt(title, setting)
     
     # Check cache first
@@ -375,7 +393,7 @@ def enhance_title_card_prompt(
 
 
 # =============================================================================
-# FALLBACK PROMPTS - Used when LLM enhancement fails
+# FALLBACK PROMPTS - Used when LLM enhancement fails or is disabled
 # =============================================================================
 
 def _fallback_character_prompt(
@@ -400,6 +418,51 @@ First-person perspective as if the detective is surveying the scene. No people v
 {ART_STYLE_SUFFIX}"""
 
 
+def _fallback_scene_prompt_with_context(location: str, setting: str, mood: str, context: str) -> str:
+    """Generate a scene prompt using the context directly (for fast mode).
+    
+    This preserves clue information from the describe_scene_for_image tool output
+    without requiring an LLM call.
+    """
+    if not context:
+        return _fallback_scene_prompt(location, setting, mood)
+    
+    # Parse structured context from describe_scene_for_image tool
+    # Format: "Focus: X | Shot: Y | Lighting: Z | Background: W"
+    clue_focus = ""
+    shot_type = "medium shot"
+    lighting = mood
+    background = ""
+    
+    if "Focus:" in context:
+        parts = context.split("|")
+        for part in parts:
+            part = part.strip()
+            if part.startswith("Focus:"):
+                clue_focus = part.replace("Focus:", "").strip()
+            elif part.startswith("Shot:"):
+                shot_type = part.replace("Shot:", "").strip()
+            elif part.startswith("Lighting:"):
+                lighting = part.replace("Lighting:", "").strip()
+            elif part.startswith("Background:"):
+                background = part.replace("Background:", "").strip()
+    else:
+        # Fallback: use raw context
+        clue_focus = context[:300]
+    
+    # Build a focused prompt that emphasizes the clue
+    prompt = f"""A {shot_type.lower()} view of {location}. {setting}.
+
+VISUAL FOCUS: {clue_focus}. This is the main subject of the image, prominently displayed and dramatically lit.
+
+The scene has {lighting.lower()} atmosphere. {background if background else 'The background is softly blurred to draw attention to the focal point.'}
+
+Composition emphasizes the clue/evidence - it should be clearly visible and the hero of the shot. {shot_type} framing. No people visible. No text, signs, or writing anywhere in the image.
+{ART_STYLE_SUFFIX}"""
+    
+    return prompt
+
+
 def _fallback_title_prompt(title: str, setting: str) -> str:
     """Generate a basic title card prompt when LLM enhancement fails."""
     return f"""An atmospheric establishing shot for a murder mystery set in {setting}.
@@ -408,4 +471,3 @@ The mood is ominous and foreboding, suggesting something terrible has happened. 
 
 No body or explicit violence shown - only the aftermath suggested through disturbed elements and ominous atmosphere. No text or writing anywhere in the image.
 {ART_STYLE_SUFFIX}"""
-
