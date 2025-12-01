@@ -60,7 +60,13 @@ perf.reset("app_startup")
 
 # Initialize OpenAI client
 perf.start("init_openai")
-openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+openai_api_key = os.getenv("OPENAI_API_KEY")
+openai_client = None
+if openai_api_key:
+    openai_client = OpenAI(api_key=openai_api_key)
+    logger.info("✅ OpenAI client initialized")
+else:
+    logger.warning("⚠️ OPENAI_API_KEY not set - game features will be limited")
 perf.end("init_openai")
 
 # Initialize ElevenLabs client
