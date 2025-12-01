@@ -316,19 +316,6 @@ def on_start_game(sess_id, progress=gr.Progress()):
             autoplay=True,
         )
 
-    # Build victim/case HTML from premise (full mystery still loading)
-    victim_html = f"""
-    <div style="margin-bottom: 12px;">
-        <div style="font-weight: 700; margin-bottom: 8px; font-size: 1.2em; padding-bottom: 8px;">
-            The Murder of {state.premise_victim_name}
-        </div>
-        <div style="font-weight: 600; color: var(--accent-blue); margin-bottom: 8px;">Victim:</div>
-        <div style="color: var(--text-primary); margin-bottom: 12px;">{state.premise_victim_name}</div>
-        <div style="font-weight: 600; color: var(--accent-blue); margin-bottom: 8px;">Scene:</div>
-        <div style="color: var(--text-primary);">{state.premise_setting}</div>
-    </div>
-    """
-
     # Final progress
     progress(1.0, desc="🎮 Let's play!")
     
@@ -349,22 +336,12 @@ def on_start_game(sess_id, progress=gr.Progress()):
         # Show game UI
         gr.update(visible=True),  # input_row
         # Side panels - show "loading" state, timer will update when ready
-        victim_html,
         format_suspects_list_html(None, state.suspects_talked_to, loading=True, layout="column"),
         format_locations_html(None, state.searched_locations, loading=True),
         format_clues_html(state.clues_found),
         # Accusations
         format_accusations_html(state),
-        # Tab components (replicated from accordions)
-        format_dashboard_html(
-            None,
-            state.clues_found,
-            state.suspects_talked_to,
-            state.searched_locations,
-            state.suspect_states,
-            state.wrong_accusations
-        ),
-        victim_html,
+        # Tab components (suspects, locations, clues, accusations, timeline)
         format_suspects_list_html(None, state.suspects_talked_to, loading=True, layout="row"),
         format_locations_html(None, state.searched_locations, loading=True),
         format_clues_html(state.clues_found),
@@ -460,14 +437,29 @@ def check_mystery_ready(sess_id: str):
         # Check for early suspect previews (available ~2s before full mystery)
         suspect_previews = getattr(state, "suspect_previews", [])
         skeleton = getattr(state, "skeleton", None)
-        logger.info("[APP] Timer: suspect_previews=%d, has_skeleton=%s", 
+        logger.info("[APP] Timer: suspect_previews=%d, has_skeleton=%s, previews=%s", 
                    len(suspect_previews) if suspect_previews else 0, 
-                   skeleton is not None)
+                   skeleton is not None,
+                   [sp.get("name", "?") for sp in suspect_previews] if suspect_previews else [])
         if suspect_previews:
-            logger.info("[APP] Timer: Suspect previews available (%d), showing early", len(suspect_previews))
+            logger.info("[APP] Timer: Suspect previews available (%d), showing early: %s", 
+                       len(suspect_previews),
+                       [sp.get("name", "?") for sp in suspect_previews])
             from ui.formatters import format_suspect_previews_html
             suspects_preview_panel = format_suspect_previews_html(suspect_previews, layout="column")
             suspects_preview_tab = format_suspect_previews_html(suspect_previews, layout="row")
+            # Update case file with suspect previews so names appear early
+            case_file_preview = format_case_file_html(
+                mystery=None,
+                suspects_talked_to=state.suspects_talked_to,
+                suspect_states=state.suspect_states,
+                clues_found=state.clues_found,
+                wrong_accusations=state.wrong_accusations,
+                game_over=state.game_over,
+                won=state.won,
+                suspect_previews=suspect_previews,
+            )
+            logger.info("[APP] Timer: Case file preview generated, length=%d", len(case_file_preview))
             return [
                 portrait_update,  # Update opening scene if available
                 suspects_preview_panel,  # suspects_list_html - show previews early!
@@ -475,7 +467,7 @@ def check_mystery_ready(sess_id: str):
                 # Tab components
                 suspects_preview_tab,  # suspects tab - show previews early!
                 gr.update(),  # locations_html_tab
-                gr.update(),  # case_file_html_main - no change yet
+                case_file_preview,  # case_file_html_main - show suspect names from previews!
                 gr.update(active=True),  # Keep timer running
             ]
         
@@ -724,7 +716,7 @@ def on_voice_input(audio_path: str, sess_id, progress=gr.Progress()):
     Stage 2 (slow): Generate TTS audio + images, yield final update with audio
     """
     if not audio_path:
-        yield [gr.update()] * 18  # Must match game_outputs count
+        yield [gr.update()] * 15  # Must match game_outputs count
         return
 
     # Normalize session id so it matches what on_start_game used
@@ -736,12 +728,12 @@ def on_voice_input(audio_path: str, sess_id, progress=gr.Progress()):
         state_before, "premise_setting", None
     ):
         logger.warning("[APP] Voice input received but no game started yet")
-        yield [gr.update()] * 18  # Must match game_outputs count
+        yield [gr.update()] * 15  # Must match game_outputs count
         return
 
     # Show progress indicator while processing
     progress(0, desc="🗣️ Transcribing...")
-    yield [gr.update()] * 18  # Must match game_outputs count
+    yield [gr.update()] * 15  # Must match game_outputs count
 
     # Store previous state to detect what changed
     # IMPORTANT: Make copies of the lists since state is mutated in place
@@ -768,7 +760,7 @@ def on_voice_input(audio_path: str, sess_id, progress=gr.Progress()):
     logger.info("[PERF] Transcription took %.2fs", t1 - t0)
 
     if not text.strip():
-        yield [gr.update()] * 18  # Must match game_outputs count
+        yield [gr.update()] * 15  # Must match game_outputs count
         return
 
     # Infer high-level action type from the transcribed text
@@ -795,6 +787,16 @@ def on_voice_input(audio_path: str, sess_id, progress=gr.Progress()):
     from game.state_manager import get_tool_output_store
     tool_store = get_tool_output_store(sess_id)
     alignment_data_from_tool = tool_store.audio_alignment_data
+    
+    # Debug: Log accusation state after processing
+    if tool_store.accusation:
+        logger.info(
+            "[APP] Accusation detected - wrong_accusations: %d, is_correct: %s, has_evidence: %s, accusation_history length: %d",
+            state.wrong_accusations,
+            tool_store.accusation.is_correct,
+            tool_store.accusation.has_sufficient_evidence,
+            len(state.accusation_history) if hasattr(state, 'accusation_history') else 0
+        )
     
     # Check if a secret was revealed this turn (for UI notification)
     secret_reveal_notification = ""

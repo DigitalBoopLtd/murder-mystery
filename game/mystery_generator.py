@@ -744,13 +744,14 @@ def prepare_game_prompt(
     )
 
     # Build suspect profiles WITHOUT secrets (secrets accessed by tool internally)
+    # Alibis are hidden until suspects are interrogated
     suspect_profiles = "\n".join(
         [
             f"""
 ### {s.name}
 Role: {s.role}
 Personality: {s.personality}
-Alibi: "{s.alibi}"
+Alibi: (Not yet revealed - interrogate this suspect to learn their alibi)
 Voice ID: {s.voice_id or 'None'}
 
 EMOTIONAL STATE (initial):
@@ -870,12 +871,13 @@ def prepare_secure_game_prompt(
     case_context = build_gm_context(public_mystery)
     
     # Build suspect profiles from public info only
+    # Alibis are only revealed after interrogation
     suspect_profiles = "\n".join(
         f"""
 ### {s.name}
 Role: {s.role}
 Personality: {s.personality}
-Alibi claim: "{s.alibi}"
+Alibi claim: {f'"{s.alibi}"' if s.has_been_interrogated else "(Not yet revealed - interrogate this suspect to learn their alibi)"}
 Status: {"INTERROGATED" if s.has_been_interrogated else "Not yet questioned"}
 """
         for s in public_mystery.suspects

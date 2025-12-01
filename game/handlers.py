@@ -706,13 +706,14 @@ def process_player_action(
                     break
     
     if tool_store.accusation:
-        actions["accusation"] = tool_store.accusation.suspect_name
-        actions["accusation_correct"] = tool_store.accusation.is_correct
-        actions["accusation_has_evidence"] = tool_store.accusation.has_sufficient_evidence
+        accusation = tool_store.accusation
+        actions["accusation"] = accusation.suspect_name
+        actions["accusation_correct"] = accusation.is_correct
+        actions["accusation_has_evidence"] = accusation.has_sufficient_evidence
         
         # Apply accusation result to game state
         # ANY formal accusation costs one of the three attempts unless it's the final, correct one.
-        if tool_store.accusation.is_correct and tool_store.accusation.has_sufficient_evidence:
+        if accusation.is_correct and accusation.has_sufficient_evidence:
             state.won = True
             state.game_over = True
             logger.info("✅ CORRECT ACCUSATION with evidence! Player wins!")
@@ -720,13 +721,37 @@ def process_player_action(
             state.wrong_accusations += 1
             logger.info(
                 "❌ Failed accusation (evidence=%s): %s (attempt %d/3)",
-                "sufficient" if tool_store.accusation.has_sufficient_evidence else "insufficient",
-                tool_store.accusation.suspect_name,
+                "sufficient" if accusation.has_sufficient_evidence else "insufficient",
+                accusation.suspect_name,
                 state.wrong_accusations,
             )
             if state.wrong_accusations >= 3:
                 state.game_over = True
+                state.fired = True
                 logger.info("💀 3 failed accusations - GAME OVER!")
+        
+        # Ensure accusation is recorded in history
+        already_recorded = any(
+            a.accused_name == accusation.suspect_name and a.turn == state.current_turn
+            for a in state.accusation_history
+        )
+        if not already_recorded:
+            logger.info("[HANDLER] Recording accusation in history")
+            from game.models import AccusationRequirements
+            clues_found_count = getattr(accusation, 'clues_found_count', len(state.clue_ids_found))
+            requirements = AccusationRequirements(
+                has_minimum_clues=clues_found_count >= 2
+            )
+            state.record_accusation(
+                accused_name=accusation.suspect_name,
+                evidence_cited="",
+                was_correct=accusation.is_correct,
+                had_evidence=accusation.has_sufficient_evidence,
+                requirements=requirements,
+            )
+        
+        logger.info("[HANDLER] Accusation processed: history=%d, wrong=%d, fired=%s",
+                   len(state.accusation_history), state.wrong_accusations, state.fired)
     
     # Clean up any leftover markers from response (legacy support)
     clean_response = clean_response_markers(clean_response)
@@ -1389,32 +1414,64 @@ def run_action_logic(
                     break
     
     if tool_store.accusation:
-        actions["accusation"] = tool_store.accusation.suspect_name
-        actions["accusation_correct"] = tool_store.accusation.is_correct
-        actions["accusation_has_evidence"] = tool_store.accusation.has_sufficient_evidence
+        accusation = tool_store.accusation
+        actions["accusation"] = accusation.suspect_name
+        actions["accusation_correct"] = accusation.is_correct
+        actions["accusation_has_evidence"] = accusation.has_sufficient_evidence
         
         # Apply accusation result to game state
-        # Only count accusations that had sufficient evidence
-        if tool_store.accusation.has_sufficient_evidence:
-            if tool_store.accusation.is_correct:
+        if accusation.has_sufficient_evidence:
+            if accusation.is_correct:
                 state.won = True
                 state.game_over = True
                 logger.info("✅ CORRECT ACCUSATION with evidence! Player wins!")
             else:
+                # Wrong accusation with evidence - counts as a strike
                 state.wrong_accusations += 1
                 logger.info(
                     "❌ Wrong accusation: %s (attempt %d/3)",
-                    tool_store.accusation.suspect_name,
+                    accusation.suspect_name,
                     state.wrong_accusations
                 )
                 if state.wrong_accusations >= 3:
                     state.game_over = True
+                    state.fired = True
                     logger.info("💀 3 wrong accusations - GAME OVER!")
         else:
+            # Insufficient evidence - still counts as a strike (per tool documentation)
+            state.wrong_accusations += 1
             logger.info(
-                "⚠️ Accusation rejected - insufficient evidence (%d clues found)",
-                tool_store.accusation.clues_found_count
+                "⚠️ Accusation rejected - insufficient evidence (%d clues found) - counts as attempt %d/3",
+                accusation.clues_found_count,
+                state.wrong_accusations
             )
+            if state.wrong_accusations >= 3:
+                state.game_over = True
+                state.fired = True
+                logger.info("💀 3 failed accusations (including insufficient evidence) - GAME OVER!")
+        
+        # Fallback: Ensure accusation is recorded in history if the tool didn't do it
+        # Check if this accusation was already recorded (by comparing accused name and timestamp)
+        already_recorded = any(
+            a.accused_name == accusation.suspect_name and a.turn == state.current_turn
+            for a in state.accusation_history
+        )
+        if not already_recorded:
+            logger.info("[HANDLER] Recording accusation in history (fallback)")
+            from game.models import AccusationRequirements
+            requirements = AccusationRequirements(
+                has_minimum_clues=accusation.clues_found_count >= 2
+            )
+            state.record_accusation(
+                accused_name=accusation.suspect_name,
+                evidence_cited="",
+                was_correct=accusation.is_correct,
+                had_evidence=accusation.has_sufficient_evidence,
+                requirements=requirements,
+            )
+        
+        logger.info("[HANDLER] Accusation processed: history=%d, wrong=%d, fired=%s",
+                   len(state.accusation_history), state.wrong_accusations, state.fired)
 
     # Remove game state markers from response (SEARCHED, ACCUSATION, CLUE_FOUND)
     t_clean_start = time.perf_counter()

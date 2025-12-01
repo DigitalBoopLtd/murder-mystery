@@ -645,11 +645,13 @@ class GameState:
                 emotional_instructions = self.get_emotional_instructions(s.name)
                 
                 # Only include guilt flag for tool usage (not displayed to player)
+                # Alibi is only revealed after interrogation
+                alibi_display = f'"{s.alibi}"' if s.name in self.suspects_talked_to else "(Not yet revealed - interrogate this suspect to learn their alibi)"
                 profile = f"""
 ### {s.name}
 Role: {s.role}
 Personality: {s.personality}
-Alibi: "{s.alibi}"
+Alibi: {alibi_display}
 Voice ID: {s.voice_id or 'None'}
 
 EMOTIONAL STATE (pass to tool):

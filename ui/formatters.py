@@ -61,13 +61,14 @@ def format_victim_scene_html(mystery) -> str:
 
 
 def format_case_file_html(
-    mystery,
+    mystery=None,
     suspects_talked_to: Optional[List[str]] = None,
     suspect_states: Optional[Dict[str, SuspectState]] = None,
     clues_found: Optional[List[str]] = None,
     wrong_accusations: int = 0,
     game_over: bool = False,
     won: bool = False,
+    suspect_previews: Optional[List[Dict[str, str]]] = None,
 ) -> str:
     """Format an 'official case file' overview as HTML for the Case File tab.
 
@@ -78,28 +79,86 @@ def format_case_file_html(
     suspects_talked_to = suspects_talked_to or []
     suspect_states = suspect_states or {}
     clues_found = clues_found or []
+    suspect_previews = suspect_previews or []
 
+    # If no mystery but we have previews, show them
     if not mystery:
-        return """
-        <div class="case-file-root">
-            <div class="case-file-header">
-                <div class="case-file-title-block">
-                    <div class="case-file-division">HOMICIDE DIVISION</div>
-                    <div class="case-file-title">OFFICIAL CASE FILE</div>
+        if suspect_previews and len(suspect_previews) > 0:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.info("[FORMATTER] Case file: Showing %d suspect previews: %s", 
+                       len(suspect_previews),
+                       [sp.get("name", "?") if isinstance(sp, dict) else getattr(sp, "name", "?") for sp in suspect_previews])
+            # Show previews while full mystery loads
+            suspect_rows = []
+            for preview in suspect_previews:
+                name = preview.get("name", "Unknown") if isinstance(preview, dict) else getattr(preview, "name", "Unknown")
+                role = preview.get("role", "Unknown") if isinstance(preview, dict) else getattr(preview, "role", "Unknown")
+                suspect_rows.append(
+                    f"""
+                    <tr>
+                        <td class="case-file-cell-name">{name}</td>
+                        <td class="case-file-cell-role">{role}</td>
+                        <td class="case-file-cell-status">⚪ Loading details...</td>
+                    </tr>
+                    """
+                )
+            suspects_html = "".join(suspect_rows)
+            
+            return f"""
+            <div class="case-file-root">
+                <div class="case-file-header">
+                    <div class="case-file-title-block">
+                        <div class="case-file-division">HOMICIDE DIVISION</div>
+                        <div class="case-file-title">OFFICIAL CASE FILE</div>
+                    </div>
+                    <div class="case-file-meta">
+                        <div>Case #: <span class="case-file-meta-value">MYS-2025-001</span></div>
+                        <div>Status: <span class="case-file-status case-file-status-open">LOADING</span></div>
+                    </div>
                 </div>
-                <div class="case-file-meta">
-                    <div>Case #: <span class="case-file-meta-value">MYS-????</span></div>
-                    <div>Status: <span class="case-file-status case-file-status-open">PENDING</span></div>
+                <div class="case-file-body">
+                    <div class="case-file-section">
+                        <div class="case-file-section-title">
+                            PERSONS OF INTEREST ({len(suspect_previews)})
+                        </div>
+                        <table class="case-file-table">
+                            <thead>
+                                <tr>
+                                    <th>Name</th>
+                                    <th>Role</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {suspects_html}
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
-            <div class="case-file-body">
-                <div class="case-file-empty">
-                    <div class="case-file-empty-icon">📁</div>
-                    <div class="case-file-empty-text">Start a mystery to generate the official case file.</div>
+            """
+        else:
+            return """
+            <div class="case-file-root">
+                <div class="case-file-header">
+                    <div class="case-file-title-block">
+                        <div class="case-file-division">HOMICIDE DIVISION</div>
+                        <div class="case-file-title">OFFICIAL CASE FILE</div>
+                    </div>
+                    <div class="case-file-meta">
+                        <div>Case #: <span class="case-file-meta-value">MYS-????</span></div>
+                        <div>Status: <span class="case-file-status case-file-status-open">PENDING</span></div>
+                    </div>
+                </div>
+                <div class="case-file-body">
+                    <div class="case-file-empty">
+                        <div class="case-file-empty-icon">📁</div>
+                        <div class="case-file-empty-text">Start a mystery to generate the official case file.</div>
+                    </div>
                 </div>
             </div>
-        </div>
-        """
+            """
 
     victim = getattr(mystery, "victim", None)
     murder_method = getattr(mystery, "murder_method", None)
@@ -139,30 +198,46 @@ def format_case_file_html(
 
     # Build suspect rows
     suspect_rows: List[str] = []
-    suspects = getattr(mystery, "suspects", []) or []
+    
+    # Use full mystery suspects if available, otherwise use previews
+    if mystery:
+        suspects = getattr(mystery, "suspects", []) or []
+        for s in suspects:
+            name = getattr(s, "name", "Unknown")
+            role = getattr(s, "role", "Unknown")
+            state = suspect_states.get(name) if suspect_states else None
 
-    for s in suspects:
-        name = getattr(s, "name", "Unknown")
-        role = getattr(s, "role", "Unknown")
-        state = suspect_states.get(name)
+            # Simple, non-spoilery status
+            if state and state.contradictions_caught > 0:
+                status_text = "🔴 Prime Suspect"
+            elif name in (suspects_talked_to or []):
+                status_text = "🟡 Person of Interest"
+            else:
+                status_text = "⚪ Not Yet Interrogated"
 
-        # Simple, non-spoilery status
-        if state and state.contradictions_caught > 0:
-            status_text = "🔴 Prime Suspect"
-        elif name in suspects_talked_to:
-            status_text = "🟡 Person of Interest"
-        else:
-            status_text = "⚪ Not Yet Interrogated"
-
-        suspect_rows.append(
-            f"""
-            <tr>
-                <td class="case-file-cell-name">{name}</td>
-                <td class="case-file-cell-role">{role}</td>
-                <td class="case-file-cell-status">{status_text}</td>
-            </tr>
-            """
-        )
+            suspect_rows.append(
+                f"""
+                <tr>
+                    <td class="case-file-cell-name">{name}</td>
+                    <td class="case-file-cell-role">{role}</td>
+                    <td class="case-file-cell-status">{status_text}</td>
+                </tr>
+                """
+            )
+    elif suspect_previews:
+        # Show previews while full mystery is loading
+        for preview in suspect_previews:
+            name = preview.get("name", "Unknown")
+            role = preview.get("role", "Unknown")
+            suspect_rows.append(
+                f"""
+                <tr>
+                    <td class="case-file-cell-name">{name}</td>
+                    <td class="case-file-cell-role">{role}</td>
+                    <td class="case-file-cell-status">⚪ Loading details...</td>
+                </tr>
+                """
+            )
 
     suspects_html = (
         "".join(suspect_rows)
@@ -208,7 +283,7 @@ def format_case_file_html(
 
             <div class="case-file-section">
                 <div class="case-file-section-title">
-                    PERSONS OF INTEREST ({len(suspects)})
+                    PERSONS OF INTEREST ({len(suspect_rows)})
                 </div>
                 <table class="case-file-table">
                     <thead>
@@ -307,31 +382,34 @@ def get_suspect_relationships(suspect_name: str) -> List[Tuple[str, str]]:
                     continue
 
         # ===== 2) RAG-based cross-references (fallback / extra context) =====
-        try:
-            from services.game_memory import get_game_memory
-            memory = get_game_memory()
-        except Exception:
-            memory = None
-        
-        if memory and memory.is_available:
-            try:
-                cross_refs = memory.search_cross_references(suspect_name, k=5)
-                
-                for speaker, statement in cross_refs:
-                    # Skip if we already have a stronger structured relationship
-                    if speaker in relationships:
-                        continue
-                    
-                    statement_lower = statement.lower()
-                    
-                    if any(word in statement_lower for word in ["saw", "with", "together", "alibi"]):
-                        relationships.setdefault(speaker, "alibi")
-                    elif any(word in statement_lower for word in ["suspicious", "lying", "guilty", "killed", "murder"]):
-                        relationships.setdefault(speaker, "accused")
-                    else:
-                        relationships.setdefault(speaker, "mentioned")
-            except Exception as e:
-                logger.debug("[FORMATTER] RAG cross-references failed: %s", e)
+        # SKIP RAG searches for performance - only use structured data
+        # RAG searches are expensive and can slow down UI rendering
+        # If needed, relationships can be calculated on-demand or cached
+        # try:
+        #     from services.game_memory import get_game_memory
+        #     memory = get_game_memory()
+        # except Exception:
+        #     memory = None
+        # 
+        # if memory and memory.is_available:
+        #     try:
+        #         cross_refs = memory.search_cross_references(suspect_name, k=5)
+        #         
+        #         for speaker, statement in cross_refs:
+        #             # Skip if we already have a stronger structured relationship
+        #             if speaker in relationships:
+        #                 continue
+        #             
+        #             statement_lower = statement.lower()
+        #             
+        #             if any(word in statement_lower for word in ["saw", "with", "together", "alibi"]):
+        #                 relationships.setdefault(speaker, "alibi")
+        #             elif any(word in statement_lower for word in ["suspicious", "lying", "guilty", "killed", "murder"]):
+        #                 relationships.setdefault(speaker, "accused")
+        #             else:
+        #                 relationships.setdefault(speaker, "mentioned")
+        #     except Exception as e:
+        #         logger.debug("[FORMATTER] RAG cross-references failed: %s", e)
         
         # Convert to list and limit to a couple of most relevant entries
         result = [(speaker, rel_type) for speaker, rel_type in relationships.items()]
