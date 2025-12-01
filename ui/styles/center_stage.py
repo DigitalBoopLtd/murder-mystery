@@ -53,8 +53,8 @@ CSS_CENTER_STAGE = """/* ========== MAIN LAYOUT ========== */
         padding: 12px !important;
     }
     
-    /* Adjust input bar for mobile */
-    .input-bar {
+    /* Adjust record bar for mobile */
+    .record-bar {
         padding: 8px !important;
     }
     

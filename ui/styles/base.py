@@ -41,9 +41,9 @@ CSS_BASE = """
     left: -9999px !important;
 }
 
-/* Hide status trackers that appear in wrong places (input bar, audio player, inline) */
+/* Hide status trackers that appear in wrong places (record bar, audio player, inline) */
 /* Only the centered modal should be visible - handled by dedicated status tracker section below */
-.input-bar [data-testid="status-tracker"],
+.record-bar [data-testid="status-tracker"],
 #mm-audio-player [data-testid="status-tracker"],
 [data-testid="status-tracker"].wrap.default.full.hide,
 [data-testid="status-tracker"].wrap.default:not(.full),

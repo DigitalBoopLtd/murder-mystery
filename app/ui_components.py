@@ -30,131 +30,7 @@ def create_ui_components() -> dict:
     """
 
     # Inject CSS and favicon
-    # Scripts for sticky bar and password field fixes
-    # Note: Password field form warnings are a known Gradio issue and don't affect functionality
-    password_form_fix = ""  # Disabled - wrapping breaks Gradio's event handling
-    
-    sticky_bar_script = """
-    <script>
-    (function() {
-        console.log('[Sticky Bar] Script starting...');
-        
-        // In HF Spaces, position:fixed often doesn't work correctly in iframes
-        // Force absolute positioning from the start
-        const forceAbsolute = window.location.hostname.includes('hf.space') || 
-                             window.location.hostname.includes('huggingface') ||
-                             window.self !== window.top; // In any iframe
-        
-        console.log('[Sticky Bar] Force absolute mode:', forceAbsolute);
-        
-        let stickyBar = null;
-        
-        function positionBar() {
-            if (!stickyBar) {
-                stickyBar = document.getElementById('sticky-record-bar');
-                if (!stickyBar) return;
-            }
-            
-            const viewportHeight = window.innerHeight;
-            const scrollY = window.scrollY || window.pageYOffset || document.documentElement.scrollTop || 0;
-            const barHeight = stickyBar.offsetHeight || 80;
-            
-            if (forceAbsolute) {
-                // Use absolute positioning with calculated top
-                const targetTop = scrollY + viewportHeight - barHeight;
-                
-                stickyBar.style.cssText = `
-                    position: absolute !important;
-                    top: ${targetTop}px !important;
-                    bottom: auto !important;
-                    left: 0 !important;
-                    right: 0 !important;
-                    width: 100% !important;
-                    z-index: 2147483647 !important;
-                    margin: 0 !important;
-                    padding: 16px 12px !important;
-                    background: rgba(10, 10, 10, 0.98) !important;
-                    border-top: 1px solid #006666 !important;
-                    display: block !important;
-                    box-sizing: border-box !important;
-                `;
-            } else {
-                stickyBar.style.cssText = `
-                    position: fixed !important;
-                    bottom: 0 !important;
-                    left: 0 !important;
-                    right: 0 !important;
-                    top: auto !important;
-                    width: 100% !important;
-                    z-index: 2147483647 !important;
-                    margin: 0 !important;
-                    padding: 16px 12px !important;
-                    background: rgba(10, 10, 10, 0.98) !important;
-                    border-top: 1px solid #006666 !important;
-                    display: block !important;
-                    transform: none !important;
-                    box-sizing: border-box !important;
-                `;
-            }
-        }
-        
-        function init() {
-            stickyBar = document.getElementById('sticky-record-bar');
-            if (!stickyBar) {
-                console.log('[Sticky Bar] Element not found, retrying...');
-                setTimeout(init, 100);
-                return;
-            }
-            
-            console.log('[Sticky Bar] Element found. Offset height:', stickyBar.offsetHeight);
-            
-            // Initial position
-            positionBar();
-            
-            // Log position for debugging
-            setTimeout(() => {
-                const rect = stickyBar.getBoundingClientRect();
-                console.log('[Sticky Bar] After positioning - Rect:', {
-                    top: rect.top,
-                    bottom: rect.bottom,
-                    height: rect.height
-                }, 'Viewport:', window.innerHeight, 'ScrollY:', window.scrollY);
-            }, 100);
-        }
-        
-        // Throttled scroll handler
-        let ticking = false;
-        function onScroll() {
-            if (!ticking) {
-                requestAnimationFrame(() => {
-                    positionBar();
-                    ticking = false;
-                });
-                ticking = true;
-            }
-        }
-        
-        // Listen on multiple scroll targets
-        window.addEventListener('scroll', onScroll, { passive: true });
-        document.addEventListener('scroll', onScroll, { passive: true });
-        
-        // Also reposition on resize
-        window.addEventListener('resize', positionBar);
-        
-        // Start initialization
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', init);
-        } else {
-            init();
-        }
-        window.addEventListener('load', init);
-        
-        // Periodic repositioning as fallback
-        setInterval(positionBar, 500);
-    })();
-    </script>
-    """
-    gr.HTML(f"<style>{RETRO_CSS}</style>{favicon_html}{password_form_fix}{sticky_bar_script}")
+    gr.HTML(f"<style>{RETRO_CSS}</style>{favicon_html}")
 
     # Session state - stable UUID string per browser session
     session_id = gr.State(str(uuid.uuid4()))
@@ -253,20 +129,20 @@ def create_ui_components() -> dict:
                             elem_classes="audio-player",
                         )
                         
-                    # Input bar - sticky bottom record button (always visible)
-                    with gr.Column(
-                        elem_classes="input-bar",
-                        elem_id="sticky-record-bar",
-                        visible=True,
-                    ) as input_row:
-                        # Voice input - minimal, just the mic button
-                        voice_input = gr.Audio(
-                            sources=["microphone"],
-                            type="filepath",
-                            label=None,
-                            show_label=False,
-                            elem_classes="record-audio-minimal",
-                        )
+                        # Record button - inside the stage for reliable positioning
+                        with gr.Column(
+                            elem_classes="record-bar",
+                            elem_id="record-bar",
+                            visible=True,
+                        ) as input_row:
+                            # Voice input - minimal, just the mic button
+                            voice_input = gr.Audio(
+                                sources=["microphone"],
+                                type="filepath",
+                                label=None,
+                                show_label=False,
+                                elem_classes="record-audio-minimal",
+                            )
 
                     # ====== SETUP WIZARD ======
                     # Step 1: Configure + Voice Loading
