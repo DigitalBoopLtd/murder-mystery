@@ -34,36 +34,86 @@ def create_ui_components() -> dict:
     sticky_bar_script = """
     <script>
     (function() {
-        // Ensure sticky bar is always fixed to viewport, even if parent has transform
+        let stickyBarMoved = false;
+        
+        // Check if a parent element has transform/perspective/filter that breaks fixed positioning
+        function hasTransformParent(element) {
+            let parent = element.parentElement;
+            while (parent && parent !== document.body) {
+                const style = window.getComputedStyle(parent);
+                const transform = style.transform;
+                const perspective = style.perspective;
+                const filter = style.filter;
+                const willChange = style.willChange;
+                
+                if (transform && transform !== 'none') return true;
+                if (perspective && perspective !== 'none') return true;
+                if (filter && filter !== 'none') return true;
+                if (willChange && willChange !== 'auto') return true;
+                
+                parent = parent.parentElement;
+            }
+            return false;
+        }
+        
+        // Ensure sticky bar is always fixed to viewport
         function enforceStickyBar() {
             const stickyBar = document.getElementById('sticky-record-bar');
-            if (stickyBar) {
-                // Force fixed positioning by checking computed style
-                const computed = window.getComputedStyle(stickyBar);
-                if (computed.position !== 'fixed') {
-                    stickyBar.style.position = 'fixed';
-                    stickyBar.style.bottom = '0';
-                    stickyBar.style.left = '0';
-                    stickyBar.style.right = '0';
-                    stickyBar.style.zIndex = '99999';
-                }
+            if (!stickyBar) return;
+            
+            // If parent has transform, move sticky bar to body to escape the containing block
+            if (!stickyBarMoved && hasTransformParent(stickyBar)) {
+                // Store original parent and position
+                const originalParent = stickyBar.parentElement;
+                const nextSibling = stickyBar.nextSibling;
+                
+                // Move to body
+                document.body.appendChild(stickyBar);
+                stickyBarMoved = true;
+                
+                console.log('[Sticky Bar] Moved to body to escape transform parent');
             }
+            
+            // Force fixed positioning
+            stickyBar.style.position = 'fixed';
+            stickyBar.style.bottom = '0';
+            stickyBar.style.left = '0';
+            stickyBar.style.right = '0';
+            stickyBar.style.width = '100%';
+            stickyBar.style.zIndex = '99999';
+            stickyBar.style.margin = '0';
         }
         
-        // Run on load and after a short delay to catch late-rendered elements
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', enforceStickyBar);
-        } else {
-            enforceStickyBar();
+        // Run on load and after delays to catch late-rendered elements
+        function initStickyBar() {
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', enforceStickyBar);
+            } else {
+                enforceStickyBar();
+            }
+            setTimeout(enforceStickyBar, 100);
+            setTimeout(enforceStickyBar, 500);
+            setTimeout(enforceStickyBar, 1000);
         }
-        setTimeout(enforceStickyBar, 100);
-        setTimeout(enforceStickyBar, 500);
         
-        // Also watch for DOM changes (Gradio may re-render)
+        initStickyBar();
+        
+        // Watch for DOM changes (Gradio may re-render)
         const observer = new MutationObserver(function(mutations) {
+            // Only re-check if sticky bar was moved back or recreated
+            const stickyBar = document.getElementById('sticky-record-bar');
+            if (stickyBar && stickyBar.parentElement !== document.body) {
+                stickyBarMoved = false;
+            }
             enforceStickyBar();
         });
-        observer.observe(document.body, { childList: true, subtree: true });
+        
+        observer.observe(document.body, { 
+            childList: true, 
+            subtree: true,
+            attributes: true,
+            attributeFilter: ['style', 'class']
+        });
     })();
     </script>
     """
