@@ -88,13 +88,18 @@ def create_ui_components() -> dict:
             const rect = stickyBar.getBoundingClientRect();
             const viewportHeight = window.innerHeight;
             const distanceFromBottom = viewportHeight - rect.bottom;
+            const isInBody = stickyBar.parentElement === document.body;
             
-            if (computed.position !== 'fixed') {
-                console.warn('[Sticky Bar] Position is not fixed! Computed:', computed.position, 'Parent:', stickyBar.parentElement?.tagName);
-            } else if (Math.abs(distanceFromBottom) > 5) {
-                console.warn('[Sticky Bar] Not at viewport bottom! Distance:', distanceFromBottom, 'px, Rect:', rect);
-            } else {
-                console.log('[Sticky Bar] ✓ Correctly positioned at viewport bottom');
+            // Log detailed info for debugging
+            if (!isInBody || computed.position !== 'fixed' || Math.abs(distanceFromBottom) > 5) {
+                console.warn('[Sticky Bar] Issue detected!', {
+                    inBody: isInBody,
+                    position: computed.position,
+                    parent: stickyBar.parentElement?.tagName + '.' + stickyBar.parentElement?.className,
+                    distanceFromBottom: distanceFromBottom + 'px',
+                    rect: { top: rect.top, bottom: rect.bottom, left: rect.left, right: rect.right },
+                    viewportHeight: viewportHeight
+                });
             }
         }
         
@@ -115,37 +120,41 @@ def create_ui_components() -> dict:
         
         initStickyBar();
         
-        // Watch for DOM changes (Gradio may re-render)
+        // Watch for DOM changes (Gradio may re-render or move the element back)
         const observer = new MutationObserver(function(mutations) {
             const stickyBar = document.getElementById('sticky-record-bar');
             if (stickyBar) {
                 const parent = stickyBar.parentElement;
                 if (parent !== document.body) {
                     console.log('[Sticky Bar] Detected in container, moving to body. Parent:', parent.tagName, parent.className);
-                    stickyBarMoved = false;
+                    // Immediately move it back to body
+                    document.body.appendChild(stickyBar);
+                    stickyBarMoved = true;
+                    // Re-apply all styles
                     enforceStickyBar();
                 } else {
-                    // Still enforce styles even if already moved
+                    // Still enforce styles even if already moved (in case styles get overridden)
                     enforceStickyBar();
                 }
             }
         });
         
-        observer.observe(document.body, { 
+        // Watch the entire document for when the element gets moved
+        observer.observe(document.documentElement, { 
             childList: true, 
             subtree: true,
-            attributes: true,
-            attributeFilter: ['style', 'class']
+            attributes: false  // Don't watch attributes to reduce noise
         });
         
-        // Also run on window load and scroll to ensure it stays fixed
+        // Also watch body specifically for when element is added/removed
+        observer.observe(document.body, { 
+            childList: true,
+            subtree: false  // Only direct children of body
+        });
+        
+        // Also run on window load to ensure it stays fixed
         window.addEventListener('load', enforceStickyBar);
-        window.addEventListener('scroll', function() {
-            const stickyBar = document.getElementById('sticky-record-bar');
-            if (stickyBar) {
-                enforceStickyBar();
-            }
-        }, { passive: true });
+        // Removed scroll listener to reduce console spam - fixed positioning should handle scrolling automatically
     })();
     </script>
     """
