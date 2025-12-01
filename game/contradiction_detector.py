@@ -143,3 +143,4 @@ def clear_cache():
     _contradiction_cache = {}
     logger.info("[CONTRADICTION] Cache cleared")
 
+
