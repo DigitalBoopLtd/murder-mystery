@@ -61,27 +61,46 @@ def create_ui_components() -> dict:
             const stickyBar = document.getElementById('sticky-record-bar');
             if (!stickyBar) return;
             
-            // If parent has transform, move sticky bar to body to escape the containing block
-            if (!stickyBarMoved && hasTransformParent(stickyBar)) {
-                // Store original parent and position
-                const originalParent = stickyBar.parentElement;
-                const nextSibling = stickyBar.nextSibling;
+            // Always move to body in Hugging Face Spaces to ensure it works
+            // Check if it's still inside a Gradio container
+            const isInGradioContainer = stickyBar.closest('.gradio-container') !== null;
+            
+            if (!stickyBarMoved && (hasTransformParent(stickyBar) || isInGradioContainer)) {
+                // Clone the element to preserve event listeners
+                const clone = stickyBar.cloneNode(true);
                 
-                // Move to body
-                document.body.appendChild(stickyBar);
+                // Remove from current location
+                stickyBar.remove();
+                
+                // Add to body
+                document.body.appendChild(clone);
+                
+                // Update the ID on the clone (in case Gradio is looking for it)
+                clone.id = 'sticky-record-bar';
+                
                 stickyBarMoved = true;
                 
-                console.log('[Sticky Bar] Moved to body to escape transform parent');
+                console.log('[Sticky Bar] Moved to body to escape container');
+                
+                // Re-run on the new element
+                enforceStickyBar();
+                return;
             }
             
-            // Force fixed positioning
-            stickyBar.style.position = 'fixed';
-            stickyBar.style.bottom = '0';
-            stickyBar.style.left = '0';
-            stickyBar.style.right = '0';
-            stickyBar.style.width = '100%';
-            stickyBar.style.zIndex = '99999';
-            stickyBar.style.margin = '0';
+            // Force fixed positioning and remove flex styles
+            const targetBar = document.getElementById('sticky-record-bar');
+            if (targetBar) {
+                targetBar.style.position = 'fixed';
+                targetBar.style.bottom = '0';
+                targetBar.style.left = '0';
+                targetBar.style.right = '0';
+                targetBar.style.width = '100%';
+                targetBar.style.zIndex = '99999';
+                targetBar.style.margin = '0';
+                targetBar.style.flexGrow = '0';
+                targetBar.style.minWidth = 'auto';
+                targetBar.style.maxWidth = 'none';
+            }
         }
         
         // Run on load and after delays to catch late-rendered elements
@@ -94,18 +113,21 @@ def create_ui_components() -> dict:
             setTimeout(enforceStickyBar, 100);
             setTimeout(enforceStickyBar, 500);
             setTimeout(enforceStickyBar, 1000);
+            setTimeout(enforceStickyBar, 2000);
         }
         
         initStickyBar();
         
         // Watch for DOM changes (Gradio may re-render)
         const observer = new MutationObserver(function(mutations) {
-            // Only re-check if sticky bar was moved back or recreated
             const stickyBar = document.getElementById('sticky-record-bar');
             if (stickyBar && stickyBar.parentElement !== document.body) {
                 stickyBarMoved = false;
+                enforceStickyBar();
+            } else if (stickyBar) {
+                // Still enforce styles even if already moved
+                enforceStickyBar();
             }
-            enforceStickyBar();
         });
         
         observer.observe(document.body, { 
