@@ -66,25 +66,14 @@ def create_ui_components() -> dict:
             const isInGradioContainer = stickyBar.closest('.gradio-container') !== null;
             
             if (!stickyBarMoved && (hasTransformParent(stickyBar) || isInGradioContainer)) {
-                // Clone the element to preserve event listeners
-                const clone = stickyBar.cloneNode(true);
-                
-                // Remove from current location
-                stickyBar.remove();
-                
-                // Add to body
-                document.body.appendChild(clone);
-                
-                // Update the ID on the clone (in case Gradio is looking for it)
-                clone.id = 'sticky-record-bar';
+                // Move directly to body (preserves event listeners)
+                document.body.appendChild(stickyBar);
                 
                 stickyBarMoved = true;
                 
                 console.log('[Sticky Bar] Moved to body to escape container');
                 
-                // Re-run on the new element
-                enforceStickyBar();
-                return;
+                // Continue to apply styles
             }
             
             // Force fixed positioning and remove flex styles
