@@ -1,15 +1,23 @@
 """Input bar CSS styles."""
 
 CSS_INPUT_BAR = """/* ========== STICKY INPUT BAR (RESET) ========== */
-#sticky-record-bar {
+/* Target the sticky bar with maximum specificity to work in Hugging Face Spaces */
+#sticky-record-bar,
+.gradio-container #sticky-record-bar,
+body #sticky-record-bar,
+html body #sticky-record-bar {
     position: fixed !important;
     bottom: 0 !important;
     left: 0 !important;
     right: 0 !important;
-    z-index: 9999 !important;
+    width: 100% !important;
+    z-index: 99999 !important;
     background: rgba(10, 10, 10, 0.96) !important;
     border-top: 1px solid var(--border-dark) !important;
     padding: 16px 12px !important;
+    margin: 0 !important;
+    transform: none !important;
+    will-change: auto !important;
 }
 
 /* Center the audio block, keep it narrow, and make the wrapper visually subtle */

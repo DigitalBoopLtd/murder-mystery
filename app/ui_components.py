@@ -30,7 +30,44 @@ def create_ui_components() -> dict:
     """
 
     # Inject CSS and favicon
-    gr.HTML(f"<style>{RETRO_CSS}</style>{favicon_html}")
+    # Also include a script to ensure sticky bar works in Hugging Face Spaces
+    sticky_bar_script = """
+    <script>
+    (function() {
+        // Ensure sticky bar is always fixed to viewport, even if parent has transform
+        function enforceStickyBar() {
+            const stickyBar = document.getElementById('sticky-record-bar');
+            if (stickyBar) {
+                // Force fixed positioning by checking computed style
+                const computed = window.getComputedStyle(stickyBar);
+                if (computed.position !== 'fixed') {
+                    stickyBar.style.position = 'fixed';
+                    stickyBar.style.bottom = '0';
+                    stickyBar.style.left = '0';
+                    stickyBar.style.right = '0';
+                    stickyBar.style.zIndex = '99999';
+                }
+            }
+        }
+        
+        // Run on load and after a short delay to catch late-rendered elements
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', enforceStickyBar);
+        } else {
+            enforceStickyBar();
+        }
+        setTimeout(enforceStickyBar, 100);
+        setTimeout(enforceStickyBar, 500);
+        
+        // Also watch for DOM changes (Gradio may re-render)
+        const observer = new MutationObserver(function(mutations) {
+            enforceStickyBar();
+        });
+        observer.observe(document.body, { childList: true, subtree: true });
+    })();
+    </script>
+    """
+    gr.HTML(f"<style>{RETRO_CSS}</style>{favicon_html}{sticky_bar_script}")
 
     # Session state - stable UUID string per browser session
     session_id = gr.State(str(uuid.uuid4()))
