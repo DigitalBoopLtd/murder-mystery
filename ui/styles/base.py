@@ -217,6 +217,13 @@ label.svelte-19qdtil {
     color: var(--text-primary) !important;
 }
 
+label {
+    background: var(--bg-card) !important;
+    border-color: var(--border-dark) !important;
+    box-shadow: none !important;
+    color: var(--text-primary) !important;
+}
+
 label.svelte-19qdtil:hover {
     background: var(--bg-panel) !important;
     color: var(--text-primary) !important;
