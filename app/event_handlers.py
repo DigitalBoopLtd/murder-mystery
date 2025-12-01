@@ -435,41 +435,40 @@ def check_mystery_ready(sess_id: str):
         portrait_update = gr.update(value=opening_scene) if opening_scene else gr.update()
         
         # Check for early suspect previews (available ~2s before full mystery)
-        suspect_previews = getattr(state, "suspect_previews", [])
-        skeleton = getattr(state, "skeleton", None)
-        logger.info("[APP] Timer: suspect_previews=%d, has_skeleton=%s, previews=%s", 
-                   len(suspect_previews) if suspect_previews else 0, 
-                   skeleton is not None,
-                   [sp.get("name", "?") for sp in suspect_previews] if suspect_previews else [])
-        if suspect_previews:
-            logger.info("[APP] Timer: Suspect previews available (%d), showing early: %s", 
-                       len(suspect_previews),
-                       [sp.get("name", "?") for sp in suspect_previews])
-            from ui.formatters import format_suspect_previews_html
-            suspects_preview_panel = format_suspect_previews_html(suspect_previews, layout="column")
-            suspects_preview_tab = format_suspect_previews_html(suspect_previews, layout="row")
-            # Update case file with suspect previews so names appear early
-            case_file_preview = format_case_file_html(
-                mystery=None,
-                suspects_talked_to=state.suspects_talked_to,
-                suspect_states=state.suspect_states,
-                clues_found=state.clues_found,
-                wrong_accusations=state.wrong_accusations,
-                game_over=state.game_over,
-                won=state.won,
-                suspect_previews=suspect_previews,
-            )
-            logger.info("[APP] Timer: Case file preview generated, length=%d", len(case_file_preview))
-            return [
-                portrait_update,  # Update opening scene if available
-                suspects_preview_panel,  # suspects_list_html - show previews early!
-                gr.update(),  # locations_html - no change
-                # Tab components
-                suspects_preview_tab,  # suspects tab - show previews early!
-                gr.update(),  # locations_html_tab
-                case_file_preview,  # case_file_html_main - show suspect names from previews!
-                gr.update(active=True),  # Keep timer running
-            ]
+        # Note: suspect_previews already loaded at line 369
+        print(f"[TIMER] Checking previews: count={len(suspect_previews)}, data={suspect_previews[:2] if suspect_previews else 'empty'}", flush=True)
+        if suspect_previews and len(suspect_previews) > 0:
+            try:
+                print(f"[TIMER] ✅ Showing previews: {[sp.get('name', '?') for sp in suspect_previews]}", flush=True)
+                from ui.formatters import format_suspect_previews_html
+                suspects_preview_panel = format_suspect_previews_html(suspect_previews, layout="column")
+                suspects_preview_tab = format_suspect_previews_html(suspect_previews, layout="row")
+                # Update case file with suspect previews so names appear early
+                case_file_preview = format_case_file_html(
+                    mystery=None,
+                    suspects_talked_to=state.suspects_talked_to,
+                    suspect_states=state.suspect_states,
+                    clues_found=state.clues_found,
+                    wrong_accusations=state.wrong_accusations,
+                    game_over=state.game_over,
+                    won=state.won,
+                    suspect_previews=suspect_previews,
+                )
+                print("[TIMER] Preview HTML generated, returning to UI", flush=True)
+                return [
+                    portrait_update,  # Update opening scene if available
+                    suspects_preview_panel,  # suspects_list_html - show previews early!
+                    gr.update(),  # locations_html - no change
+                    # Tab components
+                    suspects_preview_tab,  # suspects tab - show previews early!
+                    gr.update(),  # locations_html_tab
+                    case_file_preview,  # case_file_html_main - show suspect names from previews!
+                    gr.update(active=True),  # Keep timer running
+                ]
+            except Exception as e:
+                print(f"[TIMER] ❌ Error showing previews: {e}", flush=True)
+                import traceback
+                traceback.print_exc()
         
         return [
             portrait_update,  # Update opening scene if available
