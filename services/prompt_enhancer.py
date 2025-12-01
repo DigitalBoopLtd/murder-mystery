@@ -49,8 +49,11 @@ def get_client():
     """Get or create OpenAI client."""
     global _client
     if _client is None:
+        api_key = os.getenv("OPENAI_API_KEY")
+        if not api_key:
+            return None
         from openai import OpenAI
-        _client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+        _client = OpenAI(api_key=api_key)
     return _client
 
 
