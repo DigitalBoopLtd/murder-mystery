@@ -4,7 +4,7 @@ emoji: 🔍
 colorFrom: purple
 colorTo: red
 sdk: gradio
-sdk_version: "5.0"
+sdk_version: "5.29.1"
 app_file: app.py
 pinned: false
 tags:
@@ -14,11 +14,42 @@ tags:
   - elevenlabs
   - tts
   - mcp
+  - voice
+  - detective
+  - agentic
 ---
 
 # 🔍 Murder Mystery Detective Game
 
+> 🎉 **MCP 1st Birthday Hackathon Submission** — Track 2: MCP in Action (`mcp-in-action-track-creative`)
+> 
+> 🔗 **See also**: [Murder Mystery MCP Server](https://huggingface.co/spaces/MCP-1st-Birthday/murder-mystery-mcp) — Track 1: Building MCP
+
 A voice-first murder mystery game powered by **Model Context Protocol (MCP)**. Investigate crimes, interrogate AI suspects, and solve procedurally generated mysteries in a 90s point-and-click adventure style.
+
+---
+
+## 📺 Demo Video
+
+> **[👉 Watch the Demo Video](YOUR_VIDEO_LINK_HERE)** *(Required for submission)*
+>
+> The video shows: starting a new mystery, interrogating suspects with voice, searching locations, and making an accusation.
+
+---
+
+## 🐦 Social Media
+
+> **[🐦 See the announcement on X/Twitter](YOUR_SOCIAL_POST_LINK_HERE)** *(Required for submission)*
+
+---
+
+## 👥 Team
+
+| HuggingFace Username |
+|---------------------|
+| @YOUR_HF_USERNAME |
+
+*(Add all team member HuggingFace usernames)*
 
 ---
 
@@ -66,17 +97,37 @@ The MCP server (`murder-mystery-mcp/`) handles **all game logic**:
 
 ---
 
-## 🎮 Demo
+## 🏆 Hackathon Tracks
 
-[Link to your video]
+This is part of a **two-project submission**:
 
-## 🐦 Social Media
+| Track | Project | Description |
+|-------|---------|-------------|
+| **Track 1: Building MCP** | [murder-mystery-mcp](https://huggingface.co/spaces/MCP-1st-Birthday/murder-mystery-mcp) | Standalone MCP server with all game tools |
+| **Track 2: MCP in Action** | **This project** | Gradio UI that uses the MCP server |
 
-[Link to your X/LinkedIn post]
+### Track 1: Building MCP → [Separate Repository](../murder-mystery-mcp/)
 
-## 👥 Team
+The **Murder Mystery MCP Server** is a complete game engine as MCP tools:
 
-- @your-hf-username
+| Category | Tools/Resources |
+|----------|-----------------|
+| **Game Flow** | `start_game`, `get_game_state`, `interrogate_suspect`, `search_location`, `make_accusation` |
+| **Investigation** | `search_memory`, `find_contradictions`, `get_cross_references`, `get_timeline` |
+| **Images** | `generate_portrait`, `generate_scene`, `generate_title_card` |
+| **Resources** | `mystery://state`, `mystery://suspects`, `mystery://clues`, `mystery://timeline` |
+
+**Use it in Claude Desktop** to play the game entirely through chat!
+
+### Track 2: MCP in Action — This Project
+
+**The Gradio Murder Mystery App** is a complete AI agent application that:
+
+- 🎙️ **Voice-first gameplay** with ElevenLabs TTS for all characters
+- 🕵️ **Autonomous agent** that orchestrates interrogation, clue discovery, and accusation
+- 🧠 **RAG-powered memory** for finding contradictions in suspect statements
+- 🎨 **MCP-powered image generation** via the Image Generator MCP server
+- 📊 **Visual case file** with timeline, clues, and suspect profiles
 
 ---
 

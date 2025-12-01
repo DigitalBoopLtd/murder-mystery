@@ -190,9 +190,8 @@ def create_app():
         huggingface_key_status = components["huggingface_key_status"]
         save_keys_btn = components["save_keys_btn"]
         keys_status_html = components["keys_status_html"]
-        # Tabs and buttons for lazy portrait loading
+        # Tabs
         info_tabs = components["info_tabs"]
-        refresh_suspects_btn = components["refresh_suspects_btn"]
 
         # ====== WIRE UP EVENTS ======
 
@@ -366,13 +365,6 @@ def create_app():
         # Info tabs select - refresh suspects portraits on tab click (lazy loading)
         getattr(info_tabs, "select")(
             fn=on_suspects_tab_select,
-            inputs=[session_id],
-            outputs=[suspects_list_html_tab],
-        )
-        
-        # Manual refresh button for suspects portraits
-        getattr(refresh_suspects_btn, "click")(
-            fn=on_refresh_suspects_click,
             inputs=[session_id],
             outputs=[suspects_list_html_tab],
         )

@@ -19,6 +19,8 @@ CSS_CENTER_STAGE = """/* ========== MAIN LAYOUT ========== */
     }
 }
 
+.wizard-buttons div.styler { background: transparent !important; }
+
 /* ========== MOBILE/TABLET: Hide side panels, show bottom tabs ========== */
 @media (max-width: 900px) {
     .main-layout-row {

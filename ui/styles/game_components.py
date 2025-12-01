@@ -508,14 +508,45 @@ button.record.record-button { height: 48px !important; width: 48px !important; b
 
 .wizard-section-title {
     font-family: var(--font-retro-mono);
-    font-size: 16px;
+    font-size: 18px;
     color: var(--terminal-green);
     letter-spacing: 2px;
-    margin-bottom: 16px;
+    margin-bottom: 12px;
     padding-bottom: 8px;
     border-bottom: 1px solid var(--terminal-green-border-soft);
     text-shadow: 0 0 6px var(--terminal-green);
-    text-transform: uppercase;
+    text-align: center;
+}
+
+.wizard-instructions {
+    background: rgba(0, 40, 0, 0.3);
+    border: 1px solid var(--terminal-green-border-soft);
+    border-radius: 6px;
+    padding: 12px 16px;
+    margin-bottom: 16px;
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+.wizard-instructions p {
+    margin: 0 0 8px 0;
+    color: var(--terminal-green);
+    font-size: 14px;
+}
+
+.wizard-instructions ul {
+    margin: 0;
+    padding-left: 0;
+    list-style: none;
+}
+
+.wizard-instructions li {
+    margin: 6px 0;
+    padding-left: 4px;
+}
+
+.wizard-instructions strong {
+    color: var(--text-primary);
 }
 
 .wizard-buttons {

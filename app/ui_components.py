@@ -150,7 +150,18 @@ def create_ui_components() -> dict:
                         
                         # Settings (inline in wizard for Step 1)
                         with gr.Group(elem_classes="wizard-settings"):
-                            gr.HTML('<div class="wizard-section-title">Configure Your Mystery</div>')
+                            gr.HTML('<div class="wizard-section-title">🔍 Murder Mystery Detective</div>')
+                            gr.HTML('''
+                                <div class="wizard-instructions">
+                                    <p><strong>How to Play:</strong></p>
+                                    <ul>
+                                        <li>🎤 <strong>Speak</strong> to investigate — use the microphone to ask questions</li>
+                                        <li>🗣️ <strong>Interrogate</strong> suspects — ask about their alibis and secrets</li>
+                                        <li>🔎 <strong>Search</strong> locations — look for clues at the crime scene</li>
+                                        <li>⚖️ <strong>Accuse</strong> the murderer — but be careful, 3 wrong guesses and you lose!</li>
+                                    </ul>
+                                </div>
+                            ''')
                             with gr.Row():
                                 wizard_era_dropdown = gr.Dropdown(
                                     label="Era",
@@ -207,16 +218,8 @@ def create_ui_components() -> dict:
                                 elem_classes="transcript-panel",
                             )
                         
-                        # Suspects tab - with select event for lazy portrait loading
+                        # Suspects tab
                         with gr.Tab("🎭 SUSPECTS", id="suspects") as suspects_tab:
-                            with gr.Row():
-                                gr.HTML('<span style="flex: 1;"></span>')  # Spacer
-                                refresh_suspects_btn = gr.Button(
-                                    "↻",
-                                    size="sm",
-                                    elem_classes="refresh-suspects-btn",
-                                    scale=0,
-                                )
                             suspects_list_html_tab = gr.HTML(
                                 "<em>Start a game to see suspects...</em>",
                                 elem_classes="transcript-panel suspects-list",
@@ -435,6 +438,5 @@ def create_ui_components() -> dict:
         # Tabs for select events (lazy portrait loading)
         "info_tabs": info_tabs,
         "suspects_tab": suspects_tab,
-        "refresh_suspects_btn": refresh_suspects_btn,
     }
 
