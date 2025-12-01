@@ -61,39 +61,46 @@ def create_ui_components() -> dict:
             const stickyBar = document.getElementById('sticky-record-bar');
             if (!stickyBar) return;
             
-            // Always move to body in Hugging Face Spaces to ensure it works
-            // Check if it's still inside a Gradio container
-            const isInGradioContainer = stickyBar.closest('.gradio-container') !== null;
-            
-            if (!stickyBarMoved && (hasTransformParent(stickyBar) || isInGradioContainer)) {
+            // Always move to body if not already there (simplified - just always move it)
+            if (stickyBar.parentElement !== document.body) {
                 // Move directly to body (preserves event listeners)
                 document.body.appendChild(stickyBar);
-                
                 stickyBarMoved = true;
-                
-                console.log('[Sticky Bar] Moved to body to escape container');
-                
-                // Continue to apply styles
+                console.log('[Sticky Bar] Moved to body. Was in:', stickyBar.parentElement?.tagName, stickyBar.parentElement?.className);
             }
             
-            // Force fixed positioning and remove flex styles
-            const targetBar = document.getElementById('sticky-record-bar');
-            if (targetBar) {
-                targetBar.style.position = 'fixed';
-                targetBar.style.bottom = '0';
-                targetBar.style.left = '0';
-                targetBar.style.right = '0';
-                targetBar.style.width = '100%';
-                targetBar.style.zIndex = '99999';
-                targetBar.style.margin = '0';
-                targetBar.style.flexGrow = '0';
-                targetBar.style.minWidth = 'auto';
-                targetBar.style.maxWidth = 'none';
+            // Apply all styles with !important via setProperty
+            stickyBar.style.setProperty('position', 'fixed', 'important');
+            stickyBar.style.setProperty('bottom', '0', 'important');
+            stickyBar.style.setProperty('left', '0', 'important');
+            stickyBar.style.setProperty('right', '0', 'important');
+            stickyBar.style.setProperty('width', '100%', 'important');
+            stickyBar.style.setProperty('z-index', '99999', 'important');
+            stickyBar.style.setProperty('margin', '0', 'important');
+            stickyBar.style.setProperty('flex-grow', '0', 'important');
+            stickyBar.style.setProperty('min-width', 'auto', 'important');
+            stickyBar.style.setProperty('max-width', 'none', 'important');
+            stickyBar.style.setProperty('display', 'block', 'important');
+            stickyBar.style.setProperty('flex-direction', 'unset', 'important');
+            
+            // Verify it's actually fixed and positioned correctly
+            const computed = window.getComputedStyle(stickyBar);
+            const rect = stickyBar.getBoundingClientRect();
+            const viewportHeight = window.innerHeight;
+            const distanceFromBottom = viewportHeight - rect.bottom;
+            
+            if (computed.position !== 'fixed') {
+                console.warn('[Sticky Bar] Position is not fixed! Computed:', computed.position, 'Parent:', stickyBar.parentElement?.tagName);
+            } else if (Math.abs(distanceFromBottom) > 5) {
+                console.warn('[Sticky Bar] Not at viewport bottom! Distance:', distanceFromBottom, 'px, Rect:', rect);
+            } else {
+                console.log('[Sticky Bar] ✓ Correctly positioned at viewport bottom');
             }
         }
         
         // Run on load and after delays to catch late-rendered elements
         function initStickyBar() {
+            console.log('[Sticky Bar] Initializing...');
             if (document.readyState === 'loading') {
                 document.addEventListener('DOMContentLoaded', enforceStickyBar);
             } else {
@@ -103,6 +110,7 @@ def create_ui_components() -> dict:
             setTimeout(enforceStickyBar, 500);
             setTimeout(enforceStickyBar, 1000);
             setTimeout(enforceStickyBar, 2000);
+            setTimeout(enforceStickyBar, 3000);
         }
         
         initStickyBar();
@@ -110,12 +118,16 @@ def create_ui_components() -> dict:
         // Watch for DOM changes (Gradio may re-render)
         const observer = new MutationObserver(function(mutations) {
             const stickyBar = document.getElementById('sticky-record-bar');
-            if (stickyBar && stickyBar.parentElement !== document.body) {
-                stickyBarMoved = false;
-                enforceStickyBar();
-            } else if (stickyBar) {
-                // Still enforce styles even if already moved
-                enforceStickyBar();
+            if (stickyBar) {
+                const parent = stickyBar.parentElement;
+                if (parent !== document.body) {
+                    console.log('[Sticky Bar] Detected in container, moving to body. Parent:', parent.tagName, parent.className);
+                    stickyBarMoved = false;
+                    enforceStickyBar();
+                } else {
+                    // Still enforce styles even if already moved
+                    enforceStickyBar();
+                }
             }
         });
         
@@ -125,6 +137,15 @@ def create_ui_components() -> dict:
             attributes: true,
             attributeFilter: ['style', 'class']
         });
+        
+        // Also run on window load and scroll to ensure it stays fixed
+        window.addEventListener('load', enforceStickyBar);
+        window.addEventListener('scroll', function() {
+            const stickyBar = document.getElementById('sticky-record-bar');
+            if (stickyBar) {
+                enforceStickyBar();
+            }
+        }, { passive: true });
     })();
     </script>
     """

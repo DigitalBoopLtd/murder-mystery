@@ -18,6 +18,19 @@ html body #sticky-record-bar {
     margin: 0 !important;
     transform: none !important;
     will-change: auto !important;
+    display: block !important;
+    flex-grow: 0 !important;
+    min-width: auto !important;
+    max-width: none !important;
+    flex-direction: unset !important;
+}
+
+/* Override Svelte's flex display */
+#sticky-record-bar.svelte-vt1mxs,
+#sticky-record-bar.column,
+#sticky-record-bar.gap {
+    display: block !important;
+    flex-direction: unset !important;
 }
 
 /* Center the audio block, keep it narrow, and make the wrapper visually subtle */
