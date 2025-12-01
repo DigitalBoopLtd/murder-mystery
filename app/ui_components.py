@@ -39,33 +39,14 @@ def create_ui_components() -> dict:
     (function() {
         console.log('[Sticky Bar] Script starting...');
         
-        // Detect if we're in Hugging Face Spaces iframe
-        const isHFSpaces = window.location.hostname.includes('hf.space') || 
-                          window.location.hostname.includes('huggingface');
-        console.log('[Sticky Bar] HF Spaces detected:', isHFSpaces);
+        // In HF Spaces, position:fixed often doesn't work correctly in iframes
+        // Force absolute positioning from the start
+        const forceAbsolute = window.location.hostname.includes('hf.space') || 
+                             window.location.hostname.includes('huggingface') ||
+                             window.self !== window.top; // In any iframe
         
-        // Find the actual scrollable container - in HF Spaces, it might not be body
-        function findScrollContainer() {
-            // Check common Gradio scroll containers
-            const candidates = [
-                document.querySelector('.gradio-container'),
-                document.querySelector('.main'),
-                document.querySelector('.wrap'),
-                document.documentElement,
-                document.body
-            ];
-            
-            for (const el of candidates) {
-                if (el && el.scrollHeight > el.clientHeight) {
-                    console.log('[Sticky Bar] Found scroll container:', el.tagName, el.className);
-                    return el;
-                }
-            }
-            return document.documentElement;
-        }
+        console.log('[Sticky Bar] Force absolute mode:', forceAbsolute);
         
-        let scrollContainer = null;
-        let useAbsolutePositioning = false;
         let stickyBar = null;
         
         function positionBar() {
@@ -74,31 +55,13 @@ def create_ui_components() -> dict:
                 if (!stickyBar) return;
             }
             
-            if (!scrollContainer) {
-                scrollContainer = findScrollContainer();
-            }
-            
-            // Get actual visible viewport info
             const viewportHeight = window.innerHeight;
-            const scrollTop = scrollContainer.scrollTop || window.scrollY || 0;
-            const scrollHeight = scrollContainer.scrollHeight;
-            const clientHeight = scrollContainer.clientHeight;
+            const scrollY = window.scrollY || window.pageYOffset || document.documentElement.scrollTop || 0;
+            const barHeight = stickyBar.offsetHeight || 80;
             
-            // Check if bar is visible at viewport bottom
-            const rect = stickyBar.getBoundingClientRect();
-            const isAtBottom = Math.abs(viewportHeight - rect.bottom) < 20;
-            const barHeight = rect.height || 80;
-            
-            // If position:fixed isn't working, switch to absolute positioning
-            if (!isAtBottom && !useAbsolutePositioning) {
-                console.warn('[Sticky Bar] Fixed positioning failed! Rect:', rect, 'Viewport:', viewportHeight);
-                console.log('[Sticky Bar] Switching to absolute positioning fallback');
-                useAbsolutePositioning = true;
-            }
-            
-            if (useAbsolutePositioning) {
-                // Calculate where the bar should be based on scroll position
-                const targetTop = scrollTop + viewportHeight - barHeight;
+            if (forceAbsolute) {
+                // Use absolute positioning with calculated top
+                const targetTop = scrollY + viewportHeight - barHeight;
                 
                 stickyBar.style.cssText = `
                     position: absolute !important;
@@ -113,6 +76,7 @@ def create_ui_components() -> dict:
                     background: rgba(10, 10, 10, 0.98) !important;
                     border-top: 1px solid #006666 !important;
                     display: block !important;
+                    box-sizing: border-box !important;
                 `;
             } else {
                 stickyBar.style.cssText = `
@@ -129,6 +93,7 @@ def create_ui_components() -> dict:
                     border-top: 1px solid #006666 !important;
                     display: block !important;
                     transform: none !important;
+                    box-sizing: border-box !important;
                 `;
             }
         }
@@ -141,57 +106,40 @@ def create_ui_components() -> dict:
                 return;
             }
             
-            console.log('[Sticky Bar] Element found. Parent:', stickyBar.parentElement?.tagName);
-            
-            // DON'T move to body - keep it in place but apply positioning
-            // Moving breaks Gradio's internal references
+            console.log('[Sticky Bar] Element found. Offset height:', stickyBar.offsetHeight);
             
             // Initial position
             positionBar();
             
-            // Check after a delay if fixed positioning worked
+            // Log position for debugging
             setTimeout(() => {
                 const rect = stickyBar.getBoundingClientRect();
-                const viewportHeight = window.innerHeight;
-                console.log('[Sticky Bar] Position check - Rect:', rect, 'Viewport:', viewportHeight, 'Distance from bottom:', viewportHeight - rect.bottom);
-                
-                if (Math.abs(viewportHeight - rect.bottom) > 20) {
-                    console.warn('[Sticky Bar] Position check FAILED - not at viewport bottom');
-                    useAbsolutePositioning = true;
-                    positionBar();
-                }
-            }, 500);
-            
-            // Reposition on scroll (needed for absolute positioning fallback)
-            let scrollTicking = false;
-            function onScroll() {
-                if (!scrollTicking) {
-                    requestAnimationFrame(() => {
-                        if (useAbsolutePositioning) {
-                            positionBar();
-                        }
-                        scrollTicking = false;
-                    });
-                    scrollTicking = true;
-                }
-            }
-            
-            window.addEventListener('scroll', onScroll, { passive: true });
-            document.addEventListener('scroll', onScroll, { passive: true });
-            if (scrollContainer && scrollContainer !== window) {
-                scrollContainer.addEventListener('scroll', onScroll, { passive: true });
-            }
-            
-            // Also reposition on resize
-            window.addEventListener('resize', positionBar);
-            
-            // Periodic check to ensure it stays positioned
-            setInterval(() => {
-                if (useAbsolutePositioning) {
-                    positionBar();
-                }
-            }, 1000);
+                console.log('[Sticky Bar] After positioning - Rect:', {
+                    top: rect.top,
+                    bottom: rect.bottom,
+                    height: rect.height
+                }, 'Viewport:', window.innerHeight, 'ScrollY:', window.scrollY);
+            }, 100);
         }
+        
+        // Throttled scroll handler
+        let ticking = false;
+        function onScroll() {
+            if (!ticking) {
+                requestAnimationFrame(() => {
+                    positionBar();
+                    ticking = false;
+                });
+                ticking = true;
+            }
+        }
+        
+        // Listen on multiple scroll targets
+        window.addEventListener('scroll', onScroll, { passive: true });
+        document.addEventListener('scroll', onScroll, { passive: true });
+        
+        // Also reposition on resize
+        window.addEventListener('resize', positionBar);
         
         // Start initialization
         if (document.readyState === 'loading') {
@@ -199,9 +147,10 @@ def create_ui_components() -> dict:
         } else {
             init();
         }
-        
-        // Also try on window load
         window.addEventListener('load', init);
+        
+        // Periodic repositioning as fallback
+        setInterval(positionBar, 500);
     })();
     </script>
     """
