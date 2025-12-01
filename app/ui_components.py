@@ -37,102 +37,171 @@ def create_ui_components() -> dict:
     sticky_bar_script = """
     <script>
     (function() {
-        // First, inject an ultra-high-specificity CSS rule that can't be easily overridden
-        const styleId = 'sticky-bar-force-styles';
-        if (!document.getElementById(styleId)) {
-            const style = document.createElement('style');
-            style.id = styleId;
-            style.textContent = `
-                /* Force sticky bar styles with highest specificity */
-                html body #sticky-record-bar,
-                html body > #sticky-record-bar,
-                body > #sticky-record-bar,
-                #sticky-record-bar[id] {
+        console.log('[Sticky Bar] Script starting...');
+        
+        // Detect if we're in Hugging Face Spaces iframe
+        const isHFSpaces = window.location.hostname.includes('hf.space') || 
+                          window.location.hostname.includes('huggingface');
+        console.log('[Sticky Bar] HF Spaces detected:', isHFSpaces);
+        
+        // Find the actual scrollable container - in HF Spaces, it might not be body
+        function findScrollContainer() {
+            // Check common Gradio scroll containers
+            const candidates = [
+                document.querySelector('.gradio-container'),
+                document.querySelector('.main'),
+                document.querySelector('.wrap'),
+                document.documentElement,
+                document.body
+            ];
+            
+            for (const el of candidates) {
+                if (el && el.scrollHeight > el.clientHeight) {
+                    console.log('[Sticky Bar] Found scroll container:', el.tagName, el.className);
+                    return el;
+                }
+            }
+            return document.documentElement;
+        }
+        
+        let scrollContainer = null;
+        let useAbsolutePositioning = false;
+        let stickyBar = null;
+        
+        function positionBar() {
+            if (!stickyBar) {
+                stickyBar = document.getElementById('sticky-record-bar');
+                if (!stickyBar) return;
+            }
+            
+            if (!scrollContainer) {
+                scrollContainer = findScrollContainer();
+            }
+            
+            // Get actual visible viewport info
+            const viewportHeight = window.innerHeight;
+            const scrollTop = scrollContainer.scrollTop || window.scrollY || 0;
+            const scrollHeight = scrollContainer.scrollHeight;
+            const clientHeight = scrollContainer.clientHeight;
+            
+            // Check if bar is visible at viewport bottom
+            const rect = stickyBar.getBoundingClientRect();
+            const isAtBottom = Math.abs(viewportHeight - rect.bottom) < 20;
+            const barHeight = rect.height || 80;
+            
+            // If position:fixed isn't working, switch to absolute positioning
+            if (!isAtBottom && !useAbsolutePositioning) {
+                console.warn('[Sticky Bar] Fixed positioning failed! Rect:', rect, 'Viewport:', viewportHeight);
+                console.log('[Sticky Bar] Switching to absolute positioning fallback');
+                useAbsolutePositioning = true;
+            }
+            
+            if (useAbsolutePositioning) {
+                // Calculate where the bar should be based on scroll position
+                const targetTop = scrollTop + viewportHeight - barHeight;
+                
+                stickyBar.style.cssText = `
+                    position: absolute !important;
+                    top: ${targetTop}px !important;
+                    bottom: auto !important;
+                    left: 0 !important;
+                    right: 0 !important;
+                    width: 100% !important;
+                    z-index: 2147483647 !important;
+                    margin: 0 !important;
+                    padding: 16px 12px !important;
+                    background: rgba(10, 10, 10, 0.98) !important;
+                    border-top: 1px solid #006666 !important;
+                    display: block !important;
+                `;
+            } else {
+                stickyBar.style.cssText = `
                     position: fixed !important;
                     bottom: 0 !important;
                     left: 0 !important;
                     right: 0 !important;
                     top: auto !important;
                     width: 100% !important;
-                    height: auto !important;
-                    z-index: 2147483647 !important; /* Max z-index */
+                    z-index: 2147483647 !important;
                     margin: 0 !important;
                     padding: 16px 12px !important;
-                    transform: none !important;
-                    will-change: auto !important;
-                    contain: none !important;
-                    display: block !important;
-                    flex-grow: 0 !important;
-                    flex-shrink: 0 !important;
-                    flex-basis: auto !important;
-                    min-width: 0 !important;
-                    max-width: none !important;
-                    min-height: auto !important;
-                    max-height: none !important;
-                    overflow: visible !important;
                     background: rgba(10, 10, 10, 0.98) !important;
                     border-top: 1px solid #006666 !important;
-                }
-            `;
-            document.head.appendChild(style);
-            console.log('[Sticky Bar] Injected force-style CSS');
+                    display: block !important;
+                    transform: none !important;
+                `;
+            }
         }
         
-        let frameId = null;
-        
-        // Force styles every animation frame (aggressive but effective)
-        function forceStyles() {
-            const stickyBar = document.getElementById('sticky-record-bar');
+        function init() {
+            stickyBar = document.getElementById('sticky-record-bar');
             if (!stickyBar) {
-                frameId = requestAnimationFrame(forceStyles);
+                console.log('[Sticky Bar] Element not found, retrying...');
+                setTimeout(init, 100);
                 return;
             }
             
-            // Move to body if not already there
-            if (stickyBar.parentElement !== document.body) {
-                console.log('[Sticky Bar] Moving to body from:', stickyBar.parentElement?.tagName);
-                document.body.appendChild(stickyBar);
+            console.log('[Sticky Bar] Element found. Parent:', stickyBar.parentElement?.tagName);
+            
+            // DON'T move to body - keep it in place but apply positioning
+            // Moving breaks Gradio's internal references
+            
+            // Initial position
+            positionBar();
+            
+            // Check after a delay if fixed positioning worked
+            setTimeout(() => {
+                const rect = stickyBar.getBoundingClientRect();
+                const viewportHeight = window.innerHeight;
+                console.log('[Sticky Bar] Position check - Rect:', rect, 'Viewport:', viewportHeight, 'Distance from bottom:', viewportHeight - rect.bottom);
+                
+                if (Math.abs(viewportHeight - rect.bottom) > 20) {
+                    console.warn('[Sticky Bar] Position check FAILED - not at viewport bottom');
+                    useAbsolutePositioning = true;
+                    positionBar();
+                }
+            }, 500);
+            
+            // Reposition on scroll (needed for absolute positioning fallback)
+            let scrollTicking = false;
+            function onScroll() {
+                if (!scrollTicking) {
+                    requestAnimationFrame(() => {
+                        if (useAbsolutePositioning) {
+                            positionBar();
+                        }
+                        scrollTicking = false;
+                    });
+                    scrollTicking = true;
+                }
             }
             
-            // Clear any inline styles that Gradio might set
-            stickyBar.style.cssText = `
-                position: fixed !important;
-                bottom: 0 !important;
-                left: 0 !important;
-                right: 0 !important;
-                top: auto !important;
-                width: 100% !important;
-                z-index: 2147483647 !important;
-                margin: 0 !important;
-                transform: none !important;
-                will-change: auto !important;
-                display: block !important;
-                flex-grow: 0 !important;
-                min-width: 0 !important;
-                max-width: none !important;
-            `;
-            
-            // Verify position
-            const rect = stickyBar.getBoundingClientRect();
-            const viewportHeight = window.innerHeight;
-            const distFromBottom = viewportHeight - rect.bottom;
-            
-            // Only log if there's a problem
-            if (Math.abs(distFromBottom) > 10) {
-                console.warn('[Sticky Bar] Not at bottom! Distance:', distFromBottom, 'px. Rect:', rect);
+            window.addEventListener('scroll', onScroll, { passive: true });
+            document.addEventListener('scroll', onScroll, { passive: true });
+            if (scrollContainer && scrollContainer !== window) {
+                scrollContainer.addEventListener('scroll', onScroll, { passive: true });
             }
             
-            frameId = requestAnimationFrame(forceStyles);
+            // Also reposition on resize
+            window.addEventListener('resize', positionBar);
+            
+            // Periodic check to ensure it stays positioned
+            setInterval(() => {
+                if (useAbsolutePositioning) {
+                    positionBar();
+                }
+            }, 1000);
         }
         
-        // Start the force loop
-        console.log('[Sticky Bar] Starting force loop');
-        frameId = requestAnimationFrame(forceStyles);
+        // Start initialization
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', init);
+        } else {
+            init();
+        }
         
-        // Also enforce on various events
-        window.addEventListener('load', forceStyles);
-        window.addEventListener('resize', forceStyles);
-        document.addEventListener('DOMContentLoaded', forceStyles);
+        // Also try on window load
+        window.addEventListener('load', init);
     })();
     </script>
     """
