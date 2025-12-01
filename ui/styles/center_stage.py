@@ -447,11 +447,17 @@ img { border: 4px solid white !important; }
 }
 code,
 .settings-tab .settings-column .gr-group .styler {
-    background: -var(--bg-card) !important;
+    background: var(--bg-card) !important;
     border: none !important;
     box-shadow: none !important;
     padding: 0 !important;
     margin: 0 !important;
+}
+
+/* Override Svelte-generated classes that might override background */
+.settings-tab .settings-column .gr-group .styler.svelte-1p9262q,
+.settings-tab .settings-column .gr-group div.svelte-1p9262q.styler {
+    background: var(--bg-card) !important;
 }
 
 .settings-tab .settings-column h3,
