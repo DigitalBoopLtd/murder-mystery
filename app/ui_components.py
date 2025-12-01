@@ -87,19 +87,37 @@ def create_ui_components() -> dict:
             const computed = window.getComputedStyle(stickyBar);
             const rect = stickyBar.getBoundingClientRect();
             const viewportHeight = window.innerHeight;
+            const scrollY = window.scrollY || window.pageYOffset;
             const distanceFromBottom = viewportHeight - rect.bottom;
             const isInBody = stickyBar.parentElement === document.body;
             
-            // Log detailed info for debugging
-            if (!isInBody || computed.position !== 'fixed' || Math.abs(distanceFromBottom) > 5) {
+            // Check if position is actually fixed (not just at bottom of page)
+            const isActuallyFixed = computed.position === 'fixed';
+            const isAtViewportBottom = Math.abs(distanceFromBottom) <= 5;
+            
+            // Log detailed info if there's an issue
+            if (!isInBody || !isActuallyFixed || !isAtViewportBottom) {
                 console.warn('[Sticky Bar] Issue detected!', {
                     inBody: isInBody,
                     position: computed.position,
+                    isActuallyFixed: isActuallyFixed,
                     parent: stickyBar.parentElement?.tagName + '.' + stickyBar.parentElement?.className,
                     distanceFromBottom: distanceFromBottom + 'px',
+                    isAtViewportBottom: isAtViewportBottom,
+                    scrollY: scrollY,
                     rect: { top: rect.top, bottom: rect.bottom, left: rect.left, right: rect.right },
-                    viewportHeight: viewportHeight
+                    viewportHeight: viewportHeight,
+                    pageHeight: document.documentElement.scrollHeight
                 });
+                
+                // If not fixed, try to force it again
+                if (!isActuallyFixed) {
+                    console.warn('[Sticky Bar] Position is not fixed! Forcing again...');
+                    stickyBar.style.setProperty('position', 'fixed', 'important');
+                    stickyBar.style.setProperty('bottom', '0', 'important');
+                    stickyBar.style.setProperty('left', '0', 'important');
+                    stickyBar.style.setProperty('right', '0', 'important');
+                }
             }
         }
         
@@ -154,7 +172,30 @@ def create_ui_components() -> dict:
         
         // Also run on window load to ensure it stays fixed
         window.addEventListener('load', enforceStickyBar);
-        // Removed scroll listener to reduce console spam - fixed positioning should handle scrolling automatically
+        
+        // Test if it's actually fixed by checking position before/after scroll
+        let lastScrollY = window.scrollY || window.pageYOffset;
+        let lastBarTop = null;
+        window.addEventListener('scroll', function() {
+            const stickyBar = document.getElementById('sticky-record-bar');
+            if (stickyBar) {
+                const currentScrollY = window.scrollY || window.pageYOffset;
+                const currentBarTop = stickyBar.getBoundingClientRect().top;
+                
+                // If we've scrolled but the bar's top position changed, it's not fixed
+                if (lastBarTop !== null && Math.abs(currentScrollY - lastScrollY) > 10) {
+                    const barMoved = Math.abs(currentBarTop - lastBarTop) > 5;
+                    if (barMoved) {
+                        console.warn('[Sticky Bar] Element moved with scroll! Not actually fixed. Scroll delta:', currentScrollY - lastScrollY, 'Bar moved:', currentBarTop - lastBarTop);
+                        // Force fix it
+                        enforceStickyBar();
+                    }
+                }
+                
+                lastScrollY = currentScrollY;
+                lastBarTop = currentBarTop;
+            }
+        }, { passive: true });
     })();
     </script>
     """
