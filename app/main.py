@@ -163,13 +163,10 @@ def create_app():
         portrait_image = components["portrait_image"]
         input_row = components["input_row"]
         start_btn = components["start_btn"]
-        victim_scene_html = components["victim_scene_html"]
         suspects_list_html = components["suspects_list_html"]
         locations_html = components["locations_html"]
         clues_html = components["clues_html"]
         accusations_html = components["accusations_html"]
-        dashboard_html_tab = components["dashboard_html_tab"]
-        victim_scene_html_tab = components["victim_scene_html_tab"]
         suspects_list_html_tab = components["suspects_list_html_tab"]
         locations_html_tab = components["locations_html_tab"]
         clues_html_tab = components["clues_html_tab"]
@@ -206,15 +203,12 @@ def create_app():
             speaker_html,
             audio_output,
             portrait_image,
-            victim_scene_html,
             suspects_list_html,
             locations_html,
             clues_html,
             accusations_html,
             timeline_html_main,  # Main tab version
             # Tab components (replicated from accordions)
-            dashboard_html_tab,
-            victim_scene_html_tab,
             suspects_list_html_tab,
             locations_html_tab,
             clues_html_tab,
@@ -309,13 +303,10 @@ def create_app():
                 audio_output,
                 portrait_image,
                 input_row,
-                victim_scene_html,
                 suspects_list_html,
                 locations_html,
                 clues_html,
                 accusations_html,
-                dashboard_html_tab,
-                victim_scene_html_tab,
                 suspects_list_html_tab,
                 locations_html_tab,
                 clues_html_tab,
@@ -332,11 +323,8 @@ def create_app():
             inputs=[session_id],
             outputs=[
                 portrait_image,  # Opening scene image (appears when ready)
-                victim_scene_html,
                 suspects_list_html,
                 locations_html,
-                dashboard_html_tab,
-                victim_scene_html_tab,
                 suspects_list_html_tab,
                 locations_html_tab,
                 case_file_html_main,     # Case File (main tab)

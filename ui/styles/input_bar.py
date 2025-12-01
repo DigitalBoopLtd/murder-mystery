@@ -85,6 +85,10 @@ CSS_INPUT_BAR = """/* ========== RECORD BAR (inside stage) ========== */
     color: var(--text-primary);
 }
 
+#record-bar .record-bar {
+    border-radius: 0px !important;
+}
+
 #record-bar .controls .stop-button::before,
 #record-bar .controls .stop-button-paused::before,
 .record-bar .controls .stop-button::before,

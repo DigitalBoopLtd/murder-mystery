@@ -13,7 +13,6 @@ from game.media import generate_turn_media
 from services.tts_service import transcribe_audio
 from services.perf_tracker import perf
 from ui.formatters import (
-    format_victim_scene_html,
     format_suspects_list_html,
     format_locations_html,
     format_clues_html,
@@ -186,13 +185,10 @@ def on_start_game(sess_id, progress=gr.Progress()):
             gr.update(),  # audio_output
             gr.update(),  # portrait_image
             gr.update(),  # input_row
-            gr.update(),  # victim_scene_html
             gr.update(),  # suspects_list_html
             gr.update(),  # locations_html
             gr.update(),  # clues_html
             gr.update(),  # accusations_html
-            gr.update(),  # dashboard_html_tab
-            gr.update(),  # victim_scene_html_tab
             gr.update(),  # suspects_list_html_tab
             gr.update(),  # locations_html_tab
             gr.update(),  # clues_html_tab
@@ -410,7 +406,6 @@ def check_mystery_ready(sess_id: str):
         # Mystery is ready - update UI and stop timer
         # Note: Portraits may still be loading - they'll appear when user clicks Suspects tab
         logger.info("[APP] Timer: Full mystery ready, updating UI panels")
-        victim_html = format_victim_scene_html(state.mystery)
         # Side panel: column layout (portrait on top)
         suspects_html_panel = format_suspects_list_html(
             state.mystery,
@@ -436,14 +431,6 @@ def check_mystery_ready(sess_id: str):
             location_images=images,
             unlocked_locations=state.unlocked_locations,
         )
-        dashboard_html = format_dashboard_html(
-            state.mystery,
-            state.clues_found,
-            state.suspects_talked_to,
-            state.searched_locations,
-            state.suspect_states,
-            state.wrong_accusations
-        )
         # Update portrait if opening scene is available
         portrait_update = gr.update(value=opening_scene) if opening_scene else gr.update()
         
@@ -458,12 +445,9 @@ def check_mystery_ready(sess_id: str):
         )
         return [
             portrait_update,  # Opening scene image
-            victim_html,
             suspects_html_panel,  # Side panel (column layout)
             locations_html,
             # Tab components (replicated from accordions)
-            dashboard_html,
-            victim_html,
             suspects_html_tab,  # Tabs (row layout)
             locations_html,
             case_file_html,    # Case File (main tab)
@@ -486,12 +470,9 @@ def check_mystery_ready(sess_id: str):
             suspects_preview_tab = format_suspect_previews_html(suspect_previews, layout="row")
             return [
                 portrait_update,  # Update opening scene if available
-                gr.update(),  # victim_scene_html - no change yet
                 suspects_preview_panel,  # suspects_list_html - show previews early!
                 gr.update(),  # locations_html - no change
                 # Tab components
-                gr.update(),  # dashboard_html_tab
-                gr.update(),  # victim_scene_html_tab
                 suspects_preview_tab,  # suspects tab - show previews early!
                 gr.update(),  # locations_html_tab
                 gr.update(),  # case_file_html_main - no change yet
@@ -500,12 +481,9 @@ def check_mystery_ready(sess_id: str):
         
         return [
             portrait_update,  # Update opening scene if available
-            gr.update(),  # victim_scene_html - no change
             gr.update(),  # suspects_list_html - no change
             gr.update(),  # locations_html - no change
             # Tab components - no change
-            gr.update(),  # dashboard_html_tab
-            gr.update(),  # victim_scene_html_tab
             gr.update(),  # suspects_list_html_tab
             gr.update(),  # locations_html_tab
             gr.update(),  # case_file_html_main - no change
@@ -661,7 +639,6 @@ def on_custom_message(message: str, sess_id: str):
             else None
         ),
         portrait_update,
-        format_victim_scene_html(state.mystery),
         format_suspects_list_html(
             state.mystery,
             state.suspects_talked_to,
@@ -918,7 +895,6 @@ def on_voice_input(audio_path: str, sess_id, progress=gr.Progress()):
         speaker_html,
         gr.update(),  # Audio placeholder - will be filled in stage 2
         portrait_update,
-        format_victim_scene_html(state.mystery),
         format_suspects_list_html(
             state.mystery,
             state.suspects_talked_to,
@@ -936,15 +912,6 @@ def on_voice_input(audio_path: str, sess_id, progress=gr.Progress()):
         format_accusations_html(state),
         format_timeline_html(state.discovered_timeline),  # Main tab version
         # Tab components (replicated from accordions)
-        format_dashboard_html(
-            state.mystery,
-            state.clues_found,
-            state.suspects_talked_to,
-            state.searched_locations,
-            state.suspect_states,
-            state.wrong_accusations
-        ),
-        format_victim_scene_html(state.mystery),
         format_suspects_list_html(
             state.mystery,
             state.suspects_talked_to,
@@ -1117,7 +1084,6 @@ def on_voice_input(audio_path: str, sess_id, progress=gr.Progress()):
             else gr.update()
         ),
         portrait_update,
-        format_victim_scene_html(state.mystery),
         format_suspects_list_html(
             state.mystery,
             state.suspects_talked_to,
@@ -1135,15 +1101,6 @@ def on_voice_input(audio_path: str, sess_id, progress=gr.Progress()):
         format_accusations_html(state),
         format_timeline_html(state.discovered_timeline),  # Main tab version
         # Tab components (replicated from accordions)
-        format_dashboard_html(
-            state.mystery,
-            state.clues_found,
-            state.suspects_talked_to,
-            state.searched_locations,
-            state.suspect_states,
-            state.wrong_accusations
-        ),
-        format_victim_scene_html(state.mystery),
         format_suspects_list_html(
             state.mystery,
             state.suspects_talked_to,

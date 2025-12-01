@@ -54,18 +54,7 @@ def create_ui_components() -> dict:
                     min_width=200,
                     elem_classes="side-column side-column-left",
                 ):
-                    # Case Details
-                    with gr.Accordion(
-                        "🧳 CASE DETAILS",
-                        open=False,
-                        elem_classes="side-panel",
-                    ):
-                        victim_scene_html = gr.HTML(
-                            "<em>Start a game to see case details...</em>",
-                            elem_classes="transcript-panel",
-                        )
-
-                    # Suspects list - expanded by default
+                    # Suspects list - first and expanded by default
                     with gr.Accordion(
                         "🎭 SUSPECTS",
                         open=True,
@@ -76,10 +65,10 @@ def create_ui_components() -> dict:
                             elem_classes="transcript-panel suspects-list",
                         )
 
-                    # Accusations card
+                    # Accusations card - expanded by default
                     with gr.Accordion(
                         "⚖️ ACCUSATIONS",
-                        open=False,
+                        open=True,
                         elem_classes="side-panel",
                     ):
                         accusations_html = gr.HTML(
@@ -202,23 +191,7 @@ def create_ui_components() -> dict:
                     
                     # Tab group with accordion content (always visible)
                     with gr.Tabs(elem_classes="info-tabs") as info_tabs:
-                        # Dashboard tab - first for quick overview
-                        with gr.Tab("📊 DASHBOARD", id="dashboard"):
-                            dashboard_html_tab = gr.HTML(
-                                '''<div class="dashboard-empty">
-                                    <div class="dashboard-icon">📊</div>
-                                    <div>Start a mystery to track your investigation.</div>
-                                </div>'''
-                            )
-                        
-                        # Case Details tab
-                        with gr.Tab("🧳 CASE DETAILS", id="case_details"):
-                            victim_scene_html_tab = gr.HTML(
-                                "<em>Start a game to see case details...</em>",
-                                elem_classes="transcript-panel",
-                            )
-                        
-                        # Suspects tab
+                        # Suspects tab - first
                         with gr.Tab("🎭 SUSPECTS", id="suspects") as suspects_tab:
                             suspects_list_html_tab = gr.HTML(
                                 "<em>Start a game to see suspects...</em>",
@@ -402,13 +375,10 @@ def create_ui_components() -> dict:
         "portrait_image": portrait_image,
         "input_row": input_row,
         "start_btn": start_btn,
-        "victim_scene_html": victim_scene_html,
         "suspects_list_html": suspects_list_html,
         "locations_html": locations_html,
         "clues_html": clues_html,
         "accusations_html": accusations_html,
-        "dashboard_html_tab": dashboard_html_tab,
-        "victim_scene_html_tab": victim_scene_html_tab,
         "suspects_list_html_tab": suspects_list_html_tab,
         "locations_html_tab": locations_html_tab,
         "clues_html_tab": clues_html_tab,
