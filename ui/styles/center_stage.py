@@ -542,7 +542,11 @@ code,
 .settings-tab .form > .block {
     border-radius: 6px !important;
     border-width: 1px !important;
-    background: rgba(0, 10, 20, 0.5) !important;
+    background: rgba(0, 10, 20, 1) !important;
+}
+
+.form {
+    background: var(--bg-card) !important;
 }
 
 /* Make key status cells compact labels instead of full cards */
