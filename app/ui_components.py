@@ -30,11 +30,84 @@ def create_ui_components() -> dict:
     """
 
     # Inject CSS and favicon
-    # Also include a script to ensure sticky bar works in Hugging Face Spaces
+    # Scripts for sticky bar and password field fixes
+    password_form_fix = """
+    <script>
+    (function() {
+        // Wrap password fields in form elements to fix browser warnings
+        function wrapPasswordFields() {
+            const passwordInputs = document.querySelectorAll('input[type="password"][data-testid="password"]');
+            passwordInputs.forEach(function(input) {
+                // Check if already wrapped in a form
+                if (input.closest('form')) {
+                    return;
+                }
+                
+                // Find the closest Gradio block/form container
+                let container = input.closest('.form') || input.closest('.block') || input.parentElement;
+                
+                // Walk up to find a suitable container that's not already in a form
+                while (container && container !== document.body) {
+                    if (container.closest('form')) {
+                        return; // Already in a form
+                    }
+                    // Check if this container has a class that suggests it's a Gradio form block
+                    if (container.classList.contains('form') || container.classList.contains('block')) {
+                        break;
+                    }
+                    container = container.parentElement;
+                }
+                
+                if (container && !container.closest('form')) {
+                    // Create a form element with display:contents to not affect layout
+                    const form = document.createElement('form');
+                    form.style.cssText = 'display: contents;';
+                    form.setAttribute('aria-label', 'API Key Input');
+                    form.setAttribute('novalidate', 'true'); // Prevent browser validation
+                    
+                    // Wrap the container
+                    const containerParent = container.parentElement;
+                    if (containerParent) {
+                        containerParent.insertBefore(form, container);
+                        form.appendChild(container);
+                    }
+                }
+            });
+        }
+        
+        // Run on load and watch for new password fields
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', wrapPasswordFields);
+        } else {
+            wrapPasswordFields();
+        }
+        
+        // Watch for dynamically added password fields (debounced)
+        let timeout;
+        const observer = new MutationObserver(function(mutations) {
+            clearTimeout(timeout);
+            timeout = setTimeout(wrapPasswordFields, 100);
+        });
+        observer.observe(document.body, { childList: true, subtree: true });
+        
+        // Also run after delays to catch late-rendered fields
+        setTimeout(wrapPasswordFields, 500);
+        setTimeout(wrapPasswordFields, 1000);
+        setTimeout(wrapPasswordFields, 2000);
+    })();
+    </script>
+    """
+    
     sticky_bar_script = """
     <script>
     (function() {
         let stickyBarMoved = false;
+        
+        // Check if we're in an iframe (Hugging Face Spaces often uses iframes)
+        const isInIframe = window.self !== window.top;
+        if (isInIframe) {
+            console.log('[Sticky Bar] Running in iframe - will use iframe-relative positioning');
+        }
         
         // Check if a parent element has transform/perspective/filter that breaks fixed positioning
         function hasTransformParent(element) {
@@ -69,6 +142,9 @@ def create_ui_components() -> dict:
                 console.log('[Sticky Bar] Moved to body. Was in:', stickyBar.parentElement?.tagName, stickyBar.parentElement?.className);
             }
             
+            // Find the actual scrollable container (could be body, html, or a wrapper)
+            const scrollContainer = document.scrollingElement || document.documentElement || document.body;
+            
             // Apply all styles with !important via setProperty
             stickyBar.style.setProperty('position', 'fixed', 'important');
             stickyBar.style.setProperty('bottom', '0', 'important');
@@ -83,6 +159,14 @@ def create_ui_components() -> dict:
             stickyBar.style.setProperty('display', 'block', 'important');
             stickyBar.style.setProperty('flex-direction', 'unset', 'important');
             
+            // If in iframe, also try to ensure it's relative to the iframe's viewport
+            if (isInIframe) {
+                stickyBar.style.setProperty('position', 'fixed', 'important');
+                // Make sure it's at the bottom of the iframe viewport
+                const iframeRect = document.documentElement.getBoundingClientRect();
+                console.log('[Sticky Bar] Iframe context - document height:', document.documentElement.scrollHeight, 'viewport height:', window.innerHeight);
+            }
+            
             // Verify it's actually fixed and positioned correctly
             const computed = window.getComputedStyle(stickyBar);
             const rect = stickyBar.getBoundingClientRect();
@@ -95,8 +179,13 @@ def create_ui_components() -> dict:
             const isActuallyFixed = computed.position === 'fixed';
             const isAtViewportBottom = Math.abs(distanceFromBottom) <= 5;
             
+            // Critical check: if we're at the top of the page (scrollY = 0) and the bar is below the viewport,
+            // it's definitely not fixed
+            const isBelowViewport = rect.top > viewportHeight;
+            const isAboveViewport = rect.bottom < 0;
+            
             // Log detailed info if there's an issue
-            if (!isInBody || !isActuallyFixed || !isAtViewportBottom) {
+            if (!isInBody || !isActuallyFixed || !isAtViewportBottom || (scrollY === 0 && isBelowViewport)) {
                 console.warn('[Sticky Bar] Issue detected!', {
                     inBody: isInBody,
                     position: computed.position,
@@ -105,18 +194,35 @@ def create_ui_components() -> dict:
                     distanceFromBottom: distanceFromBottom + 'px',
                     isAtViewportBottom: isAtViewportBottom,
                     scrollY: scrollY,
+                    isBelowViewport: isBelowViewport,
+                    isAboveViewport: isAboveViewport,
                     rect: { top: rect.top, bottom: rect.bottom, left: rect.left, right: rect.right },
                     viewportHeight: viewportHeight,
                     pageHeight: document.documentElement.scrollHeight
                 });
                 
-                // If not fixed, try to force it again
-                if (!isActuallyFixed) {
-                    console.warn('[Sticky Bar] Position is not fixed! Forcing again...');
+                // If not fixed or not visible at top of page, force it
+                if (!isActuallyFixed || (scrollY === 0 && isBelowViewport)) {
+                    console.warn('[Sticky Bar] Not fixed or not visible! Forcing position...');
+                    // Remove from DOM and re-add to ensure clean state
+                    const parent = stickyBar.parentElement;
+                    const nextSibling = stickyBar.nextSibling;
+                    stickyBar.remove();
+                    document.body.appendChild(stickyBar);
+                    
+                    // Force all styles again
                     stickyBar.style.setProperty('position', 'fixed', 'important');
                     stickyBar.style.setProperty('bottom', '0', 'important');
                     stickyBar.style.setProperty('left', '0', 'important');
                     stickyBar.style.setProperty('right', '0', 'important');
+                    stickyBar.style.setProperty('width', '100%', 'important');
+                    stickyBar.style.setProperty('z-index', '99999', 'important');
+                    stickyBar.style.setProperty('margin', '0', 'important');
+                    stickyBar.style.setProperty('flex-grow', '0', 'important');
+                    stickyBar.style.setProperty('min-width', 'auto', 'important');
+                    stickyBar.style.setProperty('max-width', 'none', 'important');
+                    stickyBar.style.setProperty('display', 'block', 'important');
+                    stickyBar.style.setProperty('flex-direction', 'unset', 'important');
                 }
             }
         }
@@ -199,7 +305,7 @@ def create_ui_components() -> dict:
     })();
     </script>
     """
-    gr.HTML(f"<style>{RETRO_CSS}</style>{favicon_html}{sticky_bar_script}")
+    gr.HTML(f"<style>{RETRO_CSS}</style>{favicon_html}{password_form_fix}{sticky_bar_script}")
 
     # Session state - stable UUID string per browser session
     session_id = gr.State(str(uuid.uuid4()))
