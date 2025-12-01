@@ -1529,12 +1529,206 @@ Generate the Game Master response rejecting this premature accusation.""")
         return narrative
 
 
+# =============================================================================
+# IMAGE GENERATION TOOLS
+# =============================================================================
+# These tools use ThreadPoolExecutor to enable parallel execution with other tasks.
+# The blocking I/O operations (HuggingFace API calls) are offloaded to a thread pool,
+# allowing multiple image generations to run concurrently.
+
+from concurrent.futures import ThreadPoolExecutor, Future
+import threading
+
+# Shared thread pool for image generation (max 5 concurrent requests)
+_image_executor = ThreadPoolExecutor(max_workers=5, thread_name_prefix="img_gen")
+
+
+@tool
+def generate_character_portrait(
+    name: Annotated[str, "The full name of the character"],
+    role: Annotated[str, "The character's role (e.g., 'butler', 'detective', 'heiress')"],
+    personality: Annotated[str, "Personality traits and characteristics"],
+    gender: Annotated[str, "Gender for physical description (e.g., 'male', 'female', 'person')"] = "person",
+    setting: Annotated[str, "Setting context for costume/environment hints"] = "",
+) -> str:
+    """Generate a character portrait image in 1990s adventure game style.
+    
+    Use this tool when you need to generate a visual portrait of a character.
+    Returns the file path to the generated image, or an error message if generation fails.
+    
+    This tool runs in parallel with other tasks - multiple portraits can be generated concurrently.
+    """
+    logger.info("\n%s", "=" * 60)
+    logger.info("GENERATE_CHARACTER_PORTRAIT TOOL CALLED")
+    logger.info("Character: %s (%s)", name, role)
+    logger.info("%s\n", "=" * 60)
+    
+    def _generate():
+        """Internal function to run in thread pool."""
+        try:
+            from services.image_service import get_image_service
+            
+            service = get_image_service()
+            if not service.is_available:
+                return None, "Image generation is not available. Please check that HF_TOKEN is set."
+            
+            path = service.generate_character_portrait(
+                name=name,
+                role=role,
+                personality=personality,
+                gender=gender,
+                setting_context=setting,
+            )
+            
+            if path:
+                logger.info("✓ Generated portrait for %s: %s", name, path)
+                return path, None
+            else:
+                return None, f"Failed to generate portrait for {name}. Please try again."
+                
+        except Exception as e:
+            logger.error("Error generating character portrait: %s", e)
+            return None, f"Error generating portrait: {str(e)}"
+    
+    # Submit to thread pool and wait for result (non-blocking for other tools)
+    future: Future = _image_executor.submit(_generate)
+    path, error = future.result()  # This blocks this tool call, but allows other tools to run in parallel
+    
+    if error:
+        return error
+    return f"Generated character portrait for {name}. Image saved to: {path}"
+
+
+@tool
+def generate_scene_image(
+    location: Annotated[str, "Name of the location/scene"],
+    setting: Annotated[str, "Overall setting description"],
+    mood: Annotated[str, "Mood/atmosphere of the scene (e.g., 'mysterious', 'tense', 'atmospheric')"] = "mysterious",
+    context: Annotated[str, "Additional context about what should be visible in the scene"] = "",
+) -> str:
+    """Generate a scene/location image in 1990s adventure game style.
+    
+    Use this tool when you need to generate a visual scene or location background.
+    Returns the file path to the generated image, or an error message if generation fails.
+    
+    This tool runs in parallel with other tasks - multiple scenes can be generated concurrently.
+    """
+    logger.info("\n%s", "=" * 60)
+    logger.info("GENERATE_SCENE_IMAGE TOOL CALLED")
+    logger.info("Location: %s", location)
+    logger.info("%s\n", "=" * 60)
+    
+    def _generate():
+        """Internal function to run in thread pool."""
+        try:
+            from services.image_service import get_image_service
+            
+            service = get_image_service()
+            if not service.is_available:
+                return None, "Image generation is not available. Please check that HF_TOKEN is set."
+            
+            path = service.generate_scene(
+                location_name=location,
+                setting_description=setting,
+                mood=mood,
+                context=context,
+            )
+            
+            if path:
+                logger.info("✓ Generated scene for %s: %s", location, path)
+                return path, None
+            else:
+                return None, f"Failed to generate scene for {location}. Please try again."
+                
+        except Exception as e:
+            logger.error("Error generating scene image: %s", e)
+            return None, f"Error generating scene: {str(e)}"
+    
+    # Submit to thread pool and wait for result (non-blocking for other tools)
+    future: Future = _image_executor.submit(_generate)
+    path, error = future.result()  # This blocks this tool call, but allows other tools to run in parallel
+    
+    if error:
+        return error
+    return f"Generated scene image for {location}. Image saved to: {path}"
+
+
+@tool
+def generate_title_card(
+    title: Annotated[str, "The mystery title"],
+    setting: Annotated[str, "Setting description for the opening scene"],
+    victim_name: Annotated[str, "Name of the murder victim"] = "",
+    victim_background: Annotated[str, "Background information about the victim"] = "",
+) -> str:
+    """Generate an atmospheric opening scene/title card image for the mystery.
+    
+    Use this tool when you need to generate the opening scene image for a murder mystery.
+    Returns the file path to the generated image, or an error message if generation fails.
+    
+    This tool runs in parallel with other tasks.
+    """
+    logger.info("\n%s", "=" * 60)
+    logger.info("GENERATE_TITLE_CARD TOOL CALLED")
+    logger.info("Title: %s", title)
+    logger.info("%s\n", "=" * 60)
+    
+    def _generate():
+        """Internal function to run in thread pool."""
+        try:
+            from services.image_service import get_image_service
+            
+            service = get_image_service()
+            if not service.is_available:
+                return None, "Image generation is not available. Please check that HF_TOKEN is set."
+            
+            path = service.generate_title_card(
+                title=title,
+                setting=setting,
+                victim_name=victim_name or None,
+                victim_background=victim_background or None,
+            )
+            
+            if path:
+                logger.info("✓ Generated title card: %s", path)
+                return path, None
+            else:
+                return None, f"Failed to generate title card. Please try again."
+                
+        except Exception as e:
+            logger.error("Error generating title card: %s", e)
+            return None, f"Error generating title card: {str(e)}"
+    
+    # Submit to thread pool and wait for result (non-blocking for other tools)
+    future: Future = _image_executor.submit(_generate)
+    path, error = future.result()  # This blocks this tool call, but allows other tools to run in parallel
+    
+    if error:
+        return error
+    return f"Generated title card for '{title}'. Image saved to: {path}"
+
+
 def get_all_tools() -> List:
     """Get all tools for the game master agent.
     
     Returns a list of all available tools, including RAG tools if available.
     """
     tools = [interrogate_suspect, describe_scene_for_image, make_accusation]
+    
+    # Add image generation tools if available
+    try:
+        from services.image_service import get_image_service
+        service = get_image_service()
+        if service.is_available:
+            tools.extend([
+                generate_character_portrait,
+                generate_scene_image,
+                generate_title_card,
+            ])
+            logger.info("[TOOLS] Image generation tools enabled")
+        else:
+            logger.info("[TOOLS] Image generation tools disabled (HF_TOKEN not set)")
+    except Exception as e:
+        logger.warning("[TOOLS] Could not load image generation tools: %s", e)
     
     # Add RAG tools if memory is available
     memory = get_game_memory()

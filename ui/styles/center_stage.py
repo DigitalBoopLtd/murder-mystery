@@ -19,8 +19,6 @@ CSS_CENTER_STAGE = """/* ========== MAIN LAYOUT ========== */
     }
 }
 
-.wizard-buttons div.styler { background: transparent !important; }
-
 /* ========== MOBILE/TABLET: Hide side panels, show bottom tabs ========== */
 @media (max-width: 900px) {
     .main-layout-row {
@@ -433,6 +431,11 @@ img { border: 4px solid white !important; }
     padding: 8px !important;
 }
 
+.row.wizard-buttons {
+    background: var(--bg-card) !important;
+    margin-top: 0 !important;
+}
+
 /* ========== API KEYS SECTION ========== */
 
 /* Settings tab styling */
@@ -444,7 +447,7 @@ img { border: 4px solid white !important; }
 }
 code,
 .settings-tab .settings-column .gr-group .styler {
-    background: transparent !important;
+    background: -var(--bg-card) !important;
     border: none !important;
     box-shadow: none !important;
     padding: 0 !important;

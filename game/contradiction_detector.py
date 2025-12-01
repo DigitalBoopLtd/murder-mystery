@@ -144,3 +144,4 @@ def clear_cache():
     logger.info("[CONTRADICTION] Cache cleared")
 
 
+

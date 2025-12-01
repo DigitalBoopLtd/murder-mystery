@@ -7,7 +7,7 @@ from typing import Tuple
 import gradio as gr
 from mystery_config import get_settings_for_era, create_validated_config
 from game.state_manager import get_or_create_state, mystery_images
-from game.startup import start_new_game_staged, prepare_game_resources, refresh_voices
+from game.startup import start_new_game_staged, refresh_voices
 from game.handlers import process_player_action, run_action_logic
 from game.media import generate_turn_media
 from services.tts_service import transcribe_audio
