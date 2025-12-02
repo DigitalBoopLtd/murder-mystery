@@ -1259,17 +1259,40 @@ def on_save_api_keys(
             results.append('<span class="key-status key-ok">✅ Saved</span>')
             overall_status.append("Voice ✓")
             
-            # Fetch voices now that API key is set
+            # Reinitialize TTS service and fetch voices now that API key is set
             try:
                 import app.main as main_module
                 from services.voice_service import get_voice_service
+                from services.tts_service import init_tts_service
                 import threading
                 
-                def _fetch_voices_async():
-                    """Fetch voices in background thread after API key is set."""
+                def _reinit_services_async():
+                    """Reinitialize TTS service and fetch voices in background thread after API key is set."""
                     try:
-                        logger.info("🎤 Fetching voices after API key was set...")
-                        voice_service = get_voice_service()
+                        logger.info("🔄 Reinitializing TTS service and fetching voices after API key was set...")
+                        
+                        # Create new ElevenLabs client with the saved key
+                        try:
+                            from elevenlabs import ElevenLabs
+                            new_elevenlabs_client = ElevenLabs(api_key=elevenlabs_key)
+                            
+                            # Reinitialize TTS service with new client
+                            init_tts_service(
+                                new_elevenlabs_client,
+                                main_module.openai_client,
+                                main_module.GAME_MASTER_VOICE_ID
+                            )
+                            
+                            # Update global client in main module
+                            main_module.elevenlabs_client = new_elevenlabs_client
+                            
+                            logger.info("✅ TTS service reinitialized with new API key")
+                        except Exception as e:
+                            logger.error(f"❌ Failed to reinitialize TTS service: {e}")
+                            return
+                        
+                        # Fetch voices (pass session ID to get key from session)
+                        voice_service = get_voice_service(session_id=sess_id)
                         if voice_service.is_available:
                             voices = voice_service.get_available_voices(force_refresh=True)
                             if voices:
@@ -1285,14 +1308,14 @@ def on_save_api_keys(
                             logger.warning("⚠️ Voice service not available after setting key")
                             main_module.VOICES_READY.set()
                     except Exception as e:
-                        logger.error(f"❌ Voice fetch failed after setting key: {e}")
+                        logger.error(f"❌ Failed to reinitialize services after setting key: {e}")
                         main_module.VOICES_READY.set()
                 
-                # Fetch voices in background thread
-                voice_thread = threading.Thread(target=_fetch_voices_async, daemon=True)
-                voice_thread.start()
+                # Reinitialize services in background thread
+                reinit_thread = threading.Thread(target=_reinit_services_async, daemon=True)
+                reinit_thread.start()
             except Exception as e:
-                logger.error(f"Failed to start voice fetch thread: {e}")
+                logger.error(f"Failed to start service reinitialization thread: {e}")
         else:
             results.append(f'<span class="key-status key-error">❌ {msg}</span>')
             overall_status.append("Voice ✗")

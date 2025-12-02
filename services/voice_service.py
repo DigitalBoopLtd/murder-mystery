@@ -978,9 +978,30 @@ class VoiceService:
 _voice_service: Optional[VoiceService] = None
 
 
-def get_voice_service() -> VoiceService:
-    """Get or create the global voice service."""
+def get_voice_service(session_id: Optional[str] = None) -> VoiceService:
+    """Get or create the global voice service.
+    
+    Args:
+        session_id: Optional session ID to get API key from session storage.
+                    If not provided, uses environment variable.
+    """
     global _voice_service
-    if _voice_service is None:
-        _voice_service = VoiceService()
+    
+    # Get API key from session if provided, otherwise from environment
+    api_key = None
+    if session_id:
+        try:
+            from services.api_keys import get_elevenlabs_key
+            api_key = get_elevenlabs_key(session_id)
+        except Exception:
+            pass
+    
+    # If no session key, use environment
+    if not api_key:
+        api_key = os.getenv("ELEVENLABS_API_KEY")
+    
+    # Recreate service if API key changed or doesn't exist
+    if _voice_service is None or _voice_service.api_key != api_key:
+        _voice_service = VoiceService(api_key=api_key)
+    
     return _voice_service

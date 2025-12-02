@@ -208,7 +208,8 @@ def fetch_voices_for_session(session_id: str) -> Tuple[List, str, str]:
         logger.debug("[VOICE] Pre-fetched voices not available, using direct fetch")
     
     # Fallback to direct API fetch (no MCP)
-    voice_service = get_voice_service()
+    # Pass session_id to get API key from session storage if available
+    voice_service = get_voice_service(session_id=session_id)
     
     # Check if voice service is available before attempting to fetch
     if not voice_service.is_available:
