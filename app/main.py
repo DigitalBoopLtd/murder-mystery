@@ -1,0 +1,372 @@
+"""Voice-First Murder Mystery Game - 90s Point-and-Click Adventure Style.
+
+A reimagined interface that prioritizes voice output with streaming captions,
+styled like classic adventure games (Monkey Island, Day of the Tentacles, Gabriel Knight, etc.)
+"""
+
+# IMPORTANT: Load environment variables FIRST, before any other imports
+# This ensures USE_MCP and other env vars are available when modules load
+from dotenv import load_dotenv
+load_dotenv()
+
+import os
+import threading
+from typing import Dict, List
+import gradio as gr
+from openai import OpenAI
+
+try:
+    from elevenlabs import ElevenLabs
+
+    ELEVENLABS_AVAILABLE = True
+except ImportError:
+    ELEVENLABS_AVAILABLE = False
+    ElevenLabs = None
+
+# Import modular components (AFTER load_dotenv so env vars are available)
+from services.tts_service import init_tts_service
+from services.perf_tracker import perf
+from game.state_manager import init_game_handlers, mystery_images
+from app.utils import setup_ui_logging
+from app.ui_components import create_ui_components
+from app.event_handlers import (
+    on_config_generic_change,
+    on_wizard_config_change,
+    on_refresh_voices,
+    on_start_game,
+    on_restart_game,
+    check_mystery_ready,
+    on_voice_input,
+    reset_voice_input,
+    on_audio_stop,
+    on_suspects_tab_select,
+    on_refresh_suspects_click,
+    on_save_api_keys,
+    check_api_keys_status,
+    choose_initial_tab,
+)
+
+# Logging - set up early
+import logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+setup_ui_logging()
+
+# =============================================================================
+# APP STARTUP - Pre-fetch voices directly (no MCP overhead)
+# =============================================================================
+
+logger.info("🚀 Starting Murder Mystery App...")
+perf.reset("app_startup")
+
+# Initialize OpenAI client
+perf.start("init_openai")
+openai_api_key = os.getenv("OPENAI_API_KEY")
+openai_client = None
+if openai_api_key:
+    openai_client = OpenAI(api_key=openai_api_key)
+    logger.info("✅ OpenAI client initialized")
+else:
+    logger.warning("⚠️ OPENAI_API_KEY not set - game features will be limited")
+perf.end("init_openai")
+
+# Initialize ElevenLabs client
+perf.start("init_elevenlabs")
+elevenlabs_client = None
+if os.getenv("ELEVENLABS_API_KEY") and ELEVENLABS_AVAILABLE:
+    try:
+        elevenlabs_client = ElevenLabs(api_key=os.getenv("ELEVENLABS_API_KEY"))
+        logger.info("✅ ElevenLabs client initialized")
+    except Exception as e:  # noqa: BLE001
+        logger.warning(f"⚠️ Failed to initialize ElevenLabs: {e}")
+perf.end("init_elevenlabs")
+
+# Game Master voice
+GAME_MASTER_VOICE_ID = "JBFqnCBsd6RMkjVDRZzb"
+
+# =============================================================================
+# PRE-FETCH VOICES DIRECTLY (bypasses MCP for speed)
+# =============================================================================
+
+# Global voice cache - populated when API key is set (not on app load)
+PREFETCHED_VOICES: List = []
+VOICE_SUMMARY: str = ""
+VOICES_READY = threading.Event()
+# Set VOICES_READY immediately so code waiting for it doesn't hang
+# It will be reset and set again when voices are actually fetched
+VOICES_READY.set()
+
+
+# Don't prefetch voices on app load - wait for API key to be set in settings
+# Voices will be fetched when user saves their ElevenLabs API key
+logger.info("🎤 Voice prefetch disabled - will fetch when API key is set in settings")
+
+# Global state
+game_states: Dict[str, object] = {}
+# mystery_images is imported from game.state_manager to ensure all modules share the same dict
+
+# Initialize services
+perf.start("init_services")
+init_tts_service(elevenlabs_client, openai_client, GAME_MASTER_VOICE_ID)
+init_game_handlers(game_states, mystery_images, GAME_MASTER_VOICE_ID)
+perf.end("init_services")
+
+
+# ============================================================================
+# GRADIO UI
+# ============================================================================
+
+
+def create_app():
+    """Create the Gradio application."""
+
+    with gr.Blocks(title="Murder Mystery") as app:
+        # Create all UI components
+        components = create_ui_components()
+
+        # Extract components for easier access
+        session_id = components["session_id"]
+        main_tabs = components["main_tabs"]
+        speaker_html = components["speaker_html"]
+        audio_output = components["audio_output"]
+        portrait_image = components["portrait_image"]
+        input_row = components["input_row"]
+        start_btn = components["start_btn"]
+        suspects_list_html = components["suspects_list_html"]
+        locations_html = components["locations_html"]
+        clues_html = components["clues_html"]
+        accusations_html = components["accusations_html"]
+        suspects_list_html_tab = components["suspects_list_html_tab"]
+        locations_html_tab = components["locations_html_tab"]
+        clues_html_tab = components["clues_html_tab"]
+        accusations_html_tab = components["accusations_html_tab"]
+        timeline_html_tab = components["timeline_html_tab"]
+        timeline_html_main = components["timeline_html_main"]  # Main tab version
+        case_file_html_main = components["case_file_html_main"]  # Case File (main tab)
+        dashboard_html_main = components["dashboard_html_main"]  # Dashboard (main tab)
+        mystery_check_timer = components["mystery_check_timer"]
+        voice_input = components["voice_input"]
+        # Setup wizard components
+        game_started_marker = components["game_started_marker"]
+        setup_wizard = components["setup_wizard"]
+        wizard_era_dropdown = components["wizard_era_dropdown"]
+        wizard_setting_dropdown = components["wizard_setting_dropdown"]
+        wizard_difficulty_radio = components["wizard_difficulty_radio"]
+        wizard_tone_radio = components["wizard_tone_radio"]
+        # API Key inputs
+        openai_key_input = components["openai_key_input"]
+        openai_key_status = components["openai_key_status"]
+        elevenlabs_key_input = components["elevenlabs_key_input"]
+        elevenlabs_key_status = components["elevenlabs_key_status"]
+        huggingface_key_input = components["huggingface_key_input"]
+        huggingface_key_status = components["huggingface_key_status"]
+        save_keys_btn = components["save_keys_btn"]
+        keys_status_html = components["keys_status_html"]
+        # Restart button
+        restart_btn = components["restart_btn"]
+        # Tabs
+        info_tabs = components["info_tabs"]
+
+        # ====== WIRE UP EVENTS ======
+
+        # Common outputs for game actions
+        game_outputs = [
+            speaker_html,
+            audio_output,
+            portrait_image,
+            suspects_list_html,
+            locations_html,
+            clues_html,
+            accusations_html,
+            timeline_html_main,  # Main tab version
+            # Tab components (replicated from accordions)
+            suspects_list_html_tab,
+            locations_html_tab,
+            clues_html_tab,
+            accusations_html_tab,
+            timeline_html_tab,
+            case_file_html_main,  # Case File (main tab)
+            dashboard_html_main,  # Dashboard (main tab)
+        ]
+
+        # ====== WIZARD EVENT HANDLERS ======
+        
+        # Wizard era dropdown - updates settings and syncs config
+        getattr(wizard_era_dropdown, "change")(
+            fn=on_wizard_config_change,
+            inputs=[
+                wizard_era_dropdown,
+                wizard_setting_dropdown,
+                wizard_difficulty_radio,
+                wizard_tone_radio,
+                session_id,
+            ],
+            outputs=[wizard_setting_dropdown],
+        )
+        
+        # Wizard setting changes - sync config
+        getattr(wizard_setting_dropdown, "change")(
+            fn=on_config_generic_change,
+            inputs=[
+                wizard_setting_dropdown,
+                wizard_era_dropdown,
+                wizard_difficulty_radio,
+                wizard_tone_radio,
+                session_id,
+            ],
+            outputs=None,
+        )
+        
+        # Wizard difficulty changes - sync config
+        getattr(wizard_difficulty_radio, "change")(
+            fn=on_config_generic_change,
+            inputs=[
+                wizard_setting_dropdown,
+                wizard_era_dropdown,
+                wizard_difficulty_radio,
+                wizard_tone_radio,
+                session_id,
+            ],
+            outputs=None,
+        )
+        
+        # Wizard tone changes - sync config
+        getattr(wizard_tone_radio, "change")(
+            fn=on_config_generic_change,
+            inputs=[
+                wizard_setting_dropdown,
+                wizard_era_dropdown,
+                wizard_difficulty_radio,
+                wizard_tone_radio,
+                session_id,
+            ],
+            outputs=None,
+        )
+        
+        # Save API keys button
+        getattr(save_keys_btn, "click")(
+            fn=on_save_api_keys,
+            inputs=[openai_key_input, elevenlabs_key_input, huggingface_key_input, session_id],
+            outputs=[openai_key_status, elevenlabs_key_status, huggingface_key_status, keys_status_html],
+        )
+        
+        # Check API keys status on page load
+        getattr(app, "load")(
+            fn=check_api_keys_status,
+            inputs=[session_id],
+            outputs=[openai_key_status, elevenlabs_key_status, huggingface_key_status, keys_status_html],
+        )
+
+        # Decide which main tab should be active on load (API Keys first if missing)
+        getattr(app, "load")(
+            fn=choose_initial_tab,
+            inputs=[session_id],
+            outputs=[main_tabs],
+        )
+        
+        # Start game - show game_started_marker (CSS sibling selector hides wizard)
+        getattr(start_btn, "click")(
+            fn=on_start_game,
+            inputs=[session_id],
+            outputs=[
+                game_started_marker,  # Show marker → CSS hides wizard via sibling selector
+                speaker_html,
+                audio_output,
+                portrait_image,
+                input_row,
+                suspects_list_html,
+                locations_html,
+                clues_html,
+                accusations_html,
+                suspects_list_html_tab,
+                locations_html_tab,
+                clues_html_tab,
+                accusations_html_tab,
+                timeline_html_tab,
+                mystery_check_timer,  # Timer activation
+                restart_btn,  # Show restart button
+            ],
+        )
+        
+        # Restart game - reset state and show wizard again
+        restart_btn.click(
+            fn=on_restart_game,
+            inputs=[session_id],
+            outputs=[
+                game_started_marker,  # Clear marker → CSS shows wizard again
+                speaker_html,
+                audio_output,
+                portrait_image,
+                input_row,
+                suspects_list_html,
+                locations_html,
+                clues_html,
+                accusations_html,
+                suspects_list_html_tab,
+                locations_html_tab,
+                clues_html_tab,
+                accusations_html_tab,
+                timeline_html_tab,
+                mystery_check_timer,  # Stop timer
+                restart_btn,  # Hide restart button
+            ],
+        )
+
+        # Timer to check for mystery completion and update UI
+        # Also updates opening scene image when it becomes available
+        getattr(mystery_check_timer, "tick")(
+            fn=check_mystery_ready,
+            inputs=[session_id],
+            outputs=[
+                portrait_image,  # Opening scene image (appears when ready)
+                suspects_list_html,
+                locations_html,
+                suspects_list_html_tab,
+                locations_html_tab,
+                case_file_html_main,     # Case File (main tab)
+                mystery_check_timer,
+            ],
+        )
+
+        # Voice input - only input method
+        getattr(voice_input, "stop_recording")(
+            on_voice_input, inputs=[voice_input, session_id], outputs=game_outputs
+        ).then(
+            reset_voice_input,
+            inputs=None,
+            outputs=[voice_input],
+        )
+
+        # Hide speaker name when audio finishes playing
+        # Use getattr to access the stop event (works across Gradio versions)
+        if hasattr(audio_output, "stop"):
+            getattr(audio_output, "stop")(
+                fn=on_audio_stop,
+                inputs=[session_id],
+                outputs=[speaker_html],
+            )
+        elif hasattr(audio_output, "pause"):
+            getattr(audio_output, "pause")(
+                fn=on_audio_stop,
+                inputs=[session_id],
+                outputs=[speaker_html],
+            )
+
+        # Info tabs select - refresh suspects portraits on tab click (lazy loading)
+        getattr(info_tabs, "select")(
+            fn=on_suspects_tab_select,
+            inputs=[session_id],
+            outputs=[suspects_list_html_tab],
+        )
+
+    return app
+
+
+# ============================================================================
+# MAIN
+# ============================================================================
+
+if __name__ == "__main__":
+    app = create_app()
+    # Use Gradio's queue so the global progress/status tracker is visible
+    app.queue().launch(server_name="0.0.0.0", server_port=7860, share=False)

@@ -12,3 +12,5 @@ ENV/
 dist/
 build/
 
+voices_metadata.txt
+voices_metadata.json
