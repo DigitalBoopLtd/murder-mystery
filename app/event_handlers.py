@@ -315,11 +315,11 @@ def on_start_game(sess_id, progress=gr.Progress()):
     if audio_path:
         # Always autoplay if audio exists - don't block audio waiting for image
         # The image will appear when ready via the timer callback
-        audio_update = gr.update(
-            value=audio_path,
-            subtitles=subtitles,
-            autoplay=True,  # Always autoplay - image will appear when ready
-        )
+        # Note: Subtitles are passed as a tuple (audio_path, subtitles) in Gradio 6.0+
+        if subtitles:
+            audio_update = (audio_path, subtitles)
+        else:
+            audio_update = audio_path
         logger.info("[APP] Audio autoplay enabled (image will appear when ready)")
 
     # Final progress
@@ -633,7 +633,7 @@ def on_custom_message(message: str, sess_id: str):
     return [
         f'<div class="speaker-name" style="padding: 16px 0 !important;">🗣️ {speaker} SPEAKING...</div>',
         (
-            gr.update(value=audio_path, subtitles=subtitles)
+            (audio_path, subtitles) if audio_path and subtitles else audio_path
             if audio_path
             else None
         ),
@@ -1088,9 +1088,9 @@ def on_voice_input(audio_path: str, sess_id, progress=gr.Progress()):
     yield [
         speaker_html,  # Includes secret reveal notification if applicable
         (
-            gr.update(value=audio_resp, subtitles=subtitles, autoplay=True)
+            (audio_resp, subtitles) if audio_resp and subtitles else audio_resp
             if audio_resp
-            else gr.update()
+            else None
         ),
         portrait_update,
         format_suspects_list_html(
