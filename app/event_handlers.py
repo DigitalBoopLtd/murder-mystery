@@ -310,16 +310,13 @@ def on_start_game(sess_id, progress=gr.Progress()):
     subtitles = convert_alignment_to_subtitles(alignment_data)
 
     # Update audio component with game audio and subtitles
-    # Always enable autoplay when audio exists - image will appear when ready
     audio_update = None
     if audio_path:
-        # Always autoplay if audio exists - don't block audio waiting for image
-        # The image will appear when ready via the timer callback
-        # Note: Subtitles are passed as a tuple (audio_path, subtitles) in Gradio 6.0+
+        # Use gr.update() with subtitles as keyword argument (Gradio 6.0+ format)
         if subtitles:
-            audio_update = (audio_path, subtitles)
+            audio_update = gr.update(value=audio_path, subtitles=subtitles, autoplay=True)
         else:
-            audio_update = audio_path
+            audio_update = gr.update(value=audio_path, autoplay=True)
         logger.info("[APP] Audio autoplay enabled (image will appear when ready)")
 
     # Final progress
@@ -633,8 +630,8 @@ def on_custom_message(message: str, sess_id: str):
     return [
         f'<div class="speaker-name" style="padding: 16px 0 !important;">🗣️ {speaker} SPEAKING...</div>',
         (
-            (audio_path, subtitles) if audio_path and subtitles else audio_path
-            if audio_path
+            gr.update(value=audio_path, subtitles=subtitles) if audio_path and subtitles
+            else gr.update(value=audio_path) if audio_path
             else None
         ),
         portrait_update,
@@ -1088,8 +1085,8 @@ def on_voice_input(audio_path: str, sess_id, progress=gr.Progress()):
     yield [
         speaker_html,  # Includes secret reveal notification if applicable
         (
-            (audio_resp, subtitles) if audio_resp and subtitles else audio_resp
-            if audio_resp
+            gr.update(value=audio_resp, subtitles=subtitles, autoplay=True) if audio_resp and subtitles
+            else gr.update(value=audio_resp, autoplay=True) if audio_resp
             else None
         ),
         portrait_update,
