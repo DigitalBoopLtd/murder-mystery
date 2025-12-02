@@ -1465,6 +1465,10 @@ Generate the Game Master response rejecting this premature accusation.""")
         
         result: AccusationToolOutput = chain.invoke(invoke_params)
         
+        # Handle case where structured output returns a dict instead of Pydantic model
+        if isinstance(result, dict):
+            result = AccusationToolOutput(**result)
+        
         # Store structured data in ToolOutputStore (no regex markers!)
         store.accusation = AccusationOutput(
             suspect_name=suspect_name,

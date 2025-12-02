@@ -390,6 +390,24 @@ system or background tasks. Stay purely in-world."""
     if session_id not in mystery_images:
         mystery_images[session_id] = {}
 
+    # Check briefly for opening scene image, but don't block TTS generation
+    # Image will appear when ready via UI timer callback
+    opening_scene = mystery_images.get(session_id, {}).get("_opening_scene", None)
+    if not opening_scene:
+        # Very brief check (2 seconds max) - don't delay audio generation
+        wait_start = time.time()
+        max_wait = 2.0  # Short wait - prioritize audio generation
+        poll_interval = 0.1
+        while time.time() - wait_start < max_wait:
+            opening_scene = mystery_images.get(session_id, {}).get("_opening_scene", None)
+            if opening_scene:
+                wait_time = time.time() - wait_start
+                logger.info("[GAME] ✅ Opening scene ready after %.2fs", wait_time)
+                break
+            time.sleep(poll_interval)
+        if not opening_scene:
+            logger.info("[GAME] Opening scene still loading - proceeding with TTS (image will appear when ready)")
+
     # Generate audio (needs the response text)
     logger.info("[GAME] Calling TTS for welcome message (%d chars)", len(response))
     gm_voice = getattr(state, "game_master_voice_id", None) or GAME_MASTER_VOICE_ID

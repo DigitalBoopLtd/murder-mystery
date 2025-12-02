@@ -36,7 +36,7 @@ dev: ## Run the app with hot reloading (watches for file changes)
 	@if [ ! -f ".env" ]; then \
 		echo "⚠️  Warning: .env file not found. Make sure to create it with your OPENAI_API_KEY"; \
 	fi
-	$(VENV_BIN)/watchmedo auto-restart \
+	$(PYTHON_VENV) -m watchdog.watchmedo auto-restart \
 		--patterns="*.py" \
 		--recursive \
 		--directory=. \

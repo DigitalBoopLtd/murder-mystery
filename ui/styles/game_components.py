@@ -1130,16 +1130,13 @@ button.record.record-button { height: 48px !important; width: 48px !important; b
 
 .case-file-root {
     font-family: 'Georgia', 'Times New Roman', serif;
-    color: #1a1a1a;
+    color: #ffffff;
     max-width: 720px;
     margin: 0 auto;
-    background: linear-gradient(135deg, #f5f0e1 0%, #e8dcc8 50%, #d9cdb4 100%);
+    background: var(--bg-card);
+    border: 1px solid ffffff;
     border-radius: 2px;
     position: relative;
-    /* Subtle paper texture via noise */
-    background-image: 
-        url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E"),
-        linear-gradient(135deg, #f5f0e1 0%, #e8dcc8 50%, #d9cdb4 100%);
 }
 
 /* Top edge fold effect */
@@ -1159,8 +1156,8 @@ button.record.record-button { height: 48px !important; width: 48px !important; b
     align-items: flex-start;
     justify-content: space-between;
     padding: 24px 28px 16px;
-    border-bottom: 2px solid #8b7355;
-    background: linear-gradient(to bottom, rgba(139,115,85,0.15), transparent);
+    border-bottom: 2px solid #6f553e;
+    background: linear-gradient(to bottom, rgba(139,115,85,0.22), transparent);
 }
 
 .case-file-title-block {
@@ -1174,7 +1171,7 @@ button.record.record-button { height: 48px !important; width: 48px !important; b
     font-size: 10px;
     letter-spacing: 3px;
     text-transform: uppercase;
-    color: #6b5a4a;
+    color: #2b1d11;
     font-weight: 600;
 }
 
@@ -1183,16 +1180,15 @@ button.record.record-button { height: 48px !important; width: 48px !important; b
     font-size: 20px;
     letter-spacing: 4px;
     text-transform: uppercase;
-    color: #3d2b1f;
-    font-weight: 700;
-    text-shadow: 1px 1px 0 rgba(255,255,255,0.5);
+    color: #23170f;
+    font-weight: 800;
 }
 
 .case-file-meta {
     font-family: 'Courier New', monospace;
     font-size: 11px;
     text-align: right;
-    color: #5a4a3a;
+    color: #2b1d11;
     line-height: 1.6;
 }
 
@@ -1214,7 +1210,6 @@ button.record.record-button { height: 48px !important; width: 48px !important; b
 }
 
 .case-file-status-open {
-    background: #fff3cd;
     border: 1px solid #c9a227;
     color: #856404;
 }
@@ -1244,8 +1239,8 @@ button.record.record-button { height: 48px !important; width: 48px !important; b
     font-size: 12px;
     letter-spacing: 3px;
     text-transform: uppercase;
-    color: #5a4a3a;
-    border-bottom: 1px solid #a89070;
+    color: #2b1d11;
+    border-bottom: 1px solid #7b674e;
     padding-bottom: 6px;
     margin-bottom: 14px;
     font-weight: 700;
@@ -1256,33 +1251,31 @@ button.record.record-button { height: 48px !important; width: 48px !important; b
     grid-template-columns: 140px 1fr;
     gap: 8px 16px;
     font-size: 14px;
-    background: rgba(255,255,255,0.4);
     padding: 16px;
-    border: 1px solid #c4b49a;
+    border: 1px solid #ae926a;
     border-radius: 2px;
 }
 
 .case-file-victim-label {
     font-family: 'Courier New', monospace;
-    color: #6b5a4a;
+    color: #2b1d11;
     text-transform: uppercase;
     letter-spacing: 1px;
     font-size: 11px;
-    font-weight: 600;
+    font-weight: 700;
     padding-top: 2px;
 }
 
 .case-file-victim-value {
-    color: #2d2d2d;
-    line-height: 1.5;
+    color: #111111;
+    line-height: 1.6;
 }
 
 .case-file-table {
     width: 100%;
     border-collapse: collapse;
     font-size: 14px;
-    background: rgba(255,255,255,0.35);
-    border: 1px solid #c4b49a;
+    border: 1px solid #ae926a;
 }
 
 .case-file-table th {
@@ -1292,9 +1285,8 @@ button.record.record-button { height: 48px !important; width: 48px !important; b
     font-size: 10px;
     letter-spacing: 2px;
     text-transform: uppercase;
-    color: #5a4a3a;
-    background: rgba(139,115,85,0.15);
-    border-bottom: 1px solid #a89070;
+    color: #2b1d11;
+    border-bottom: 1px solid #ae926a;
     font-weight: 700;
 }
 
@@ -1302,14 +1294,11 @@ button.record.record-button { height: 48px !important; width: 48px !important; b
     padding: 12px 14px;
     border-bottom: 1px solid #d4c4a8;
     vertical-align: top;
+    color: #1a1a1a;
 }
 
 .case-file-table tr:last-child td {
     border-bottom: none;
-}
-
-.case-file-table tr:hover {
-    background: rgba(139,115,85,0.08);
 }
 
 .case-file-cell-name {
@@ -1318,7 +1307,7 @@ button.record.record-button { height: 48px !important; width: 48px !important; b
 }
 
 .case-file-cell-role {
-    color: #5a5a5a;
+    color: #3b3b3b;
     font-style: italic;
 }
 
@@ -1360,7 +1349,7 @@ button.record.record-button { height: 48px !important; width: 48px !important; b
 
 .case-file-footer-right {
     text-align: right;
-    color: #6b5a4a;
+    color: #2b1d11;
     font-family: 'Courier New', monospace;
     font-size: 10px;
 }
@@ -1368,7 +1357,7 @@ button.record.record-button { height: 48px !important; width: 48px !important; b
 .case-file-empty {
     text-align: center;
     padding: 48px 24px;
-    color: #7a6a5a;
+    color: #5e4f41;
     font-size: 15px;
 }
 
@@ -1382,5 +1371,33 @@ button.record.record-button { height: 48px !important; width: 48px !important; b
     max-width: 320px;
     margin: 0 auto;
     line-height: 1.5;
+}
+
+/* Dark theme support for better contrast with the app's dark backdrop */
+@media (prefers-color-scheme: dark) {
+    .case-file-root {
+        color: #f1e9db;
+        border-color: #6b5a3f;
+    }
+    .case-file-title,
+    .case-file-victim-value,
+    .case-file-table td {
+        color: #fff7e6;
+    }
+    .case-file-division,
+    .case-file-meta,
+    .case-file-section-title,
+    .case-file-victim-label,
+    .case-file-footer-right {
+        color: #e8dcc4;
+    }
+    .case-file-victim-grid,
+    .case-file-table {
+        border-color: #6b5a3f;
+    }
+    .case-file-table th {
+        color: #fff7e6;
+        border-bottom-color: #6b5a3f;
+    }
 }
 """

@@ -258,15 +258,15 @@ def on_start_game(sess_id, progress=gr.Progress()):
     logger.info("Retrieving images for session %s", sess_id)
     logger.info("Available image keys: %s", list(images.keys()))
 
-    # Opening scene image: wait for background thread with short timeout.
-    # This ensures image and audio start together for polished UX.
-    progress(0.9, desc="🎨 Waiting for scene...")
+    # Opening scene image: wait briefly for image, but don't block audio playback
+    # Image will appear when ready via timer callback
+    progress(0.9, desc="🎨 Preparing scene...")
 
     portrait = images.get("_opening_scene", None)
     if not portrait:
-        # Wait up to 3 seconds for the image to be ready
+        # Wait briefly (5 seconds max) for the image, but don't delay audio
         wait_start = time.time()
-        max_wait = 3.0  # seconds
+        max_wait = 5.0  # Shorter wait - prioritize audio playback
         poll_interval = 0.1  # 100ms
         
         logger.info("[APP] Opening scene not ready, waiting up to %.1fs...", max_wait)
@@ -281,7 +281,7 @@ def on_start_game(sess_id, progress=gr.Progress()):
             time.sleep(poll_interval)
         
         if not portrait:
-            logger.info("[APP] Opening scene still not ready after %.1fs, starting anyway", max_wait)
+            logger.info("[APP] Opening scene still loading - will appear when ready via timer")
 
     if portrait:
         # Ensure path is absolute and file exists
@@ -308,13 +308,17 @@ def on_start_game(sess_id, progress=gr.Progress()):
     subtitles = convert_alignment_to_subtitles(alignment_data)
 
     # Update audio component with game audio and subtitles
+    # Always enable autoplay when audio exists - image will appear when ready
     audio_update = None
     if audio_path:
+        # Always autoplay if audio exists - don't block audio waiting for image
+        # The image will appear when ready via the timer callback
         audio_update = gr.update(
             value=audio_path,
             subtitles=subtitles,
-            autoplay=True,
+            autoplay=True,  # Always autoplay - image will appear when ready
         )
+        logger.info("[APP] Audio autoplay enabled (image will appear when ready)")
 
     # Final progress
     progress(1.0, desc="🎮 Let's play!")

@@ -14,7 +14,8 @@ mcp>=1.22.0
 mcp-elevenlabs>=0.0.2
 plotly>=6.0.0
 networkx>=3.0
+watchdog>=6.0.0
 
 # Note:
 # - langchain core packages are pulled in transitively via langchain-openai/community
-# - watchdog and websockets are dependencies of gradio and need not be pinned here
+# - websockets are dependencies of gradio and need not be pinned here

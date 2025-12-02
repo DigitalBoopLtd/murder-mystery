@@ -222,6 +222,30 @@ The **Murder Mystery MCP Server** is a complete game engine as MCP tools:
 
 ### Installation
 
+**Quick Start (Recommended):**
+
+```bash
+# Clone the repository
+git clone https://github.com/your-username/murder-mystery.git
+cd murder-mystery
+
+# One command to set up everything!
+make setup
+
+# Create your .env file with API keys
+cp env.example .env
+# Edit .env with your API keys (OPENAI_API_KEY, ELEVENLABS_API_KEY, HF_TOKEN)
+```
+
+The `make setup` command will:
+- Create a Python virtual environment
+- Install all dependencies
+- Set up everything you need to get started
+
+**Manual Installation (Alternative):**
+
+If you prefer to set up manually:
+
 ```bash
 # Clone both repositories
 git clone https://github.com/your-username/murder-mystery.git
@@ -244,22 +268,34 @@ cp env.example .env
 # Edit .env with all API keys
 ```
 
-Or use the setup script:
-
-```bash
-./setup.sh
-```
-
 ### Running
 
 **Option 1: Gradio UI (recommended for playing)**
 
 ```bash
 cd murder-mystery
+
+# With hot reloading (auto-restarts on file changes)
+make dev
+
+# Or run normally
+make run
+
+# Or manually
 source venv/bin/activate
 python app.py
-# Open http://localhost:7860
+
+# Open http://localhost:7860 in your browser
 ```
+
+**Available Make Commands:**
+
+- `make setup` - Set up virtual environment and install dependencies
+- `make dev` - Run with hot reloading (watches for file changes)
+- `make run` - Run the app normally
+- `make install` - Install/update dependencies (assumes venv exists)
+- `make clean` - Remove virtual environment and cache files
+- `make check-env` - Verify .env file has required API keys
 
 **Option 2: Claude Desktop (play via chat)**
 
