@@ -40,6 +40,11 @@ def create_ui_components() -> dict:
         gr.HTML(
             '<div class="game-title"><span class="detective-avatar">🕵️‍♀️</span> MURDER MYSTERY</div>'
         )
+        restart_btn = gr.Button(
+            "🔄 Restart Game",
+            elem_classes="restart-button",
+            visible=False,  # Only visible when game is active
+        )
 
     # ====== MAIN LAYOUT AND DEBUG ======
     with gr.Tabs(elem_classes="main-tabs") as main_tabs:
@@ -405,6 +410,8 @@ def create_ui_components() -> dict:
         "huggingface_key_status": huggingface_key_status,
         "save_keys_btn": save_keys_btn,
         "keys_status_html": keys_status_html,
+        # Restart button
+        "restart_btn": restart_btn,
         # Tabs for select events (lazy portrait loading)
         "info_tabs": info_tabs,
         "suspects_tab": suspects_tab,

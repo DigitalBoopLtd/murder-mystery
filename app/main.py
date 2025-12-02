@@ -34,6 +34,7 @@ from app.event_handlers import (
     on_wizard_config_change,
     on_refresh_voices,
     on_start_game,
+    on_restart_game,
     check_mystery_ready,
     on_voice_input,
     reset_voice_input,
@@ -127,10 +128,9 @@ def _prefetch_voices():
     VOICES_READY.set()
 
 
-# Start voice prefetch in background thread (non-blocking)
-logger.info("🎤 Pre-fetching voices in background...")
-voice_thread = threading.Thread(target=_prefetch_voices, daemon=True)
-voice_thread.start()
+# Don't prefetch voices on app load - wait for API key to be set in settings
+# Voices will be fetched when user saves their ElevenLabs API key
+logger.info("🎤 Voice prefetch disabled - will fetch when API key is set in settings")
 
 # Global state
 game_states: Dict[str, object] = {}
@@ -193,6 +193,8 @@ def create_app():
         huggingface_key_status = components["huggingface_key_status"]
         save_keys_btn = components["save_keys_btn"]
         keys_status_html = components["keys_status_html"]
+        # Restart button
+        restart_btn = components["restart_btn"]
         # Tabs
         info_tabs = components["info_tabs"]
 
@@ -313,6 +315,31 @@ def create_app():
                 accusations_html_tab,
                 timeline_html_tab,
                 mystery_check_timer,  # Timer activation
+                restart_btn,  # Show restart button
+            ],
+        )
+        
+        # Restart game - reset state and show wizard again
+        restart_btn.click(
+            fn=on_restart_game,
+            inputs=[session_id],
+            outputs=[
+                game_started_marker,  # Clear marker → CSS shows wizard again
+                speaker_html,
+                audio_output,
+                portrait_image,
+                input_row,
+                suspects_list_html,
+                locations_html,
+                clues_html,
+                accusations_html,
+                suspects_list_html_tab,
+                locations_html_tab,
+                clues_html_tab,
+                accusations_html_tab,
+                timeline_html_tab,
+                mystery_check_timer,  # Stop timer
+                restart_btn,  # Hide restart button
             ],
         )
 

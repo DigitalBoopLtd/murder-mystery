@@ -8,6 +8,8 @@ import gradio as gr
 from mystery_config import get_settings_for_era, create_validated_config
 from game.state_manager import get_or_create_state, mystery_images
 from game.startup import start_new_game_staged, refresh_voices
+from services.game_memory import reset_game_memory
+from services.mystery_oracle import reset_mystery_oracle
 from game.handlers import process_player_action, run_action_logic
 from game.media import generate_turn_media
 from services.tts_service import transcribe_audio
@@ -353,6 +355,8 @@ def on_start_game(sess_id, progress=gr.Progress()):
         format_timeline_html(state.discovered_timeline),
         # Activate timer to check when mystery is ready
         gr.update(active=True),
+        # Show restart button
+        gr.update(visible=True),  # restart_btn
     ]
     # NOTE: on_start_game outputs 19 items (game_started_marker + input_row + mystery_check_timer + game_outputs)
     # game_outputs now has 18 items including dashboard_html_main, but on_start_game doesn't return dashboard_html_main
@@ -1254,6 +1258,41 @@ def on_save_api_keys(
         if success:
             results.append('<span class="key-status key-ok">✅ Saved</span>')
             overall_status.append("Voice ✓")
+            
+            # Fetch voices now that API key is set
+            try:
+                import app.main as main_module
+                from services.voice_service import get_voice_service
+                import threading
+                
+                def _fetch_voices_async():
+                    """Fetch voices in background thread after API key is set."""
+                    try:
+                        logger.info("🎤 Fetching voices after API key was set...")
+                        voice_service = get_voice_service()
+                        if voice_service.is_available:
+                            voices = voice_service.get_available_voices(force_refresh=True)
+                            if voices:
+                                # Update module-level globals
+                                main_module.PREFETCHED_VOICES = voices
+                                main_module.VOICE_SUMMARY = voice_service.summarize_voices_for_llm(voices)
+                                main_module.VOICES_READY.set()
+                                logger.info(f"✅ Fetched {len(voices)} voices after API key was set")
+                            else:
+                                logger.warning("⚠️ No voices returned from ElevenLabs")
+                                main_module.VOICES_READY.set()
+                        else:
+                            logger.warning("⚠️ Voice service not available after setting key")
+                            main_module.VOICES_READY.set()
+                    except Exception as e:
+                        logger.error(f"❌ Voice fetch failed after setting key: {e}")
+                        main_module.VOICES_READY.set()
+                
+                # Fetch voices in background thread
+                voice_thread = threading.Thread(target=_fetch_voices_async, daemon=True)
+                voice_thread.start()
+            except Exception as e:
+                logger.error(f"Failed to start voice fetch thread: {e}")
         else:
             results.append(f'<span class="key-status key-error">❌ {msg}</span>')
             overall_status.append("Voice ✗")
@@ -1262,6 +1301,38 @@ def on_save_api_keys(
         if keys.elevenlabs_key:
             results.append('<span class="key-status key-env">✅ From environment</span>')
             overall_status.append("Voice (env)")
+            
+            # If key exists in env but voices haven't been fetched, fetch them now
+            try:
+                import app.main as main_module
+                if not main_module.PREFETCHED_VOICES and main_module.VOICES_READY.is_set():
+                    # Reset the event and fetch voices
+                    main_module.VOICES_READY.clear()
+                    from services.voice_service import get_voice_service
+                    import threading
+                    
+                    def _fetch_voices_async():
+                        """Fetch voices in background thread when env key exists."""
+                        try:
+                            logger.info("🎤 Fetching voices (env key detected)...")
+                            voice_service = get_voice_service()
+                            if voice_service.is_available:
+                                voices = voice_service.get_available_voices(force_refresh=True)
+                                if voices:
+                                    main_module.PREFETCHED_VOICES = voices
+                                    main_module.VOICE_SUMMARY = voice_service.summarize_voices_for_llm(voices)
+                                    main_module.VOICES_READY.set()
+                                    logger.info(f"✅ Fetched {len(voices)} voices from env key")
+                                else:
+                                    main_module.VOICES_READY.set()
+                        except Exception as e:
+                            logger.error(f"❌ Voice fetch failed: {e}")
+                            main_module.VOICES_READY.set()
+                    
+                    voice_thread = threading.Thread(target=_fetch_voices_async, daemon=True)
+                    voice_thread.start()
+            except Exception as e:
+                logger.error(f"Failed to fetch voices from env: {e}")
         else:
             results.append('<span class="key-status key-missing">❌ Required</span>')
             overall_status.append("Voice missing!")
@@ -1334,4 +1405,46 @@ def choose_initial_tab(sess_id: str):
     # These values must match the tab labels defined in ui_components.py
     target = "Game" if can_play else "🔑 Settings"
     return gr.update(value=target)
+
+
+def on_restart_game(sess_id: str):
+    """Restart the game - reset all state and show the setup wizard again."""
+    sess_id = normalize_session_id(sess_id)
+    logger.info("[APP] Restarting game for session %s", sess_id[:8])
+    
+    # Get and reset game state
+    state = get_or_create_state(sess_id)
+    state.reset_game()
+    
+    # Clear game memory and oracle
+    reset_game_memory()
+    reset_mystery_oracle()
+    
+    # Clear images for this session
+    if sess_id in mystery_images:
+        mystery_images[sess_id] = {}
+        logger.info("[APP] Cleared images for session %s", sess_id[:8])
+    
+    # Reset performance tracker
+    perf.reset(sess_id)
+    
+    # Return updates to reset UI to initial state
+    return [
+        '',  # game_started_marker - clear it so wizard shows again
+        '<div class="speaker-name" style="display: none;"></div>',  # speaker_html - hide
+        gr.update(value=None),  # audio_output - clear audio
+        gr.update(value=None),  # portrait_image - clear portrait
+        gr.update(visible=False),  # input_row - hide input
+        format_suspects_list_html(None, [], loading=False, layout="column"),  # suspects_list_html
+        format_locations_html(None, [], loading=False),  # locations_html
+        format_clues_html([]),  # clues_html
+        format_accusations_html(state),  # accusations_html
+        format_suspects_list_html(None, [], loading=False, layout="row"),  # suspects_list_html_tab
+        format_locations_html(None, [], loading=False),  # locations_html_tab
+        format_clues_html([]),  # clues_html_tab
+        format_accusations_html(state),  # accusations_html_tab
+        format_timeline_html([]),  # timeline_html_tab
+        gr.update(active=False),  # mystery_check_timer - stop timer
+        gr.update(visible=False),  # restart_btn - hide restart button
+    ]
 

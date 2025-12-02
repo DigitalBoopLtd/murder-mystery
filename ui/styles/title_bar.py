@@ -40,4 +40,33 @@ CSS_TITLE_BAR = """/* ========== TITLE BAR ========== */
     flex-shrink: 0;
 }
 
+/* ========== RESTART BUTTON ========== */
+.restart-button {
+    font-family: var(--font-retro-mono) !important;
+    font-size: 11px !important;
+    font-weight: 500 !important;
+    background: transparent !important;
+    border: 1px solid rgba(0, 255, 255, 0.3) !important;
+    color: rgba(0, 255, 255, 0.7) !important;
+    padding: 6px 12px !important;
+    border-radius: 3px !important;
+    cursor: pointer !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.5px !important;
+    transition: all 0.2s ease !important;
+    opacity: 0.8 !important;
+    align-self: center !important;
+}
+
+.restart-button:hover {
+    background: rgba(0, 255, 255, 0.1) !important;
+    color: rgba(0, 255, 255, 0.9) !important;
+    border-color: rgba(0, 255, 255, 0.5) !important;
+    opacity: 1 !important;
+}
+
+.restart-button:active {
+    transform: translateY(0) !important;
+}
+
 """

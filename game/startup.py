@@ -210,6 +210,20 @@ def fetch_voices_for_session(session_id: str) -> Tuple[List, str, str]:
     # Fallback to direct API fetch (no MCP)
     voice_service = get_voice_service()
     
+    # Check if voice service is available before attempting to fetch
+    if not voice_service.is_available:
+        # No API key set - return empty voices without warning
+        # (User hasn't set the key in settings yet)
+        state.available_voices = []
+        state.voice_summary = ""
+        state.voices_fetched = True  # Mark as fetched to avoid retrying
+        state.voice_mode = "text_only"  # Silent film mode
+        state.voice_fetch_error = "no_api_key"
+        
+        perf.end("fetch_voices_session", status="skipped", details="No API key set")
+        logger.debug("[VOICE] API key not set - skipping voice fetch (user can set key in settings)")
+        return [], "", "no_api_key"
+    
     t0 = time.perf_counter()
     voices = voice_service.get_available_voices(force_refresh=True)
     t1 = time.perf_counter()
@@ -243,7 +257,11 @@ def fetch_voices_for_session(session_id: str) -> Tuple[List, str, str]:
         state.voice_mode = "text_only"  # Silent film mode
         state.voice_fetch_error = status
         
-        logger.warning("[VOICE] Failed to fetch voices (status=%s), running in silent film mode", status)
+        # Only log warning if it's an actual failure, not just missing API key
+        if status != "no_api_key":
+            logger.warning("[VOICE] Failed to fetch voices (status=%s), running in silent film mode", status)
+        else:
+            logger.debug("[VOICE] No API key set - running in silent film mode")
         
         return [], "", status
 
