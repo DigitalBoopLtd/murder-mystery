@@ -312,21 +312,20 @@ def on_start_game(sess_id, progress=gr.Progress()):
     # Update audio component with game audio and subtitles
     # Gradio Audio component supports subtitles as list[dict] with format:
     # [{"timestamp": [start, end], "text": str}, ...]
-    # Note: Check if subtitles are supported by inspecting Audio component signature
+    # Note: Try to pass subtitles - gr.update() accepts **kwargs so we test it directly
     audio_update = None
     if audio_path:
-        # Check if Audio component supports subtitles parameter
-        import inspect
-        audio_init_signature = inspect.signature(gr.Audio.__init__)
-        supports_subtitles = 'subtitles' in audio_init_signature.parameters
-        
-        if subtitles and supports_subtitles:
-            # Pass subtitles if supported
-            audio_update = gr.update(value=audio_path, subtitles=subtitles, autoplay=True)
+        if subtitles:
+            logger.info(f"[APP] Subtitles available: {len(subtitles)} entries, attempting to pass to audio component")
+            # Try to pass subtitles - gr.update() accepts **kwargs, so this should work if Audio supports it
+            try:
+                audio_update = gr.update(value=audio_path, subtitles=subtitles, autoplay=True)
+                logger.info("[APP] Successfully created audio update with subtitles")
+            except TypeError as e:
+                # If subtitles parameter not supported, fall back to audio only
+                logger.warning(f"[APP] Subtitles parameter not supported: {e}, falling back to audio only")
+                audio_update = gr.update(value=audio_path, autoplay=True)
         else:
-            # Fallback: just pass audio without subtitles
-            if subtitles and not supports_subtitles:
-                logger.debug("[APP] Subtitles not supported in this Gradio version, skipping")
             audio_update = gr.update(value=audio_path, autoplay=True)
         logger.info("[APP] Audio autoplay enabled (image will appear when ready)")
 
@@ -639,17 +638,17 @@ def on_custom_message(message: str, sess_id: str):
     )
 
     # Update audio with subtitles if available
-    import inspect
-    audio_init_signature = inspect.signature(gr.Audio.__init__)
-    supports_subtitles = 'subtitles' in audio_init_signature.parameters
-    
     audio_update = None
     if audio_path:
-        if subtitles and supports_subtitles:
-            audio_update = gr.update(value=audio_path, subtitles=subtitles)
+        if subtitles:
+            logger.info(f"[APP] Subtitles available: {len(subtitles)} entries, attempting to pass to audio component")
+            try:
+                audio_update = gr.update(value=audio_path, subtitles=subtitles)
+                logger.info("[APP] Successfully created audio update with subtitles")
+            except TypeError as e:
+                logger.warning(f"[APP] Subtitles parameter not supported: {e}, falling back to audio only")
+                audio_update = gr.update(value=audio_path)
         else:
-            if subtitles and not supports_subtitles:
-                logger.debug("[APP] Subtitles not supported in this Gradio version, skipping")
             audio_update = gr.update(value=audio_path)
 
     return [
@@ -1104,17 +1103,17 @@ def on_voice_input(audio_path: str, sess_id, progress=gr.Progress()):
     )
 
     # Update audio with subtitles if available
-    import inspect
-    audio_init_signature = inspect.signature(gr.Audio.__init__)
-    supports_subtitles = 'subtitles' in audio_init_signature.parameters
-    
     audio_update = None
     if audio_resp:
-        if subtitles and supports_subtitles:
-            audio_update = gr.update(value=audio_resp, subtitles=subtitles, autoplay=True)
+        if subtitles:
+            logger.info(f"[APP] Subtitles available: {len(subtitles)} entries, attempting to pass to audio component")
+            try:
+                audio_update = gr.update(value=audio_resp, subtitles=subtitles, autoplay=True)
+                logger.info("[APP] Successfully created audio update with subtitles")
+            except TypeError as e:
+                logger.warning(f"[APP] Subtitles parameter not supported: {e}, falling back to audio only")
+                audio_update = gr.update(value=audio_resp, autoplay=True)
         else:
-            if subtitles and not supports_subtitles:
-                logger.debug("[APP] Subtitles not supported in this Gradio version, skipping")
             audio_update = gr.update(value=audio_resp, autoplay=True)
 
     yield [
