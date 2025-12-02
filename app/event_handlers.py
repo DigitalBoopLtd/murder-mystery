@@ -310,12 +310,19 @@ def on_start_game(sess_id, progress=gr.Progress()):
     subtitles = convert_alignment_to_subtitles(alignment_data)
 
     # Update audio component with game audio and subtitles
+    # Gradio Audio component supports subtitles as list[dict] with format:
+    # [{"timestamp": [start, end], "text": str}, ...]
     audio_update = None
     if audio_path:
-        # Use gr.update() with subtitles as keyword argument (Gradio 6.0+ format)
-        if subtitles:
-            audio_update = gr.update(value=audio_path, subtitles=subtitles, autoplay=True)
-        else:
+        try:
+            # Try to pass subtitles via gr.update() - works in Gradio 6.0+
+            if subtitles:
+                audio_update = gr.update(value=audio_path, subtitles=subtitles, autoplay=True)
+            else:
+                audio_update = gr.update(value=audio_path, autoplay=True)
+        except TypeError:
+            # Fallback: if subtitles parameter not supported, just pass audio
+            logger.warning("[APP] Subtitles parameter not supported in this Gradio version")
             audio_update = gr.update(value=audio_path, autoplay=True)
         logger.info("[APP] Audio autoplay enabled (image will appear when ready)")
 
@@ -332,7 +339,7 @@ def on_start_game(sess_id, progress=gr.Progress()):
         '<div class="game-active" data-game-started="true"></div>',  # game_started_marker
         # Speaker - show when game starts
         f'<div class="speaker-name" style="padding: 16px 0 !important;">🗣️ {speaker} SPEAKING...</div>',
-        # Audio with subtitles
+        # Audio with subtitles (passed as tuple if subtitles exist)
         audio_update,
         # Portrait - set the image value (CSS handles visibility)
         display_portrait,
@@ -627,13 +634,20 @@ def on_custom_message(message: str, sess_id: str):
         else gr.update()
     )
 
+    # Update audio with subtitles if available
+    audio_update = None
+    if audio_path:
+        try:
+            if subtitles:
+                audio_update = gr.update(value=audio_path, subtitles=subtitles)
+            else:
+                audio_update = gr.update(value=audio_path)
+        except TypeError:
+            audio_update = gr.update(value=audio_path)
+
     return [
         f'<div class="speaker-name" style="padding: 16px 0 !important;">🗣️ {speaker} SPEAKING...</div>',
-        (
-            gr.update(value=audio_path, subtitles=subtitles) if audio_path and subtitles
-            else gr.update(value=audio_path) if audio_path
-            else None
-        ),
+        audio_update,
         portrait_update,
         format_suspects_list_html(
             state.mystery,
@@ -1082,13 +1096,20 @@ def on_voice_input(audio_path: str, sess_id, progress=gr.Progress()):
         else gr.update()
     )
 
+    # Update audio with subtitles if available
+    audio_update = None
+    if audio_resp:
+        try:
+            if subtitles:
+                audio_update = gr.update(value=audio_resp, subtitles=subtitles, autoplay=True)
+            else:
+                audio_update = gr.update(value=audio_resp, autoplay=True)
+        except TypeError:
+            audio_update = gr.update(value=audio_resp, autoplay=True)
+
     yield [
         speaker_html,  # Includes secret reveal notification if applicable
-        (
-            gr.update(value=audio_resp, subtitles=subtitles, autoplay=True) if audio_resp and subtitles
-            else gr.update(value=audio_resp, autoplay=True) if audio_resp
-            else None
-        ),
+        audio_update,
         portrait_update,
         format_suspects_list_html(
             state.mystery,
@@ -1296,14 +1317,14 @@ def on_save_api_keys(
                                 # Update module-level globals
                                 main_module.PREFETCHED_VOICES = voices
                                 main_module.VOICE_SUMMARY = voice_service.summarize_voices_for_llm(voices)
-                                main_module.VOICES_READY.set()
+                                main_module.VOICES_READY.set()  # Signal that voices are ready
                                 logger.info(f"✅ Fetched {len(voices)} voices after API key was set")
                             else:
                                 logger.warning("⚠️ No voices returned from ElevenLabs")
-                                main_module.VOICES_READY.set()
+                                main_module.VOICES_READY.set()  # Still signal ready (no voices available)
                         else:
                             logger.warning("⚠️ Voice service not available after setting key")
-                            main_module.VOICES_READY.set()
+                            main_module.VOICES_READY.set()  # Still signal ready (service not available)
                     except Exception as e:
                         logger.error(f"❌ Failed to reinitialize services after setting key: {e}")
                         main_module.VOICES_READY.set()

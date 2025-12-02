@@ -88,44 +88,13 @@ GAME_MASTER_VOICE_ID = "JBFqnCBsd6RMkjVDRZzb"
 # PRE-FETCH VOICES DIRECTLY (bypasses MCP for speed)
 # =============================================================================
 
-# Global voice cache - populated on app load for instant access
+# Global voice cache - populated when API key is set (not on app load)
 PREFETCHED_VOICES: List = []
 VOICE_SUMMARY: str = ""
 VOICES_READY = threading.Event()
-
-
-def _prefetch_voices():
-    """Pre-fetch voices directly from ElevenLabs API on app startup."""
-    global PREFETCHED_VOICES, VOICE_SUMMARY
-    
-    from services.voice_service import get_voice_service
-    
-    perf.start("prefetch_voices", details="Direct API call")
-    
-    try:
-        voice_service = get_voice_service()
-        if voice_service.is_available:
-            voices = voice_service.get_available_voices(force_refresh=True)
-            if voices:
-                # Update globals BEFORE signaling ready
-                PREFETCHED_VOICES = voices
-                VOICE_SUMMARY = voice_service.summarize_voices_for_llm(voices)
-                VOICES_READY.set()  # Signal ready AFTER globals are set
-                logger.info(f"✅ Pre-fetched {len(voices)} voices on app load")
-                perf.end("prefetch_voices", details=f"{len(voices)} voices")
-                return
-            else:
-                logger.warning("⚠️ No voices returned from ElevenLabs")
-                perf.end("prefetch_voices", status="warning", details="No voices")
-        else:
-            logger.info("ℹ️ ElevenLabs not configured, skipping voice prefetch")
-            perf.end("prefetch_voices", status="skipped", details="No API key")
-    except Exception as e:
-        logger.error(f"❌ Voice prefetch failed: {e}")
-        perf.end("prefetch_voices", status="error", details=str(e))
-    
-    # If we get here, no voices were fetched
-    VOICES_READY.set()
+# Set VOICES_READY immediately so code waiting for it doesn't hang
+# It will be reset and set again when voices are actually fetched
+VOICES_READY.set()
 
 
 # Don't prefetch voices on app load - wait for API key to be set in settings
